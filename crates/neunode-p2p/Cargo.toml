@@ -1,0 +1,17 @@
+[package]
+name = "neunode-p2p"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+neunode-core = { path = "../neunode-core" }
+neunode-crypto = { path = "../neunode-crypto" }
+neunode-identity = { path = "../neunode-identity" }
+libp2p = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }

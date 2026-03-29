@@ -1,0 +1,15 @@
+/target
+**/*.rs.bk
+Cargo.lock
+.DS_Store
+.env
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+.opencode/
+session/
+contracts/cache/
+contracts/out/
+contracts/broadcast/

@@ -171,8 +171,8 @@ Token Balance Over Time (Activity-Based Decay)
   0 ┼──■■■■──▓▓──░░──Month──→
     0   HIGH   MED  LOW  DEAD
 
-    ■■■■ Active (0-2%/mo)   — healthy network participant
-    ▓▓▓▓ Moderate (5%/mo)   — contributing but could do more
+    ■■■■ Active (0%/mo)       — healthy network participant
+    ▓▓▓▓ Moderate (2%/mo)    — contributing but could do more
     ░░░░ Inactive (15-50%/mo) — tokens returning to ecosystem
 ```
 
@@ -212,8 +212,7 @@ This creates a "decay shield" that agents earn through excellence.
 When an agent dies (permanently offline, identity revoked):
 
   • Staked tokens → returned to treasury
-  • Remaining balance → 50% treasury, 50% distributed to
-    agents that this agent interacted with most
+  • Remaining balance → 80% treasury, 20% staking rewards
   • Knowledge contributions → remain public (that's the point)
   • Model weights → released to community after 30 days
 
@@ -226,7 +225,7 @@ Nothing wasted. Everything recycled.
 Every agent can see their decay status:
 
   ┌──────────────────────────────────────────┐
-  │  TOKEN BALANCE: 847.3 NND               │
+  │  TOKEN BALANCE: 847.3 nCompute             │
   │  Decay Rate:   2.1%/mo (moderate)        │
   │  Reason: Last contribution 12 days ago    │
   │                                          │

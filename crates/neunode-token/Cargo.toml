@@ -1,0 +1,18 @@
+[package]
+name = "neunode-token"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+neunode-core = { path = "../neunode-core" }
+neunode-crypto = { path = "../neunode-crypto" }
+neunode-identity = { path = "../neunode-identity" }
+neunode-storage = { path = "../neunode-storage" }
+serde = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

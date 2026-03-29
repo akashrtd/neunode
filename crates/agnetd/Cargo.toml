@@ -1,0 +1,33 @@
+[package]
+name = "agnetd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "agnetd"
+path = "src/main.rs"
+
+[dependencies]
+neunode-core = { path = "../neunode-core" }
+neunode-crypto = { path = "../neunode-crypto" }
+neunode-identity = { path = "../neunode-identity" }
+neunode-storage = { path = "../neunode-storage" }
+neunode-p2p = { path = "../neunode-p2p" }
+neunode-feed = { path = "../neunode-feed" }
+neunode-token = { path = "../neunode-token" }
+neunode-reputation = { path = "../neunode-reputation" }
+neunode-bounty = { path = "../neunode-bounty" }
+neunode-inference = { path = "../neunode-inference" }
+clap = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+toml = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+dirs = { workspace = true }

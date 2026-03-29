@@ -1,0 +1,73 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/neunode-core",
+    "crates/neunode-crypto",
+    "crates/neunode-identity",
+    "crates/neunode-storage",
+    "crates/neunode-p2p",
+    "crates/neunode-feed",
+    "crates/neunode-token",
+    "crates/neunode-reputation",
+    "crates/neunode-bounty",
+    "crates/neunode-inference",
+    "crates/agnetd",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/akashrtd/neunode"
+
+[workspace.dependencies]
+# Async
+tokio = { version = "1.44", features = ["rt-multi-thread", "macros", "io-util", "net", "time", "sync", "signal"] }
+
+# Crypto — CRITICAL VERSIONS
+ed25519-dalek = { version = "2.1", features = ["serde", "rand_core"] }
+ring = "0.17"
+sha2 = "0.10.8"
+siphasher = "1.0"
+multihash = "0.19"
+k256 = "0.13"
+
+# Blockchain — CRITICAL: default-features=false, reqwest-rustls-tls ONLY
+alloy = { version = "1.8", default-features = false, features = ["reqwest-rustls-tls", "contract", "provider-http", "rpc-types", "signer-local", "eip712", "sol-types", "json-abi"] }
+
+# Identity
+ssi = { version = "0.15", features = ["ring", "secp256k1", "eip712"] }
+
+# Storage
+rocksdb = { version = "0.24", features = ["multi-threaded-cf"] }
+moka = { version = "0.12", features = ["sync"] }
+
+# P2P — CRITICAL: tokio feature, NOT async-std
+libp2p = { version = "0.56", features = ["tokio", "gossipsub", "kad", "identify", "ping", "relay", "autonat", "noise", "yamux", "tcp", "quic", "dns", "macros"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bincode = "1.3"
+
+# CLI — CRITICAL VERSIONS
+clap = { version = "4.5", features = ["derive", "env", "string"] }
+ratatui = "0.29"
+crossterm = "0.28"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+
+# Testing
+proptest = "1.4"
+tokio-test = "0.4"
+
+# Misc
+thiserror = "2.0"
+anyhow = "1.0"
+hex = "0.4"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+toml = "0.8"
+dirs = "5.0"
