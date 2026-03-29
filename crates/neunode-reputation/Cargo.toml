@@ -7,9 +7,13 @@ license.workspace = true
 [dependencies]
 neunode-core = { path = "../neunode-core" }
 neunode-crypto = { path = "../neunode-crypto" }
-neunode-identity = { path = "../neunode-identity" }
-neunode-storage = { path = "../neunode-storage" }
+ed25519-dalek = { workspace = true }
+hex = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+neunode-identity = { path = "../neunode-identity" }
