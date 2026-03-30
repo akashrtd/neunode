@@ -4,6 +4,7 @@ use clap::Parser;
 mod cli;
 mod cmd_bounty;
 mod cmd_config;
+mod cmd_dashboard;
 mod cmd_feed;
 mod cmd_identity;
 mod cmd_inference;
@@ -41,6 +42,7 @@ async fn main() -> Result<()> {
         Commands::Inference { command } => {
             cmd_inference::execute(command, &cli_args, &mut app_state)
         }
+        Commands::Dashboard => cmd_dashboard::execute(&cli_args, &mut app_state).await,
         Commands::Version => {
             println!("agnetd v{}", env!("CARGO_PKG_VERSION"));
             Ok(())

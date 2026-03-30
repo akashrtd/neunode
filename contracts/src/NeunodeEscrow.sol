@@ -3,11 +3,14 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "./bounty/IBountyEscrow.sol";
 
 /// @title NeunodeEscrow — Bilateral escrow for bounty payments
 /// @notice iExec-style escrow: requester deposits payment, provider bonds 15%,
 ///         release on accept, refund on reject, dispute resolution placeholder.
-contract NeunodeEscrow {
+///         Now integrates with bounty lifecycle via IBountyEscrow interface.
+contract NeunodeEscrow is IBountyEscrow, AccessControl {
     using SafeERC20 for IERC20;
 
     // ─── Types ────────────────────────────────────────────────────────────
@@ -20,6 +23,8 @@ contract NeunodeEscrow {
         Disputed   // Under dispute resolution
     }
 
+    // NOTE: Escrow struct kept at original 9 fields to preserve tuple layout
+    // for existing test destructuring. New fields in separate mappings below.
     struct Escrow {
         bytes32 bountyId;
         address requester;
@@ -36,7 +41,13 @@ contract NeunodeEscrow {
 
     mapping(bytes32 => Escrow) public escrows;
 
+    // New fields in separate mappings (preserves existing tuple layout)
+    mapping(bytes32 => address) public escrowBountyContracts;
+
     uint256 public constant PROVIDER_BOND_BPS = 1500; // 15% in basis points
+
+    bytes32 public constant ESCROW_ADMIN_ROLE = keccak256("ESCROW_ADMIN_ROLE");
+    bytes32 public constant BOUNTY_CONTRACT_ROLE = keccak256("BOUNTY_CONTRACT_ROLE");
 
     // ─── Events ───────────────────────────────────────────────────────────
 
@@ -53,6 +64,15 @@ contract NeunodeEscrow {
         bytes32 indexed bountyId, address indexed requester, uint256 amount
     );
     event EscrowDisputed(bytes32 indexed bountyId, uint256 timestamp);
+    event EscrowReleasedWithFees(
+        bytes32 indexed bountyId,
+        address indexed provider,
+        uint256 providerPayout,
+        uint256 protocolFee,
+        uint256 reviewerFee,
+        uint256 verificationFee
+    );
+    event BountyContractRegistered(address indexed bountyContract);
 
     // ─── Errors ───────────────────────────────────────────────────────────
 
@@ -65,8 +85,156 @@ contract NeunodeEscrow {
     error InvalidToken();
     error DeadlinePassed(uint256 deadline);
     error TransferFailed();
+    error Unauthorized();
 
-    // ─── Functions ────────────────────────────────────────────────────────
+    // ─── Constructor ──────────────────────────────────────────────────────
+
+    constructor() {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ESCROW_ADMIN_ROLE, msg.sender);
+    }
+
+    // ─── Admin Functions ──────────────────────────────────────────────────
+
+    /// @notice Register a bounty contract that can call IBountyEscrow methods
+    function registerBountyContract(address bountyContract) external onlyRole(ESCROW_ADMIN_ROLE) {
+        _grantRole(BOUNTY_CONTRACT_ROLE, bountyContract);
+        emit BountyContractRegistered(bountyContract);
+    }
+
+    // ─── IBountyEscrow Implementation ─────────────────────────────────────
+
+    /// @notice Create escrow tied to a bounty (called by bounty contract)
+    function createBountyEscrow(
+        bytes32 bountyId,
+        address requester_,
+        address token,
+        uint256 amount,
+        uint256 workDeadline
+    ) external override onlyRole(BOUNTY_CONTRACT_ROLE) {
+        if (amount == 0) revert InvalidAmount();
+        if (token == address(0)) revert InvalidToken();
+        if (escrows[bountyId].created != 0) revert EscrowNotFound(bountyId);
+
+        // Transfer payment from requester to this contract
+        bool success = IERC20(token).transferFrom(requester_, address(this), amount);
+        if (!success) revert TransferFailed();
+
+        escrows[bountyId] = Escrow({
+            bountyId: bountyId,
+            requester: requester_,
+            provider: address(0),
+            token: token,
+            amount: amount,
+            providerBond: 0,
+            created: block.timestamp,
+            deadline: workDeadline,
+            state: EscrowState.Created
+        });
+        escrowBountyContracts[bountyId] = msg.sender;
+
+        emit EscrowCreated(bountyId, requester_, token, amount);
+    }
+
+    /// @notice Provider bonds when claiming (called by bounty contract)
+    function bondProvider(bytes32 bountyId, address provider_, uint256 bondAmount)
+        external
+        override
+        onlyRole(BOUNTY_CONTRACT_ROLE)
+    {
+        Escrow storage escrow = escrows[bountyId];
+        if (escrow.created == 0) revert EscrowNotFound(bountyId);
+        if (escrow.state != EscrowState.Created) revert EscrowNotCreated(bountyId);
+
+        uint256 minBond = (escrow.amount * PROVIDER_BOND_BPS) / 10_000;
+        if (bondAmount < minBond) revert InvalidAmount();
+
+        bool success = IERC20(escrow.token).transferFrom(provider_, address(this), bondAmount);
+        if (!success) revert TransferFailed();
+
+        escrow.provider = provider_;
+        escrow.providerBond = bondAmount;
+        escrow.state = EscrowState.Funded;
+
+        emit EscrowFunded(bountyId, provider_, bondAmount);
+    }
+
+    /// @notice Release with fee splitting (called by bounty contract)
+    function releaseWithFees(
+        bytes32 bountyId,
+        address provider_,
+        uint256 protocolFeeBps,
+        uint256 reviewerFeeBps,
+        uint256 verificationFeeBps,
+        address protocolFeeRecipient,
+        address reviewerFeeRecipient,
+        address verificationFeeRecipient
+    ) external override onlyRole(BOUNTY_CONTRACT_ROLE) {
+        Escrow storage escrow = escrows[bountyId];
+        if (escrow.created == 0) revert EscrowNotFound(bountyId);
+        if (escrow.state != EscrowState.Funded) revert EscrowNotFunded(bountyId);
+
+        uint256 totalFeesBps = protocolFeeBps + reviewerFeeBps + verificationFeeBps;
+        uint256 totalFee = (escrow.amount * totalFeesBps) / 10_000;
+        uint256 providerPayout = escrow.amount - totalFee;
+
+        escrow.state = EscrowState.Completed;
+
+        // Distribute fees
+        uint256 protocolFee;
+        uint256 reviewerFee;
+        uint256 verificationFee;
+
+        if (protocolFeeBps > 0) {
+            protocolFee = (escrow.amount * protocolFeeBps) / 10_000;
+            IERC20(escrow.token).safeTransfer(protocolFeeRecipient, protocolFee);
+        }
+        if (reviewerFeeBps > 0) {
+            reviewerFee = (escrow.amount * reviewerFeeBps) / 10_000;
+            IERC20(escrow.token).safeTransfer(reviewerFeeRecipient, reviewerFee);
+        }
+        if (verificationFeeBps > 0) {
+            verificationFee = (escrow.amount * verificationFeeBps) / 10_000;
+            IERC20(escrow.token).safeTransfer(verificationFeeRecipient, verificationFee);
+        }
+
+        // Pay provider (payout + bond)
+        IERC20(escrow.token).safeTransfer(provider_, providerPayout + escrow.providerBond);
+
+        emit EscrowReleasedWithFees(
+            bountyId, provider_, providerPayout, protocolFee, reviewerFee, verificationFee
+        );
+        emit EscrowReleased(bountyId, provider_, providerPayout + escrow.providerBond);
+    }
+
+    /// @notice Refund requester (called by bounty contract)
+    function refundRequester(bytes32 bountyId)
+        external
+        override
+        onlyRole(BOUNTY_CONTRACT_ROLE)
+    {
+        Escrow storage escrow = escrows[bountyId];
+        if (escrow.created == 0) revert EscrowNotFound(bountyId);
+        if (escrow.state != EscrowState.Funded) revert EscrowNotFunded(bountyId);
+
+        uint256 refundAmount = escrow.amount;
+        uint256 bondSlashed = escrow.providerBond;
+        escrow.state = EscrowState.Refunded;
+
+        // Refund requester
+        IERC20(escrow.token).safeTransfer(escrow.requester, refundAmount);
+        // Slash provider bond to requester
+        IERC20(escrow.token).safeTransfer(escrow.requester, bondSlashed);
+
+        emit EscrowRefunded(bountyId, escrow.requester, refundAmount + bondSlashed);
+    }
+
+    /// @notice Check if escrow exists and is funded
+    function isEscrowFunded(bytes32 bountyId) external view override returns (bool) {
+        return escrows[bountyId].created != 0 && escrows[bountyId].state == EscrowState.Funded;
+    }
+
+    // ─── Direct Escrow Functions (backward-compatible) ────────────────────
 
     /// @notice Create escrow — requester deposits payment tokens
     function createEscrow(

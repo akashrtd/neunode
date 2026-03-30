@@ -98,6 +98,9 @@ pub enum Commands {
         #[command(subcommand)]
         command: InferenceCommands,
     },
+    /// Real-time dashboard (alias: d)
+    #[command(alias = "d")]
+    Dashboard,
     /// Show version info
     Version,
 }
