@@ -1,0 +1,12 @@
+FROM ghcr.io/cross-rs/aarch64-unknown-linux-gnu:0.2.5
+
+# Install modern LLVM/clang for rocksdb bindgen (requires clang 9+).
+# Base image has clang 3.8.x which is too old for clang_getTranslationUnitTargetInfo.
+# Ubuntu 20.04 (focal) repos provide clang 10.x which is sufficient.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    llvm-dev \
+    libclang-dev \
+    clang \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV LIBCLANG_PATH=/usr/lib/llvm-10/lib
