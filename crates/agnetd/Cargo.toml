@@ -31,3 +31,4 @@ toml = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 dirs = { workspace = true }
+openssl-sys = { version = "0.9", features = ["vendored"] }
