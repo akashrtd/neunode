@@ -1,20 +1,23 @@
 use anyhow::Result;
 use neunode_core::kind::Kind;
-use neunode_core::types::{Did, Hash256};
+use neunode_core::types::Hash256;
+use neunode_storage::feed_store::StoredEvent;
 
 use crate::cli::{Cli, FeedCommands};
-use crate::config::CliConfig;
 use crate::output::OutputWriter;
+use crate::state::AppState;
 
-pub fn execute(cmd: &FeedCommands, cli: &Cli, _config: &mut CliConfig) -> Result<()> {
+pub fn execute(cmd: &FeedCommands, cli: &Cli, state: &mut AppState) -> Result<()> {
     let writer = OutputWriter::new(cli.output);
     match cmd {
-        FeedCommands::Post { kind, content, tags } => feed_post(*kind, content, tags, cli, &writer),
+        FeedCommands::Post { kind, content, tags } => {
+            feed_post(*kind, content, tags, state, &writer)
+        }
         FeedCommands::List { kind, author, limit } => {
-            feed_list(*kind, author.as_deref(), *limit, &writer)
+            feed_list(*kind, author.as_deref(), *limit, state, &writer)
         }
         FeedCommands::Subscribe { kind } => feed_subscribe(*kind, &writer),
-        FeedCommands::Show { event_id } => feed_show(event_id, &writer),
+        FeedCommands::Show { event_id } => feed_show(event_id, state, &writer),
     }
 }
 
@@ -22,22 +25,49 @@ fn feed_post(
     kind: u32,
     content: &str,
     tags: &[String],
-    cli: &Cli,
+    state: &AppState,
     writer: &OutputWriter,
 ) -> Result<()> {
     let kind_val = (kind as u16)
         .try_into()
         .map_err(|e: neunode_core::NeunodeError| anyhow::anyhow!("invalid kind {}: {e}", kind))?;
 
-    let author_did = cli.identity.as_deref().map(|s| Did(s.to_string())).unwrap_or_else(|| {
-        Did("did:neunode:0x0000000000000000000000000000000000000000".to_string())
-    });
+    let keyring = state.require_keyring()?;
+    let did = state.require_did()?;
+
+    let store = state.feed_store();
+    let latest_seq = store.latest_sequence(&did.0)?;
+    let next_seq = if latest_seq == 0 { 1 } else { latest_seq + 1 };
+
+    let prev_hash = if latest_seq == 0 {
+        Hash256("0".to_string())
+    } else {
+        match store.get(&did.0, latest_seq)? {
+            Some(prev) => {
+                let prev_event = neunode_feed::event::FeedEvent::new(
+                    Kind::AgentMetadata,
+                    did.clone(),
+                    prev.sequence,
+                    Hash256(
+                        std::str::from_utf8(&prev.prev_hash)
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|_| "0".to_string()),
+                    ),
+                    prev.payload.iter().map(|&b| b as char).collect::<String>(),
+                )?;
+                prev_event.compute_hash()
+            }
+            None => Hash256("0".to_string()),
+        }
+    };
+
+    let prev_hash_bytes = prev_hash.0.as_bytes().to_vec();
 
     let mut event = neunode_feed::event::FeedEvent::new(
         kind_val,
-        author_did,
-        0,
-        Hash256("0".to_string()),
+        did.clone(),
+        next_seq,
+        prev_hash,
         content.to_string(),
     )?;
 
@@ -55,6 +85,24 @@ fn feed_post(
 
     event.validate()?;
 
+    let (ed_bytes, _) = keyring.to_bytes();
+    let ed_bytes_fixed: [u8; 32] = ed_bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("invalid ed25519 key length"))?;
+    event.sign(&ed_bytes_fixed)?;
+
+    let stored = StoredEvent {
+        kind: kind_val.as_u16(),
+        timestamp: event.timestamp,
+        agent_did: did.0.clone(),
+        sequence: next_seq,
+        prev_hash: prev_hash_bytes,
+        payload: content.as_bytes().to_vec(),
+        signature: event.signature.as_ref().map(|s| s.0.as_bytes().to_vec()).unwrap_or_default(),
+    };
+    store.append(&stored)?;
+
     let kind_name = kind_name(kind_val);
     let topic = kind_val.gossipsub_topic();
     let kind_display = format!("{} ({})", kind, kind_name);
@@ -66,12 +114,12 @@ fn feed_post(
         ("Event ID", event_id_str.as_str()),
         ("Kind", kind_display.as_str()),
         ("Author", author_str.as_str()),
-        ("Sequence", &event.sequence.to_string()),
+        ("Sequence", &next_seq.to_string()),
         ("Topic", topic),
         ("Schema", schema),
     ];
     writer.write_key_value_pairs(&pairs);
-    writer.write_status(&format!("Event posted to {topic} (unsigned — Phase 1 MVP)"));
+    writer.write_status(&format!("Event posted to {topic} (signed, persisted to DB)"));
     Ok(())
 }
 
@@ -79,19 +127,40 @@ fn feed_list(
     kind: Option<u32>,
     author: Option<&str>,
     limit: usize,
+    state: &AppState,
     writer: &OutputWriter,
 ) -> Result<()> {
-    let kind_display = kind.map(|k| format!("{} ({})", k, k)).unwrap_or_else(|| "all".to_string());
-    let author_display = author.unwrap_or("all").to_string();
+    let did = match author {
+        Some(a) => a.to_string(),
+        None => state.require_did()?.0.clone(),
+    };
 
-    let info = serde_json::json!({
-        "kind_filter": kind_display,
-        "author_filter": author_display,
-        "limit": limit,
-        "events": [],
-        "note": "Phase 1 MVP — feed storage not yet connected",
-    });
-    writer.write_json(&info);
+    let store = state.feed_store();
+    let events = store.get_all(&did)?;
+
+    let filtered: Vec<StoredEvent> = events
+        .into_iter()
+        .filter(|e| kind.is_none_or(|k| e.kind == k as u16))
+        .take(limit)
+        .collect();
+
+    if filtered.is_empty() {
+        writer.write_status("No events found");
+    } else {
+        let headers = ["Seq", "Kind", "Timestamp", "Author"];
+        let rows: Vec<Vec<String>> = filtered
+            .iter()
+            .map(|e| {
+                vec![
+                    e.sequence.to_string(),
+                    e.kind.to_string(),
+                    e.timestamp.to_string(),
+                    e.agent_did.clone(),
+                ]
+            })
+            .collect();
+        writer.write_table(&headers, &rows);
+    }
     Ok(())
 }
 
@@ -118,13 +187,38 @@ fn feed_subscribe(kind: Option<u32>, writer: &OutputWriter) -> Result<()> {
     Ok(())
 }
 
-fn feed_show(event_id: &str, writer: &OutputWriter) -> Result<()> {
-    let info = serde_json::json!({
-        "event_id": event_id,
-        "status": "not_found",
-        "note": "Phase 1 MVP — event lookup not yet connected to storage",
+fn feed_show(event_id: &str, state: &AppState, writer: &OutputWriter) -> Result<()> {
+    let did = state.require_did()?;
+    let store = state.feed_store();
+
+    let events = store.get_all(&did.0)?;
+    let found = events.iter().find(|e| {
+        let id_hex = hex::encode(&e.signature);
+        id_hex.contains(event_id) || event_id.starts_with(&format!("seq:{}", e.sequence))
     });
-    writer.write_json(&info);
+
+    match found {
+        Some(event) => {
+            let pairs = [
+                ("Sequence", event.sequence.to_string()),
+                ("Kind", event.kind.to_string()),
+                ("Timestamp", event.timestamp.to_string()),
+                ("Author", event.agent_did.clone()),
+                ("Content", std::str::from_utf8(&event.payload).unwrap_or("(binary)").to_string()),
+                ("Signature", hex::encode(&event.signature)),
+            ];
+            writer.write_key_value_pairs(
+                &pairs.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>(),
+            );
+        }
+        None => {
+            let info = serde_json::json!({
+                "event_id": event_id,
+                "status": "not_found",
+            });
+            writer.write_json(&info);
+        }
+    }
     Ok(())
 }
 

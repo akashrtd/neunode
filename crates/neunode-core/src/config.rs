@@ -9,6 +9,8 @@ pub struct AppConfig {
     pub storage: StorageConfig,
     #[serde(default)]
     pub tokens: TokenConfig,
+    #[serde(default)]
+    pub active_identity: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -282,6 +284,7 @@ listen_addr = "/ip4/0.0.0.0/tcp/0"
                 decay_check_interval_secs: 3600,
                 unbonding_period_secs: 7 * 24 * 3600,
             },
+            active_identity: None,
         };
         let toml_str = config.to_toml().unwrap();
         assert!(toml_str.contains("test"));

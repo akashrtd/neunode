@@ -41,7 +41,8 @@ impl CliConfig {
             default
         };
 
-        Ok(Self { config_path: path, app_config, active_identity: None })
+        let active_identity = app_config.active_identity.clone();
+        Ok(Self { config_path: path, app_config, active_identity })
     }
 
     pub fn save(&self) -> Result<()> {
@@ -166,6 +167,7 @@ impl CliConfig {
             network: neunode_core::config::NetworkConfig::default(),
             storage: neunode_core::config::StorageConfig::default(),
             tokens: neunode_core::config::TokenConfig::default(),
+            active_identity: None,
         }
     }
 }

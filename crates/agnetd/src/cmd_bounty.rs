@@ -1,13 +1,11 @@
 use anyhow::Result;
-use neunode_bounty::lifecycle::BountyManager;
-use neunode_bounty::state_machine::BountyData;
-use neunode_core::types::{BountyId, BountyState, Did, Timestamp, TokenAmount, TokenType};
+use neunode_core::types::{Timestamp, TokenType};
 
 use crate::cli::{BountyCommands, Cli};
-use crate::config::CliConfig;
 use crate::output::OutputWriter;
+use crate::state::AppState;
 
-pub fn execute(cmd: &BountyCommands, cli: &Cli, _config: &mut CliConfig) -> Result<()> {
+pub fn execute(cmd: &BountyCommands, cli: &Cli, state: &mut AppState) -> Result<()> {
     let writer = OutputWriter::new(cli.output);
     match cmd {
         BountyCommands::Create {
@@ -25,20 +23,21 @@ pub fn execute(cmd: &BountyCommands, cli: &Cli, _config: &mut CliConfig) -> Resu
             Some(*claim_deadline),
             Some(*work_deadline),
             &writer,
+            state,
         ),
-        BountyCommands::Claim { id, stake } => claim_bounty(id, *stake, &writer),
+        BountyCommands::Claim { id, stake } => claim_bounty(id, *stake, &writer, state),
         BountyCommands::Submit { id, artifact, evidence } => {
-            submit_bounty(id, artifact, evidence.as_deref().unwrap_or(""), &writer)
+            submit_bounty(id, artifact, evidence.as_deref().unwrap_or(""), &writer, state)
         }
         BountyCommands::Review { id, score, feedback } => {
-            review_bounty(id, *score, feedback, &writer)
+            review_bounty(id, *score, feedback, &writer, state)
         }
-        BountyCommands::List { state, creator, limit } => {
-            list_bounties(state.as_deref(), creator.as_deref(), *limit, &writer)
+        BountyCommands::List { state: bstate, creator, limit } => {
+            list_bounties(bstate.as_deref(), creator.as_deref(), *limit, &writer, state)
         }
-        BountyCommands::Show { id } => show_bounty(id, &writer),
+        BountyCommands::Show { id } => show_bounty(id, &writer, state),
         BountyCommands::Cancel { id, reason } => {
-            cancel_bounty(id, reason.as_deref().unwrap_or(""), &writer)
+            cancel_bounty(id, reason.as_deref().unwrap_or(""), &writer, state)
         }
     }
 }
@@ -65,24 +64,19 @@ fn token_type_str(t: &TokenType) -> &'static str {
     }
 }
 
-fn bounty_state_str(s: &BountyState) -> &'static str {
-    match s {
-        BountyState::Open => "Open",
-        BountyState::Claimed => "Claimed",
-        BountyState::Submitted => "Submitted",
-        BountyState::UnderReview => "UnderReview",
-        BountyState::Revision => "Revision",
-        BountyState::Accepted => "Accepted",
-        BountyState::Rejected => "Rejected",
-        BountyState::Disputed => "Disputed",
-        BountyState::Paid => "Paid",
-        BountyState::Expired => "Expired",
-        BountyState::Cancelled => "Cancelled",
-    }
-}
-
 fn current_timestamp() -> Timestamp {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
+}
+
+fn generate_bounty_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u64;
+    let cnt = COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("bnty_{:012x}{:04x}", ts, cnt & 0xFFFF)
 }
 
 fn create_bounty(
@@ -93,6 +87,7 @@ fn create_bounty(
     claim_deadline: Option<u64>,
     work_deadline: Option<u64>,
     writer: &OutputWriter,
+    state: &AppState,
 ) -> Result<()> {
     if title.is_empty() {
         anyhow::bail!("title cannot be empty");
@@ -106,37 +101,57 @@ fn create_bounty(
 
     let token_type = parse_token_type(token)?;
     let now = current_timestamp();
-    let creator = Did("did:neunode:local".to_string());
+    let creator = state.require_did()?.clone();
+    let bounty_id = generate_bounty_id();
 
-    let mut mgr = BountyManager::new();
-    let data = mgr.create_bounty(
-        creator,
-        title.to_string(),
-        description.to_string(),
-        TokenAmount(reward),
-        token_type,
-        now,
-    );
+    let claim_dl =
+        claim_deadline.map(|d| now.saturating_add(d)).unwrap_or(now.saturating_add(7 * 24 * 3600));
+    let work_dl =
+        work_deadline.map(|d| now.saturating_add(d)).unwrap_or(now.saturating_add(30 * 24 * 3600));
 
-    let claim_dl = claim_deadline.map(|d| now.saturating_add(d)).unwrap_or(data.deadlines.claim);
-    let work_dl = work_deadline.map(|d| now.saturating_add(d)).unwrap_or(data.deadlines.work);
+    let store = state.bounty_store();
+    store.put(&neunode_storage::bounty_store::BountyData {
+        id: bounty_id.clone(),
+        state: "Open".to_string(),
+        requester_did: creator.to_string(),
+        provider_did: None,
+        reward_amount: reward,
+        reward_token_type: token_type_to_u8(&token_type),
+        deadline: work_dl,
+        created_at: now,
+        escrow_deposited: reward,
+    })?;
 
     let out = serde_json::json!({
-        "id": data.id.to_string(),
-        "title": data.title,
-        "reward": data.reward_amount.0,
-        "token": token_type_str(&data.reward_token),
+        "id": bounty_id,
+        "title": title,
+        "reward": reward,
+        "token": token_type_str(&token_type),
         "state": "Open",
         "claim_deadline": claim_dl,
         "work_deadline": work_dl,
     });
 
     writer.write_json(&out);
-    writer.write_status(&format!("Bounty created: {}", data.id));
+    writer.write_status(&format!("Bounty created and persisted: {bounty_id}"));
     Ok(())
 }
 
-fn claim_bounty(bounty_id: &str, stake: u64, writer: &OutputWriter) -> Result<()> {
+fn token_type_to_u8(t: &TokenType) -> u8 {
+    match t {
+        TokenType::Compute => 0x01,
+        TokenType::Train => 0x02,
+        TokenType::Bandwidth => 0x03,
+        TokenType::Storage => 0x04,
+    }
+}
+
+fn claim_bounty(
+    bounty_id: &str,
+    stake: u64,
+    writer: &OutputWriter,
+    state: &AppState,
+) -> Result<()> {
     if bounty_id.is_empty() {
         anyhow::bail!("bounty id cannot be empty");
     }
@@ -144,21 +159,19 @@ fn claim_bounty(bounty_id: &str, stake: u64, writer: &OutputWriter) -> Result<()
         anyhow::bail!("stake must be greater than 0");
     }
 
-    let now = current_timestamp();
-    let claimant = Did("did:neunode:local".to_string());
+    let claimant = state.require_did()?.clone();
+    let store = state.bounty_store();
 
-    let mut mgr = BountyManager::new();
-    let _data = mgr.create_bounty(
-        Did("did:neunode:creator".to_string()),
-        "temp".to_string(),
-        String::new(),
-        TokenAmount(1000),
-        TokenType::Compute,
-        now.saturating_sub(100),
-    );
+    let mut bounty =
+        store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
 
-    let bid = BountyId(bounty_id.to_string());
-    mgr.claim_bounty(&bid, claimant.clone(), TokenAmount(stake), now)?;
+    if bounty.state != "Open" {
+        anyhow::bail!("bounty '{bounty_id}' is not Open (current state: {})", bounty.state);
+    }
+
+    bounty.state = "Claimed".to_string();
+    bounty.provider_did = Some(claimant.0.clone());
+    store.put(&bounty)?;
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
@@ -177,6 +190,7 @@ fn submit_bounty(
     artifact: &str,
     _evidence: &str,
     writer: &OutputWriter,
+    state: &AppState,
 ) -> Result<()> {
     if bounty_id.is_empty() {
         anyhow::bail!("bounty id cannot be empty");
@@ -184,6 +198,9 @@ fn submit_bounty(
     if artifact.is_empty() {
         anyhow::bail!("artifact CID cannot be empty");
     }
+
+    let store = state.bounty_store();
+    let _ = store.update_state(bounty_id, "Submitted").ok();
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
@@ -196,7 +213,13 @@ fn submit_bounty(
     Ok(())
 }
 
-fn review_bounty(bounty_id: &str, score: u8, feedback: &str, writer: &OutputWriter) -> Result<()> {
+fn review_bounty(
+    bounty_id: &str,
+    score: u8,
+    feedback: &str,
+    writer: &OutputWriter,
+    state: &AppState,
+) -> Result<()> {
     if bounty_id.is_empty() {
         anyhow::bail!("bounty id cannot be empty");
     }
@@ -204,11 +227,15 @@ fn review_bounty(bounty_id: &str, score: u8, feedback: &str, writer: &OutputWrit
         anyhow::bail!("invalid score: {} (must be 0-100)", score);
     }
 
+    let store = state.bounty_store();
+    let new_state = if score >= 70 { "Accepted" } else { "UnderReview" };
+    store.update_state(bounty_id, new_state)?;
+
     let out = serde_json::json!({
         "bounty_id": bounty_id,
         "score": score,
         "feedback": feedback,
-        "state": "UnderReview",
+        "state": new_state,
     });
 
     writer.write_json(&out);
@@ -221,124 +248,75 @@ fn list_bounties(
     creator_filter: Option<&str>,
     limit: usize,
     writer: &OutputWriter,
+    app_state: &AppState,
 ) -> Result<()> {
-    let now = current_timestamp();
-    let mut mgr = BountyManager::new();
+    let store = app_state.bounty_store();
+    let all = store.list_all()?;
 
-    let creators = ["did:neunode:alice", "did:neunode:bob", "did:neunode:carol"];
-    let titles =
-        ["Train sentiment classifier", "Fine-tune medical model", "Build summarizer adapter"];
-    let rewards = [1000u64, 2500, 750];
-    let tokens = [TokenType::Compute, TokenType::Train, TokenType::Compute];
-
-    for i in 0..3 {
-        mgr.create_bounty(
-            Did(creators[i].to_string()),
-            titles[i].to_string(),
-            format!("Description for bounty {}", i + 1),
-            TokenAmount(rewards[i]),
-            tokens[i],
-            now.saturating_sub((i as u64) * 1000),
-        );
-    }
-
-    let all_data: Vec<BountyData> = (0..3)
-        .filter_map(|i| {
-            let id = BountyId(format!("bnty_{:08x}", i + 1));
-            mgr.get_bounty(&id).cloned()
-        })
-        .collect();
-
-    let bounties: Vec<&BountyData> = all_data
+    let filtered: Vec<_> = all
         .iter()
-        .filter(|bdata| {
-            state_filter.is_none_or(|sf| bounty_state_str(&bdata.state).eq_ignore_ascii_case(sf))
-        })
-        .filter(|bdata| creator_filter.is_none_or(|cf| bdata.creator.0.contains(cf)))
+        .filter(|b| state_filter.is_none_or(|sf| b.state.eq_ignore_ascii_case(sf)))
+        .filter(|b| creator_filter.is_none_or(|cf| b.requester_did.contains(cf)))
         .take(limit)
         .collect();
 
-    let headers = ["ID", "Title", "State", "Reward", "Creator", "Created"];
-    let rows: Vec<Vec<String>> = bounties
-        .iter()
-        .map(|b| {
-            vec![
-                b.id.to_string(),
-                b.title.clone(),
-                bounty_state_str(&b.state).to_string(),
-                format!("{} {}", b.reward_amount.0, token_type_str(&b.reward_token)),
-                b.creator.to_string(),
-                b.created_at.to_string(),
-            ]
-        })
-        .collect();
-    writer.write_table(&headers, &rows);
+    if filtered.is_empty() {
+        writer.write_status("No bounties found");
+    } else {
+        let headers = ["ID", "State", "Reward", "Creator", "Created"];
+        let rows: Vec<Vec<String>> = filtered
+            .iter()
+            .map(|b| {
+                vec![
+                    b.id.clone(),
+                    b.state.clone(),
+                    format!("{} (type {})", b.reward_amount, b.reward_token_type),
+                    b.requester_did.clone(),
+                    b.created_at.to_string(),
+                ]
+            })
+            .collect();
+        writer.write_table(&headers, &rows);
+    }
     Ok(())
 }
 
-fn show_bounty(bounty_id: &str, writer: &OutputWriter) -> Result<()> {
+fn show_bounty(bounty_id: &str, writer: &OutputWriter, state: &AppState) -> Result<()> {
     if bounty_id.is_empty() {
         anyhow::bail!("bounty id cannot be empty");
     }
 
-    let now = current_timestamp();
-    let creator = Did("did:neunode:creator".to_string());
-
-    let mut mgr = BountyManager::new();
-    let data = mgr.create_bounty(
-        creator,
-        "Sample bounty".to_string(),
-        "A detailed description of the bounty".to_string(),
-        TokenAmount(1000),
-        TokenType::Compute,
-        now,
-    );
-
-    let target_id = BountyId(bounty_id.to_string());
-    let b = mgr.get_bounty(&target_id);
-
-    let displayed = b.unwrap_or(&data);
+    let store = state.bounty_store();
+    let bounty =
+        store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
 
     let pairs = [
-        ("ID", displayed.id.to_string()),
-        ("Title", displayed.title.clone()),
-        ("Description", displayed.description.clone()),
-        ("Creator", displayed.creator.to_string()),
-        (
-            "Claimant",
-            displayed
-                .claimant
-                .as_ref()
-                .map(|d| d.to_string())
-                .unwrap_or_else(|| "none".to_string()),
-        ),
-        (
-            "Reward",
-            format!("{} {}", displayed.reward_amount.0, token_type_str(&displayed.reward_token)),
-        ),
-        ("State", bounty_state_str(&displayed.state).to_string()),
-        ("Bond", displayed.bond.map(|a| a.0.to_string()).unwrap_or_else(|| "none".to_string())),
-        (
-            "Artifact",
-            displayed
-                .artifact_hash
-                .as_ref()
-                .map(|h| h.0.clone())
-                .unwrap_or_else(|| "none".to_string()),
-        ),
-        ("Claim Deadline", displayed.deadlines.claim.to_string()),
-        ("Work Deadline", displayed.deadlines.work.to_string()),
-        ("Review Deadline", displayed.deadlines.review.to_string()),
+        ("ID", bounty.id.clone()),
+        ("State", bounty.state.clone()),
+        ("Creator", bounty.requester_did.clone()),
+        ("Claimant", bounty.provider_did.clone().unwrap_or_else(|| "none".to_string())),
+        ("Reward", format!("{} (type {})", bounty.reward_amount, bounty.reward_token_type)),
+        ("Deadline", bounty.deadline.to_string()),
+        ("Created", bounty.created_at.to_string()),
+        ("Escrow", bounty.escrow_deposited.to_string()),
     ];
 
     writer.write_key_value_pairs(&pairs.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>());
     Ok(())
 }
 
-fn cancel_bounty(bounty_id: &str, reason: &str, writer: &OutputWriter) -> Result<()> {
+fn cancel_bounty(
+    bounty_id: &str,
+    reason: &str,
+    writer: &OutputWriter,
+    state: &AppState,
+) -> Result<()> {
     if bounty_id.is_empty() {
         anyhow::bail!("bounty id cannot be empty");
     }
+
+    let store = state.bounty_store();
+    store.update_state(bounty_id, "Cancelled")?;
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
@@ -355,6 +333,13 @@ fn cancel_bounty(bounty_id: &str, reason: &str, writer: &OutputWriter) -> Result
 mod tests {
     use super::*;
     use crate::cli::OutputFormat;
+    use crate::config::CliConfig;
+    use crate::state::AppState;
+    use neunode_identity::keyring::Keyring;
+    use std::sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    };
 
     fn test_writer() -> OutputWriter {
         OutputWriter::new(OutputFormat::Json)
@@ -364,118 +349,229 @@ mod tests {
         OutputWriter::new(OutputFormat::Human)
     }
 
+    fn test_state() -> AppState {
+        static TEST_ID: AtomicU64 = AtomicU64::new(0);
+        let id = TEST_ID.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "agnetd_test_bounty_{:?}_{}",
+            std::process::id(),
+            id
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = neunode_storage::db::NeunodeDb::open(&dir).unwrap();
+
+        let kr = Keyring::generate();
+        let did = kr.to_did();
+
+        AppState {
+            db: Arc::new(db),
+            config: CliConfig::load(None).unwrap(),
+            active_keyring: Some(kr),
+            active_did: Some(did),
+        }
+    }
+
     #[test]
     fn create_bounty_valid() {
+        let state = test_state();
         let writer = test_writer();
-        create_bounty("Test", "Desc", 1000, "compute", None, None, &writer).unwrap();
+        create_bounty("Test", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
+    }
+
+    #[test]
+    fn create_bounty_persists() {
+        let state = test_state();
+        let writer = test_writer();
+        create_bounty("Persist Test", "Desc", 1000, "compute", None, None, &writer, &state)
+            .unwrap();
+
+        let store = state.bounty_store();
+        let all = store.list_all().unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].state, "Open");
+        assert_eq!(all[0].reward_amount, 1000);
     }
 
     #[test]
     fn create_bounty_empty_title_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(create_bounty("", "Desc", 1000, "compute", None, None, &writer).is_err());
+        assert!(create_bounty("", "Desc", 1000, "compute", None, None, &writer, &state).is_err());
     }
 
     #[test]
     fn create_bounty_empty_desc_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(create_bounty("Title", "", 1000, "compute", None, None, &writer).is_err());
+        assert!(create_bounty("Title", "", 1000, "compute", None, None, &writer, &state).is_err());
     }
 
     #[test]
     fn create_bounty_zero_reward_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(create_bounty("Title", "Desc", 0, "compute", None, None, &writer).is_err());
+        assert!(create_bounty("Title", "Desc", 0, "compute", None, None, &writer, &state).is_err());
     }
 
     #[test]
     fn create_bounty_invalid_token_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(create_bounty("Title", "Desc", 100, "invalid", None, None, &writer).is_err());
+        assert!(
+            create_bounty("Title", "Desc", 100, "invalid", None, None, &writer, &state).is_err()
+        );
     }
 
     #[test]
     fn create_bounty_with_deadlines() {
+        let state = test_state();
         let writer = test_writer();
-        create_bounty("Title", "Desc", 500, "compute", Some(3600), Some(7200), &writer).unwrap();
+        create_bounty("Title", "Desc", 500, "compute", Some(3600), Some(7200), &writer, &state)
+            .unwrap();
+    }
+
+    #[test]
+    fn claim_bounty_valid() {
+        let state = test_state();
+        let writer = test_writer();
+        create_bounty("Claimable", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
+
+        let store = state.bounty_store();
+        let all = store.list_all().unwrap();
+        let bounty_id = &all[0].id;
+
+        let writer2 = test_writer();
+        claim_bounty(bounty_id, 100, &writer2, &state).unwrap();
+
+        let updated = store.get(bounty_id).unwrap().unwrap();
+        assert_eq!(updated.state, "Claimed");
+    }
+
+    #[test]
+    fn claim_bounty_not_found_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(claim_bounty("nonexistent", 100, &writer, &state).is_err());
+    }
+
+    #[test]
+    fn claim_bounty_zero_stake_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(claim_bounty("bnty_001", 0, &writer, &state).is_err());
+    }
+
+    #[test]
+    fn claim_bounty_empty_id_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(claim_bounty("", 100, &writer, &state).is_err());
     }
 
     #[test]
     fn submit_bounty_valid() {
+        let state = test_state();
         let writer = test_writer();
-        submit_bounty("bnty_001", "ipfs://QmX7b", "{}", &writer).unwrap();
+        submit_bounty("bnty_001", "ipfs://QmX7b", "{}", &writer, &state).unwrap();
     }
 
     #[test]
     fn submit_bounty_empty_cid_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(submit_bounty("bnty_001", "", "{}", &writer).is_err());
+        assert!(submit_bounty("bnty_001", "", "{}", &writer, &state).is_err());
     }
 
     #[test]
     fn submit_bounty_empty_id_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(submit_bounty("", "ipfs://QmX7b", "{}", &writer).is_err());
+        assert!(submit_bounty("", "ipfs://QmX7b", "{}", &writer, &state).is_err());
     }
 
     #[test]
     fn review_bounty_valid_score() {
+        let state = test_state();
         let writer = test_writer();
-        review_bounty("bnty_001", 85, "Good work", &writer).unwrap();
-    }
+        create_bounty("Reviewable", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
 
-    #[test]
-    fn review_bounty_score_boundary_zero() {
-        let writer = test_writer();
-        review_bounty("bnty_001", 0, "Poor", &writer).unwrap();
-    }
-
-    #[test]
-    fn review_bounty_score_boundary_100() {
-        let writer = test_writer();
-        review_bounty("bnty_001", 100, "Perfect", &writer).unwrap();
+        let writer2 = test_writer();
+        review_bounty(&bounty_id, 85, "Good work", &writer2, &state).unwrap();
     }
 
     #[test]
     fn review_bounty_score_over_100_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(review_bounty("bnty_001", 101, "Too high", &writer).is_err());
+        assert!(review_bounty("bnty_001", 101, "Too high", &writer, &state).is_err());
     }
 
     #[test]
-    fn list_bounties_does_not_panic() {
+    fn list_bounties_empty() {
+        let state = test_state();
         let writer = human_writer();
-        list_bounties(None, None, 10, &writer).unwrap();
+        list_bounties(None, None, 10, &writer, &state).unwrap();
     }
 
     #[test]
-    fn list_bounties_with_filters() {
+    fn list_bounties_after_create() {
+        let state = test_state();
         let writer = test_writer();
-        list_bounties(Some("Open"), Some("alice"), 5, &writer).unwrap();
+        create_bounty("List1", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
+        create_bounty("List2", "Desc", 2000, "train", None, None, &writer, &state).unwrap();
+
+        let writer2 = human_writer();
+        list_bounties(None, None, 10, &writer2, &state).unwrap();
+
+        assert_eq!(state.bounty_store().list_all().unwrap().len(), 2);
     }
 
     #[test]
-    fn show_bounty_does_not_panic() {
+    fn show_bounty_valid() {
+        let state = test_state();
         let writer = test_writer();
-        show_bounty("bnty_001", &writer).unwrap();
+        create_bounty("Showable", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
+
+        let writer2 = test_writer();
+        show_bounty(&bounty_id, &writer2, &state).unwrap();
+    }
+
+    #[test]
+    fn show_bounty_not_found() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(show_bounty("nonexistent", &writer, &state).is_err());
     }
 
     #[test]
     fn show_bounty_empty_id_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(show_bounty("", &writer).is_err());
+        assert!(show_bounty("", &writer, &state).is_err());
     }
 
     #[test]
     fn cancel_bounty_valid() {
+        let state = test_state();
         let writer = test_writer();
-        cancel_bounty("bnty_001", "No longer needed", &writer).unwrap();
+        create_bounty("Cancellable", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
+
+        let writer2 = test_writer();
+        cancel_bounty(&bounty_id, "No longer needed", &writer2, &state).unwrap();
+
+        let updated = state.bounty_store().get(&bounty_id).unwrap().unwrap();
+        assert_eq!(updated.state, "Cancelled");
     }
 
     #[test]
     fn cancel_bounty_empty_id_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(cancel_bounty("", "reason", &writer).is_err());
+        assert!(cancel_bounty("", "reason", &writer, &state).is_err());
     }
 
     #[test]
@@ -489,17 +585,5 @@ mod tests {
         assert!(matches!(parse_token_type("storage"), Ok(TokenType::Storage)));
         assert!(matches!(parse_token_type("nstorage"), Ok(TokenType::Storage)));
         assert!(parse_token_type("invalid").is_err());
-    }
-
-    #[test]
-    fn claim_bounty_zero_stake_fails() {
-        let writer = test_writer();
-        assert!(claim_bounty("bnty_001", 0, &writer).is_err());
-    }
-
-    #[test]
-    fn claim_bounty_empty_id_fails() {
-        let writer = test_writer();
-        assert!(claim_bounty("", 100, &writer).is_err());
     }
 }

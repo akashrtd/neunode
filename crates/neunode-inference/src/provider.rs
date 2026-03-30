@@ -36,7 +36,6 @@ impl InferenceProvider {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ModelInfo {
     pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub base_model: Option<String>,
     pub context_length: u32,
     pub input_price_per_million: TokenAmount,

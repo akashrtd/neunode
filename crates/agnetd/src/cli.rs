@@ -131,7 +131,7 @@ pub enum IdentityCommands {
         did: Option<String>,
         /// Output file path
         #[arg(short, long)]
-        output: String,
+        file: String,
     },
 }
 

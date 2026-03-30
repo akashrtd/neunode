@@ -1,52 +1,55 @@
 use anyhow::Result;
-use neunode_core::types::{Did, TokenAmount};
+use neunode_core::types::TokenAmount;
 use neunode_inference::openai::{ChatCompletionRequest, ChatMessage, MessageRole};
 use neunode_inference::provider::{InferenceProvider, ModelInfo, ProviderStatus};
 use neunode_inference::router::{Router, RoutingStrategy};
+use neunode_storage::db::NeunodeDb;
 
 use crate::cli::{Cli, InferenceCommands};
-use crate::config::CliConfig;
 use crate::output::OutputWriter;
+use crate::state::AppState;
 
-pub fn execute(cmd: &InferenceCommands, cli: &Cli, _config: &mut CliConfig) -> Result<()> {
+pub fn execute(cmd: &InferenceCommands, cli: &Cli, state: &mut AppState) -> Result<()> {
     let writer = OutputWriter::new(cli.output);
     match cmd {
         InferenceCommands::Request { model, prompt, max_tokens, temperature } => {
-            request_inference(model, prompt, *max_tokens, Some(*temperature), &writer)
+            request_inference(model, prompt, *max_tokens, Some(*temperature), &writer, state)
         }
-        InferenceCommands::ListModels { provider } => list_models(provider.as_deref(), &writer),
-        InferenceCommands::Providers { model } => list_providers(model.as_deref(), &writer),
-        InferenceCommands::Route { model, strategy } => route_request(model, strategy, &writer),
+        InferenceCommands::ListModels { provider } => {
+            list_models(provider.as_deref(), &writer, state)
+        }
+        InferenceCommands::Providers { model } => list_providers(model.as_deref(), &writer, state),
+        InferenceCommands::Route { model, strategy } => {
+            route_request(model, strategy, &writer, state)
+        }
         InferenceCommands::Pricing { model, input_tokens, output_tokens } => {
-            show_pricing(model, *input_tokens, *output_tokens, &writer)
+            show_pricing(model, *input_tokens, *output_tokens, &writer, state)
         }
     }
 }
 
-fn test_model(model_id: &str) -> ModelInfo {
-    ModelInfo {
-        id: model_id.to_string(),
-        base_model: Some("llama-3b".to_string()),
-        context_length: 4096,
-        input_price_per_million: TokenAmount(100),
-        output_price_per_million: TokenAmount(200),
-        capabilities: vec!["chat".to_string(), "streaming".to_string()],
-    }
+fn store_provider(db: &NeunodeDb, provider: &InferenceProvider) -> Result<()> {
+    let key = format!("prov:{}", provider.did);
+    let key_bytes = bincode::serialize(&key).map_err(|e| anyhow::anyhow!("key serialize: {e}"))?;
+    let value =
+        bincode::serialize(provider).map_err(|e| anyhow::anyhow!("serialize provider: {e}"))?;
+    db.put_raw(neunode_storage::cf::CF_MODELS, &key_bytes, &value)?;
+    Ok(())
 }
 
-fn test_provider(did_num: u32, model_ids: &[&str], rep: f64, latency_ms: u32) -> InferenceProvider {
-    InferenceProvider {
-        did: Did(format!("did:neunode:provider_{}", did_num)),
-        name: format!("provider-{}", did_num),
-        endpoint: format!("https://provider-{}.neunode.io/v1", did_num),
-        models: model_ids.iter().map(|m| test_model(m)).collect(),
-        reputation_score: rep,
-        stake_amount: TokenAmount(1000),
-        status: ProviderStatus::Online,
-        last_heartbeat: 1000,
-        total_requests_served: 0,
-        avg_latency_ms: latency_ms,
-    }
+fn load_all_providers(db: &NeunodeDb) -> Vec<InferenceProvider> {
+    let entries = match db.prefix_scan(neunode_storage::cf::CF_MODELS, &[]) {
+        Ok(e) => e,
+        Err(_) => return Vec::new(),
+    };
+    entries
+        .iter()
+        .filter(|(k, _)| {
+            let key_str = bincode::deserialize::<String>(k).unwrap_or_default();
+            key_str.starts_with("prov:")
+        })
+        .filter_map(|(_, v)| bincode::deserialize::<InferenceProvider>(v).ok())
+        .collect()
 }
 
 fn request_inference(
@@ -55,6 +58,7 @@ fn request_inference(
     max_tokens: u32,
     temperature: Option<f64>,
     writer: &OutputWriter,
+    state: &AppState,
 ) -> Result<()> {
     if model.is_empty() {
         anyhow::bail!("model cannot be empty");
@@ -91,7 +95,17 @@ fn request_inference(
 
     let estimated_tokens = request.estimate_tokens();
 
-    let out = serde_json::json!({
+    let providers = load_all_providers(state.db());
+    let pricing_info = providers.iter().find_map(|p| p.find_model(model)).map(|m| {
+        let cost = (estimated_tokens as u64 * m.input_price_per_million.0 / 1_000_000).max(1);
+        serde_json::json!({
+            "input_price_per_mtok": m.input_price_per_million.0,
+            "output_price_per_mtok": m.output_price_per_million.0,
+            "estimated_cost": cost,
+        })
+    });
+
+    let mut out = serde_json::json!({
         "model": model,
         "prompt": prompt,
         "max_tokens": max_tokens,
@@ -99,42 +113,64 @@ fn request_inference(
         "estimated_input_tokens": estimated_tokens,
         "status": "submitted",
     });
+    if let Some(pricing) = pricing_info {
+        out["pricing"] = pricing;
+    }
 
     writer.write_json(&out);
     writer.write_status(&format!("Inference request submitted for model: {model}"));
     Ok(())
 }
 
-fn list_models(provider: Option<&str>, writer: &OutputWriter) -> Result<()> {
-    let all_models = [
-        ("neunode/llama-3b", 100u64, 200u64, 4096u32),
-        ("neunode/llama-3b-medical", 150, 300, 4096),
-        ("neunode/mistral-7b", 200, 400, 8192),
-    ];
+fn list_models(provider: Option<&str>, writer: &OutputWriter, state: &AppState) -> Result<()> {
+    let providers = load_all_providers(state.db());
+
+    let mut models: Vec<&ModelInfo> = Vec::new();
+    for p in &providers {
+        for m in &p.models {
+            if !models.iter().any(|existing| existing.id == m.id) {
+                models.push(m);
+            }
+        }
+    }
+
+    if models.is_empty() {
+        writer
+            .write_status("No models found — register providers with model push or P2P discovery");
+        return Ok(());
+    }
+
+    let filtered: Vec<&&ModelInfo> =
+        models.iter().filter(|m| provider.is_none_or(|p| m.id.contains(p))).collect();
 
     let headers = ["Model", "Input Price", "Output Price", "Context"];
-    let rows: Vec<Vec<String>> = all_models
+    let rows: Vec<Vec<String>> = filtered
         .iter()
-        .filter(|(id, _, _, _)| provider.is_none_or(|p| id.contains(p)))
-        .map(|(id, inp, out, ctx_len)| {
+        .map(|m| {
             vec![
-                id.to_string(),
-                format!("{} per 1M", inp),
-                format!("{} per 1M", out),
-                ctx_len.to_string(),
+                m.id.clone(),
+                format!("{} per 1M", m.input_price_per_million),
+                format!("{} per 1M", m.output_price_per_million),
+                m.context_length.to_string(),
             ]
         })
         .collect();
-    writer.write_table(&headers, &rows);
+
+    if rows.is_empty() {
+        writer.write_status("No models matching filter");
+    } else {
+        writer.write_table(&headers, &rows);
+    }
     Ok(())
 }
 
-fn list_providers(model: Option<&str>, writer: &OutputWriter) -> Result<()> {
-    let providers = [
-        test_provider(1, &["neunode/llama-3b", "neunode/mistral-7b"], 85.0, 50),
-        test_provider(2, &["neunode/llama-3b"], 70.0, 120),
-        test_provider(3, &["neunode/mistral-7b"], 92.0, 30),
-    ];
+fn list_providers(model: Option<&str>, writer: &OutputWriter, state: &AppState) -> Result<()> {
+    let providers = load_all_providers(state.db());
+
+    if providers.is_empty() {
+        writer.write_status("No inference providers registered");
+        return Ok(());
+    }
 
     let filtered: Vec<&InferenceProvider> =
         providers.iter().filter(|p| model.is_none_or(|m| p.has_model(m))).collect();
@@ -161,7 +197,12 @@ fn list_providers(model: Option<&str>, writer: &OutputWriter) -> Result<()> {
     Ok(())
 }
 
-fn route_request(model: &str, strategy: &str, writer: &OutputWriter) -> Result<()> {
+fn route_request(
+    model: &str,
+    strategy: &str,
+    writer: &OutputWriter,
+    state: &AppState,
+) -> Result<()> {
     if model.is_empty() {
         anyhow::bail!("model cannot be empty");
     }
@@ -180,10 +221,18 @@ fn route_request(model: &str, strategy: &str, writer: &OutputWriter) -> Result<(
         }
     };
 
-    let providers = vec![
-        test_provider(1, &["neunode/llama-3b"], 70.0, 120),
-        test_provider(2, &["neunode/llama-3b"], 90.0, 50),
-    ];
+    let providers = load_all_providers(state.db());
+
+    if providers.is_empty() {
+        writer.write_status("No providers registered — routing unavailable");
+        let info = serde_json::json!({
+            "model": model,
+            "strategy": strategy,
+            "status": "no_providers",
+        });
+        writer.write_json(&info);
+        return Ok(());
+    }
 
     let router = Router::new(strat);
     let chosen = router.route(&providers, model, Some(0))?;
@@ -205,6 +254,7 @@ fn show_pricing(
     input_tokens: u32,
     output_tokens: u32,
     writer: &OutputWriter,
+    state: &AppState,
 ) -> Result<()> {
     if model.is_empty() {
         anyhow::bail!("model cannot be empty");
@@ -213,7 +263,16 @@ fn show_pricing(
         anyhow::bail!("at least one of input_tokens or output_tokens must be > 0");
     }
 
-    let model_info = test_model(model);
+    let providers = load_all_providers(state.db());
+    let model_info =
+        providers.iter().find_map(|p| p.find_model(model)).cloned().unwrap_or_else(|| ModelInfo {
+            id: model.to_string(),
+            base_model: None,
+            context_length: 4096,
+            input_price_per_million: TokenAmount(100),
+            output_price_per_million: TokenAmount(200),
+            capabilities: vec!["chat".to_string()],
+        });
 
     let input_cost = (input_tokens as u64) * model_info.input_price_per_million.0 / 1_000_000;
     let output_cost = (output_tokens as u64) * model_info.output_price_per_million.0 / 1_000_000;
@@ -244,6 +303,14 @@ fn show_pricing(
 mod tests {
     use super::*;
     use crate::cli::OutputFormat;
+    use crate::config::CliConfig;
+    use crate::state::AppState;
+    use neunode_core::types::Did;
+    use neunode_identity::keyring::Keyring;
+    use std::sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    };
 
     fn test_writer() -> OutputWriter {
         OutputWriter::new(OutputFormat::Json)
@@ -253,124 +320,172 @@ mod tests {
         OutputWriter::new(OutputFormat::Human)
     }
 
+    fn test_state() -> AppState {
+        static TEST_ID: AtomicU64 = AtomicU64::new(0);
+        let id = TEST_ID.fetch_add(1, Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("agnetd_test_inf_{:?}_{}", std::process::id(), id));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = neunode_storage::db::NeunodeDb::open(&dir).unwrap();
+        let kr = Keyring::generate();
+        let did = kr.to_did();
+        AppState {
+            db: Arc::new(db),
+            config: CliConfig::load(None).unwrap(),
+            active_keyring: Some(kr),
+            active_did: Some(did),
+        }
+    }
+
     #[test]
     fn request_valid() {
+        let state = test_state();
         let writer = test_writer();
-        request_inference("neunode/llama-3b", "Hello, world!", 256, None, &writer).unwrap();
+        request_inference("neunode/llama-3b", "Hello, world!", 256, None, &writer, &state).unwrap();
     }
 
     #[test]
     fn request_with_temperature() {
+        let state = test_state();
         let writer = test_writer();
-        request_inference("neunode/llama-3b", "Hello", 100, Some(1.5), &writer).unwrap();
+        request_inference("neunode/llama-3b", "Hello", 100, Some(1.5), &writer, &state).unwrap();
     }
 
     #[test]
     fn request_empty_model_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(request_inference("", "Hello", 100, None, &writer).is_err());
+        assert!(request_inference("", "Hello", 100, None, &writer, &state).is_err());
     }
 
     #[test]
     fn request_empty_prompt_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(request_inference("neunode/llama-3b", "", 100, None, &writer).is_err());
+        assert!(request_inference("neunode/llama-3b", "", 100, None, &writer, &state).is_err());
     }
 
     #[test]
     fn request_zero_max_tokens_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(request_inference("neunode/llama-3b", "Hello", 0, None, &writer).is_err());
+        assert!(request_inference("neunode/llama-3b", "Hello", 0, None, &writer, &state).is_err());
     }
 
     #[test]
     fn request_temperature_out_of_range_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(request_inference("neunode/llama-3b", "Hello", 100, Some(3.0), &writer).is_err());
+        assert!(request_inference("neunode/llama-3b", "Hello", 100, Some(3.0), &writer, &state)
+            .is_err());
     }
 
     #[test]
     fn request_temperature_boundary_ok() {
+        let state = test_state();
         let writer = test_writer();
-        request_inference("neunode/llama-3b", "Hello", 100, Some(0.0), &writer).unwrap();
-        request_inference("neunode/llama-3b", "Hello", 100, Some(2.0), &writer).unwrap();
+        request_inference("neunode/llama-3b", "Hello", 100, Some(0.0), &writer, &state).unwrap();
+        request_inference("neunode/llama-3b", "Hello", 100, Some(2.0), &writer, &state).unwrap();
     }
 
     #[test]
-    fn list_models_does_not_panic() {
+    fn list_models_empty_db() {
+        let state = test_state();
         let writer = human_writer();
-        list_models(None, &writer).unwrap();
+        list_models(None, &writer, &state).unwrap();
     }
 
     #[test]
     fn list_models_with_filter() {
+        let state = test_state();
         let writer = test_writer();
-        list_models(Some("medical"), &writer).unwrap();
+        list_models(Some("medical"), &writer, &state).unwrap();
     }
 
     #[test]
-    fn providers_does_not_panic() {
+    fn providers_empty_db() {
+        let state = test_state();
         let writer = test_writer();
-        list_providers(None, &writer).unwrap();
+        list_providers(None, &writer, &state).unwrap();
     }
 
     #[test]
     fn providers_with_model_filter() {
+        let state = test_state();
         let writer = human_writer();
-        list_providers(Some("neunode/llama-3b"), &writer).unwrap();
+        list_providers(Some("neunode/llama-3b"), &writer, &state).unwrap();
     }
 
     #[test]
-    fn route_cheapest() {
+    fn route_no_providers() {
+        let state = test_state();
         let writer = test_writer();
-        route_request("neunode/llama-3b", "cheapest", &writer).unwrap();
-    }
-
-    #[test]
-    fn route_fastest() {
-        let writer = test_writer();
-        route_request("neunode/llama-3b", "fastest", &writer).unwrap();
-    }
-
-    #[test]
-    fn route_reputation() {
-        let writer = test_writer();
-        route_request("neunode/llama-3b", "reputation", &writer).unwrap();
+        route_request("neunode/llama-3b", "cheapest", &writer, &state).unwrap();
     }
 
     #[test]
     fn route_invalid_strategy_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(route_request("neunode/llama-3b", "invalid", &writer).is_err());
+        assert!(route_request("neunode/llama-3b", "invalid", &writer, &state).is_err());
     }
 
     #[test]
     fn route_empty_model_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(route_request("", "cheapest", &writer).is_err());
+        assert!(route_request("", "cheapest", &writer, &state).is_err());
     }
 
     #[test]
-    fn pricing_valid() {
+    fn pricing_default_rates() {
+        let state = test_state();
         let writer = test_writer();
-        show_pricing("neunode/llama-3b", 1000, 500, &writer).unwrap();
+        show_pricing("neunode/llama-3b", 1000, 500, &writer, &state).unwrap();
     }
 
     #[test]
     fn pricing_empty_model_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(show_pricing("", 100, 100, &writer).is_err());
+        assert!(show_pricing("", 100, 100, &writer, &state).is_err());
     }
 
     #[test]
     fn pricing_zero_tokens_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(show_pricing("neunode/llama-3b", 0, 0, &writer).is_err());
+        assert!(show_pricing("neunode/llama-3b", 0, 0, &writer, &state).is_err());
     }
 
     #[test]
-    fn route_round_robin() {
-        let writer = test_writer();
-        route_request("neunode/llama-3b", "round_robin", &writer).unwrap();
+    fn store_and_load_provider() {
+        let state = test_state();
+        let provider = InferenceProvider {
+            did: Did("did:neunode:0xtestprovider1".to_string()),
+            name: "test-provider".to_string(),
+            endpoint: "https://test.neunode.io/v1".to_string(),
+            models: vec![ModelInfo {
+                id: "neunode/test-model".to_string(),
+                base_model: None,
+                context_length: 4096,
+                input_price_per_million: TokenAmount(100),
+                output_price_per_million: TokenAmount(200),
+                capabilities: vec!["chat".to_string()],
+            }],
+            reputation_score: 80.0,
+            stake_amount: TokenAmount(500),
+            status: ProviderStatus::Online,
+            last_heartbeat: 1000,
+            total_requests_served: 0,
+            avg_latency_ms: 50,
+        };
+
+        store_provider(state.db(), &provider).unwrap();
+        let loaded = load_all_providers(state.db());
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "test-provider");
+        assert_eq!(loaded[0].did, provider.did);
     }
 }

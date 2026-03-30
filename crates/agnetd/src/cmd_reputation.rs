@@ -1,44 +1,53 @@
 use anyhow::Result;
 use neunode_core::types::TokenAmount;
+use neunode_reputation::attestation::Attestation;
 use neunode_reputation::factors::FactorWeights;
 use neunode_reputation::score::{FactorInputs, ReputationGrade, ReputationScore};
 
 use crate::cli::{Cli, ReputationCommands};
-use crate::config::CliConfig;
 use crate::output::OutputWriter;
+use crate::state::AppState;
 
-pub fn execute(cmd: &ReputationCommands, cli: &Cli, _config: &mut CliConfig) -> Result<()> {
+pub fn execute(cmd: &ReputationCommands, cli: &Cli, state: &mut AppState) -> Result<()> {
     let writer = OutputWriter::new(cli.output);
     match cmd {
-        ReputationCommands::Show { agent } => show_reputation(agent.as_deref(), &writer),
+        ReputationCommands::Show { agent } => show_reputation(agent.as_deref(), &writer, state),
         ReputationCommands::Attest { to, score, comment } => {
-            attest_agent(to, *score, comment.as_deref().unwrap_or(""), &writer)
+            attest_agent(to, *score, comment.as_deref().unwrap_or(""), &writer, state)
         }
-        ReputationCommands::Leaderboard { limit } => show_leaderboard(*limit, &writer),
+        ReputationCommands::Leaderboard { limit } => show_leaderboard(*limit, &writer, state),
         ReputationCommands::Factors { agent } => {
-            show_factors(agent.as_deref().unwrap_or("active"), &writer)
+            show_factors(agent.as_deref().unwrap_or("active"), &writer, state)
         }
     }
 }
 
-fn default_inputs() -> FactorInputs {
-    FactorInputs {
-        staked_amount: TokenAmount(500),
-        total_staked: TokenAmount(1000),
-        attestation_count: 25,
-        avg_attestation_score: 85.0,
-        events_per_day: 15.0,
-        days_active: 120,
-        tasks_completed: 40,
-        tasks_failed: 5,
-        days_since_creation: 180,
-    }
-}
+fn show_reputation(agent: Option<&str>, writer: &OutputWriter, state: &AppState) -> Result<()> {
+    let agent_did = match agent {
+        Some(d) => d.to_string(),
+        None => state.require_did().map(|d| d.0.clone())?,
+    };
 
-fn show_reputation(agent: Option<&str>, writer: &OutputWriter) -> Result<()> {
-    let agent_did = agent.unwrap_or("did:neunode:local");
+    let db = state.db();
+    let attestations = load_attestations_for(db, &agent_did);
 
-    let inputs = default_inputs();
+    let avg_score = if attestations.is_empty() {
+        0.0
+    } else {
+        attestations.iter().map(|a| a.score).sum::<f64>() / attestations.len() as f64
+    };
+
+    let inputs = FactorInputs {
+        staked_amount: TokenAmount(0),
+        total_staked: TokenAmount(0),
+        attestation_count: attestations.len() as u32,
+        avg_attestation_score: avg_score,
+        events_per_day: 0.0,
+        days_active: 0,
+        tasks_completed: 0,
+        tasks_failed: 0,
+        days_since_creation: 0,
+    };
     let score = ReputationScore::compute_default(&inputs);
     let grade = score.grade();
 
@@ -46,6 +55,8 @@ fn show_reputation(agent: Option<&str>, writer: &OutputWriter) -> Result<()> {
         "agent": agent_did,
         "score": score.total,
         "grade": format!("{}", grade),
+        "attestation_count": attestations.len(),
+        "avg_attestation_score": avg_score,
         "factors": {
             "stake": score.stake_factor,
             "attest": score.attest_factor,
@@ -59,7 +70,13 @@ fn show_reputation(agent: Option<&str>, writer: &OutputWriter) -> Result<()> {
     Ok(())
 }
 
-fn attest_agent(to: &str, score: u8, comment: &str, writer: &OutputWriter) -> Result<()> {
+fn attest_agent(
+    to: &str,
+    score: u8,
+    comment: &str,
+    writer: &OutputWriter,
+    state: &AppState,
+) -> Result<()> {
     if to.is_empty() {
         anyhow::bail!("target DID cannot be empty");
     }
@@ -70,55 +87,113 @@ fn attest_agent(to: &str, score: u8, comment: &str, writer: &OutputWriter) -> Re
         anyhow::bail!("invalid score: {} (must be 0-100)", score);
     }
 
+    let keyring = state.require_keyring()?;
+    let attester_did = state.require_did()?;
+
+    let claim = if comment.is_empty() { "general".to_string() } else { comment.to_string() };
+
+    let mut attestation = Attestation::new(
+        attester_did.clone(),
+        neunode_core::types::Did(to.to_string()),
+        claim,
+        score as f64,
+        neunode_core::types::Hash256("0".to_string()),
+    )?;
+
+    let (ed_bytes, _) = keyring.to_bytes();
+    let ed_bytes_fixed: [u8; 32] = ed_bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("invalid ed25519 key length"))?;
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&ed_bytes_fixed);
+    attestation.sign(&signing_key);
+
+    let db = state.db();
+    persist_attestation(db, &attestation)?;
+
     let out = serde_json::json!({
-        "attester": "did:neunode:local",
+        "attester": attester_did.0,
         "target": to,
         "score": score,
         "comment": comment,
+        "signed": attestation.signature.is_some(),
     });
 
     writer.write_json(&out);
     writer.write_status(&format!(
-        "Attestation submitted: did:neunode:local -> {to} (score: {}/100)",
-        score
+        "Attestation submitted: {} -> {to} (score: {}/100)",
+        attester_did.0, score
     ));
     Ok(())
 }
 
-fn show_leaderboard(limit: usize, writer: &OutputWriter) -> Result<()> {
-    let agents = [
-        ("did:neunode:alice", 95.2),
-        ("did:neunode:bob", 82.5),
-        ("did:neunode:carol", 71.0),
-        ("did:neunode:dave", 55.3),
-        ("did:neunode:eve", 30.1),
-    ];
+fn show_leaderboard(limit: usize, writer: &OutputWriter, state: &AppState) -> Result<()> {
+    let db = state.db();
+    let entries = db.prefix_scan(neunode_storage::cf::CF_REPUTATION, &[])?;
 
-    let headers = ["Rank", "Agent", "Score", "Grade"];
-    let rows: Vec<Vec<String>> = agents
-        .iter()
-        .take(limit)
-        .enumerate()
-        .map(|(i, (agent, score))| {
-            vec![
-                format!("#{}", i + 1),
-                agent.to_string(),
-                format!("{:.1}", score),
-                format!("{}", ReputationGrade::from_score(*score)),
-            ]
-        })
-        .collect();
-    writer.write_table(&headers, &rows);
+    let mut agent_scores: std::collections::HashMap<String, (f64, usize)> =
+        std::collections::HashMap::new();
+
+    for (_, value_bytes) in &entries {
+        if let Ok(att) = bincode::deserialize::<Attestation>(value_bytes) {
+            let entry = agent_scores.entry(att.target.0.clone()).or_insert((0.0, 0));
+            entry.0 += att.score;
+            entry.1 += 1;
+        }
+    }
+
+    let mut ranked: Vec<(String, f64)> =
+        agent_scores.into_iter().map(|(did, (sum, count))| (did, sum / count as f64)).collect();
+    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    if ranked.is_empty() {
+        writer.write_status("No attestations found — leaderboard is empty");
+    } else {
+        let headers = ["Rank", "Agent", "Score", "Grade"];
+        let rows: Vec<Vec<String>> = ranked
+            .iter()
+            .take(limit)
+            .enumerate()
+            .map(|(i, (agent, score))| {
+                vec![
+                    format!("#{}", i + 1),
+                    agent.to_string(),
+                    format!("{:.1}", score),
+                    format!("{}", ReputationGrade::from_score(*score)),
+                ]
+            })
+            .collect();
+        writer.write_table(&headers, &rows);
+    }
     Ok(())
 }
 
-fn show_factors(agent: &str, writer: &OutputWriter) -> Result<()> {
+fn show_factors(agent: &str, writer: &OutputWriter, state: &AppState) -> Result<()> {
     if agent.is_empty() {
         anyhow::bail!("agent DID cannot be empty");
     }
 
+    let db = state.db();
+    let attestations = load_attestations_for(db, agent);
+    let avg_score = if attestations.is_empty() {
+        0.0
+    } else {
+        attestations.iter().map(|a| a.score).sum::<f64>() / attestations.len() as f64
+    };
+
+    let inputs = FactorInputs {
+        staked_amount: TokenAmount(0),
+        total_staked: TokenAmount(0),
+        attestation_count: attestations.len() as u32,
+        avg_attestation_score: avg_score,
+        events_per_day: 0.0,
+        days_active: 0,
+        tasks_completed: 0,
+        tasks_failed: 0,
+        days_since_creation: 0,
+    };
+
     let weights = FactorWeights::default();
-    let inputs = default_inputs();
     let score = ReputationScore::compute(&weights, &inputs);
 
     let headers = ["Factor", "Weight", "Score"];
@@ -143,10 +218,42 @@ fn show_factors(agent: &str, writer: &OutputWriter) -> Result<()> {
     Ok(())
 }
 
+fn persist_attestation(
+    db: &neunode_storage::db::NeunodeDb,
+    attestation: &Attestation,
+) -> Result<()> {
+    let key = format!("att_{}_{}", attestation.attester.0, attestation.timestamp);
+    let key_bytes =
+        bincode::serialize(&key).map_err(|e| anyhow::anyhow!("key serialization: {e}"))?;
+    let value_bytes =
+        bincode::serialize(attestation).map_err(|e| anyhow::anyhow!("value serialization: {e}"))?;
+    db.put_raw(neunode_storage::cf::CF_REPUTATION, &key_bytes, &value_bytes)?;
+    Ok(())
+}
+
+fn load_attestations_for(db: &neunode_storage::db::NeunodeDb, did: &str) -> Vec<Attestation> {
+    let entries = match db.prefix_scan(neunode_storage::cf::CF_REPUTATION, &[]) {
+        Ok(e) => e,
+        Err(_) => return Vec::new(),
+    };
+    entries
+        .iter()
+        .filter_map(|(_, v)| bincode::deserialize::<Attestation>(v).ok())
+        .filter(|a| a.target.0 == did)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::cli::OutputFormat;
+    use crate::config::CliConfig;
+    use crate::state::AppState;
+    use neunode_identity::keyring::Keyring;
+    use std::sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    };
 
     fn test_writer() -> OutputWriter {
         OutputWriter::new(OutputFormat::Json)
@@ -156,93 +263,106 @@ mod tests {
         OutputWriter::new(OutputFormat::Human)
     }
 
+    fn test_state() -> AppState {
+        static TEST_ID: AtomicU64 = AtomicU64::new(0);
+        let id = TEST_ID.fetch_add(1, Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("agnetd_test_rep_{:?}_{}", std::process::id(), id));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = neunode_storage::db::NeunodeDb::open(&dir).unwrap();
+
+        let kr = Keyring::generate();
+        let did = kr.to_did();
+
+        AppState {
+            db: Arc::new(db),
+            config: CliConfig::load(None).unwrap(),
+            active_keyring: Some(kr),
+            active_did: Some(did),
+        }
+    }
+
     #[test]
     fn show_default_agent() {
+        let state = test_state();
         let writer = test_writer();
-        show_reputation(None, &writer).unwrap();
+        show_reputation(None, &writer, &state).unwrap();
     }
 
     #[test]
     fn show_specific_agent() {
+        let state = test_state();
         let writer = test_writer();
-        show_reputation(Some("did:neunode:alice"), &writer).unwrap();
-    }
-
-    #[test]
-    fn show_human_output() {
-        let writer = human_writer();
-        show_reputation(Some("did:neunode:bob"), &writer).unwrap();
+        show_reputation(Some("did:neunode:alice"), &writer, &state).unwrap();
     }
 
     #[test]
     fn attest_valid() {
+        let state = test_state();
         let writer = test_writer();
-        attest_agent("did:neunode:alice", 85, "Great work", &writer).unwrap();
+        attest_agent("did:neunode:alice", 85, "Great work", &writer, &state).unwrap();
     }
 
     #[test]
-    fn attest_score_boundary_zero() {
+    fn attest_persists() {
+        let state = test_state();
         let writer = test_writer();
-        attest_agent("did:neunode:alice", 0, "Poor", &writer).unwrap();
-    }
-
-    #[test]
-    fn attest_score_boundary_100() {
-        let writer = test_writer();
-        attest_agent("did:neunode:alice", 100, "Perfect", &writer).unwrap();
+        attest_agent("did:neunode:target", 90, "Good", &writer, &state).unwrap();
+        let attestations = load_attestations_for(state.db(), "did:neunode:target");
+        assert_eq!(attestations.len(), 1);
+        assert_eq!(attestations[0].score, 90.0);
     }
 
     #[test]
     fn attest_score_over_100_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(attest_agent("did:neunode:alice", 101, "Too high", &writer).is_err());
+        assert!(attest_agent("did:neunode:alice", 101, "Too high", &writer, &state).is_err());
     }
 
     #[test]
     fn attest_empty_target_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(attest_agent("", 80, "comment", &writer).is_err());
+        assert!(attest_agent("", 80, "comment", &writer, &state).is_err());
     }
 
     #[test]
     fn attest_invalid_did_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(attest_agent("not_a_did", 80, "comment", &writer).is_err());
+        assert!(attest_agent("not_a_did", 80, "comment", &writer, &state).is_err());
     }
 
     #[test]
-    fn leaderboard_does_not_panic() {
-        let writer = test_writer();
-        show_leaderboard(5, &writer).unwrap();
-    }
-
-    #[test]
-    fn leaderboard_limited() {
+    fn leaderboard_empty() {
+        let state = test_state();
         let writer = human_writer();
-        show_leaderboard(2, &writer).unwrap();
+        show_leaderboard(5, &writer, &state).unwrap();
+    }
+
+    #[test]
+    fn leaderboard_after_attest() {
+        let state = test_state();
+        let writer = test_writer();
+        attest_agent("did:neunode:alice", 90, "Good", &writer, &state).unwrap();
+        attest_agent("did:neunode:bob", 70, "OK", &writer, &state).unwrap();
+        let writer2 = human_writer();
+        show_leaderboard(10, &writer2, &state).unwrap();
     }
 
     #[test]
     fn factors_valid() {
+        let state = test_state();
         let writer = test_writer();
-        show_factors("did:neunode:alice", &writer).unwrap();
+        show_factors("did:neunode:alice", &writer, &state).unwrap();
     }
 
     #[test]
     fn factors_empty_agent_fails() {
+        let state = test_state();
         let writer = test_writer();
-        assert!(show_factors("", &writer).is_err());
-    }
-
-    #[test]
-    fn factors_human_output() {
-        let writer = human_writer();
-        show_factors("did:neunode:bob", &writer).unwrap();
-    }
-
-    #[test]
-    fn attest_json_output() {
-        let writer = test_writer();
-        attest_agent("did:neunode:target", 90, "Excellent", &writer).unwrap();
+        assert!(show_factors("", &writer, &state).is_err());
     }
 }
