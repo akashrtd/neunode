@@ -311,6 +311,7 @@ mod tests {
             config: CliConfig::load(None).unwrap(),
             active_keyring: Some(kr),
             active_did: Some(did),
+            mesh_handle: None,
         }
     }
 
@@ -358,6 +359,7 @@ mod tests {
             config: CliConfig::load(None).unwrap(),
             active_keyring: None,
             active_did: None,
+            mesh_handle: None,
         };
         let writer = test_writer();
         assert!(show_balance(None, &writer, &state).is_err());

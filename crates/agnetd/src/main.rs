@@ -13,6 +13,8 @@ mod cmd_reputation;
 mod cmd_token;
 mod cmd_train;
 mod config;
+mod feed_wire;
+mod mesh_handle;
 mod output;
 mod state;
 

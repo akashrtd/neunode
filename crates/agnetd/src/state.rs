@@ -15,6 +15,7 @@ pub struct AppState {
     pub config: crate::config::CliConfig,
     pub active_keyring: Option<Keyring>,
     pub active_did: Option<Did>,
+    pub(crate) mesh_handle: Option<crate::mesh_handle::MeshHandle>,
 }
 
 #[allow(dead_code)]
@@ -37,7 +38,7 @@ impl AppState {
             None => (None, None),
         };
 
-        Ok(Self { db: Arc::new(db), config, active_keyring, active_did })
+        Ok(Self { db: Arc::new(db), config, active_keyring, active_did, mesh_handle: None })
     }
 
     pub fn identity_store(&self) -> IdentityStore<'_> {
@@ -74,6 +75,20 @@ impl AppState {
 
     pub fn db(&self) -> &Arc<NeunodeDb> {
         &self.db
+    }
+
+    pub(crate) fn set_mesh_handle(&mut self, handle: crate::mesh_handle::MeshHandle) {
+        self.mesh_handle = Some(handle);
+    }
+
+    pub fn mesh_handle(&self) -> Option<&crate::mesh_handle::MeshHandle> {
+        self.mesh_handle.as_ref()
+    }
+
+    pub fn require_mesh_handle(&self) -> Result<&crate::mesh_handle::MeshHandle> {
+        self.mesh_handle
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("mesh not running — run `agnetd mesh start` first"))
     }
 }
 
