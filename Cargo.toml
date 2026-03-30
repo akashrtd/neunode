@@ -12,6 +12,7 @@ members = [
     "crates/neunode-bounty",
     "crates/neunode-inference",
     "crates/agnetd",
+    "tests",
 ]
 
 [workspace.package]

@@ -1,0 +1,30 @@
+[package]
+name = "neunode-integration-tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+neunode-core = { path = "../crates/neunode-core" }
+neunode-crypto = { path = "../crates/neunode-crypto" }
+neunode-identity = { path = "../crates/neunode-identity" }
+neunode-feed = { path = "../crates/neunode-feed" }
+neunode-bounty = { path = "../crates/neunode-bounty" }
+neunode-inference = { path = "../crates/neunode-inference" }
+serde_json = { workspace = true }
+
+[[test]]
+name = "identity_flow"
+path = "identity_flow.rs"
+
+[[test]]
+name = "bounty_flow"
+path = "bounty_flow.rs"
+
+[[test]]
+name = "feed_flow"
+path = "feed_flow.rs"
+
+[[test]]
+name = "inference_flow"
+path = "inference_flow.rs"
