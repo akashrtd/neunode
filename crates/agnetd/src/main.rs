@@ -1,4 +1,52 @@
-fn main() {
-    println!("agnetd — Neunode AI Agent CLI");
-    println!("v{}", env!("CARGO_PKG_VERSION"));
+use anyhow::Result;
+use clap::Parser;
+
+mod cli;
+mod cmd_bounty;
+mod cmd_config;
+mod cmd_feed;
+mod cmd_identity;
+mod cmd_inference;
+mod cmd_mesh;
+mod cmd_model;
+mod cmd_reputation;
+mod cmd_token;
+mod cmd_train;
+mod config;
+mod output;
+
+use cli::Commands;
+
+fn main() -> Result<()> {
+    let cli_args = cli::Cli::parse();
+
+    init_logging(cli_args.verbose);
+
+    let mut config = config::CliConfig::load(cli_args.config.as_deref())?;
+
+    match &cli_args.command {
+        Commands::Identity { command } => cmd_identity::execute(command, &cli_args, &mut config),
+        Commands::Config { command } => cmd_config::execute(command, &cli_args, &mut config),
+        Commands::Mesh { command } => cmd_mesh::execute(command, &cli_args, &mut config),
+        Commands::Feed { command } => cmd_feed::execute(command, &cli_args, &mut config),
+        Commands::Model { command } => cmd_model::execute(command, &cli_args, &mut config),
+        Commands::Train { command } => cmd_train::execute(command, &cli_args, &mut config),
+        Commands::Bounty { command } => cmd_bounty::execute(command, &cli_args, &mut config),
+        Commands::Token { command } => cmd_token::execute(command, &cli_args, &mut config),
+        Commands::Reputation { command } => {
+            cmd_reputation::execute(command, &cli_args, &mut config)
+        }
+        Commands::Inference { command } => cmd_inference::execute(command, &cli_args, &mut config),
+        Commands::Version => {
+            println!("agnetd v{}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
+    }
+}
+
+fn init_logging(verbose: bool) {
+    let level = if verbose { "debug" } else { "warn" };
+    let env_filter = tracing_subscriber::EnvFilter::try_new(level)
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"));
+    tracing_subscriber::fmt().with_env_filter(env_filter).with_target(false).init();
 }
