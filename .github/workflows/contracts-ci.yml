@@ -1,25 +1,31 @@
-name: CI
-
-permissions: {}
+name: Contracts CI
 
 on:
   push:
+    branches: [main]
+    paths:
+      - 'contracts/**'
   pull_request:
+    branches: [main]
+    paths:
+      - 'contracts/**'
   workflow_dispatch:
 
 env:
   FOUNDRY_PROFILE: ci
 
 jobs:
-  check:
-    name: Foundry project
+  foundry:
+    name: Foundry build & test
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    defaults:
+      run:
+        working-directory: contracts
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
-          persist-credentials: false
           submodules: recursive
 
       - name: Install Foundry
@@ -28,11 +34,14 @@ jobs:
       - name: Show Forge version
         run: forge --version
 
-      - name: Run Forge fmt
+      - name: Check formatting
         run: forge fmt --check
 
-      - name: Run Forge build
+      - name: Build contracts
         run: forge build --sizes
 
-      - name: Run Forge tests
+      - name: Run tests
         run: forge test -vvv
+
+      - name: Run gas snapshot
+        run: forge snapshot --check
