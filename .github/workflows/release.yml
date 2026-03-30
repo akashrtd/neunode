@@ -15,13 +15,10 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            use_cross: false
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
-            use_cross: true
           - target: aarch64-apple-darwin
             os: macos-latest
-            use_cross: false
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -32,23 +29,26 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      # Cross-compilation for aarch64-linux using cross (handles openssl, rocksdb, etc.)
-      - name: Install cross
-        if: matrix.use_cross
-        run: cargo install cross --locked
+      - name: Install aarch64 cross-compilation toolchain
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
+            libclang-dev \
+            llvm-dev
 
-      - name: Build with cross
-        if: matrix.use_cross
-        run: cross build --release -p agnetd --target ${{ matrix.target }}
-
-      # Native builds
       - name: Add Rust target
-        if: "!matrix.use_cross"
         run: rustup target add ${{ matrix.target }}
 
-      - name: Build natively
-        if: "!matrix.use_cross"
+      - name: Build
         run: cargo build --release -p agnetd --target ${{ matrix.target }}
+        env:
+          CC_aarch64_unknown_linux_gnu: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
+          CXX_aarch64_unknown_linux_gnu: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-g++' || '' }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
+          BINDGEN_EXTRA_CLANG_ARGS: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && '--target=aarch64-unknown-linux-gnu --sysroot=/usr/aarch64-linux-gnu' || '' }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
