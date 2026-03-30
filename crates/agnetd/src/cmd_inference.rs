@@ -28,6 +28,7 @@ pub fn execute(cmd: &InferenceCommands, cli: &Cli, state: &mut AppState) -> Resu
     }
 }
 
+#[cfg(test)]
 fn store_provider(db: &NeunodeDb, provider: &InferenceProvider) -> Result<()> {
     let key = format!("prov:{}", provider.did);
     let key_bytes = bincode::serialize(&key).map_err(|e| anyhow::anyhow!("key serialize: {e}"))?;

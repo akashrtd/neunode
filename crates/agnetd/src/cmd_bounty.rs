@@ -79,6 +79,7 @@ fn generate_bounty_id() -> String {
     format!("bnty_{:012x}{:04x}", ts, cnt & 0xFFFF)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_bounty(
     title: &str,
     description: &str,
