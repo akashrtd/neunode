@@ -39,6 +39,10 @@ export type { AgentConfig, NetworkConfig, StorageConfig, TokenConfig, AppConfig 
 export { OutputFormat } from './cli-output.js';
 export type { SuccessEnvelope, ErrorEnvelope, CliOutput } from './cli-output.js';
 
+// training — runtime consts + types (Phase 2)
+export { WorkerStatus, CoordinatorStatus, HealthState, SettlementStatusValues, AggregationMode, TrainingProviderStatus, GradientWireFormat } from './training.js';
+export type { DiLoCoConfig, WorkerInfo, MilestoneInfo, TrainingSettlementInfo, HealthInfo, FaultEventInfo, SettlementStatus } from './training.js';
+
 // errors — runtime const + types
 export { ExitCode } from './errors.js';
 export type { NeunodeError, NeunodeErrorDetails } from './errors.js';

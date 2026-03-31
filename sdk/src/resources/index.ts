@@ -50,6 +50,12 @@ export type {
   TrainStatusResult,
   TrainStopResult,
   TrainListResult,
+  WorkerRegisterParams,
+  WorkerRegisterResult,
+  WorkerListParams,
+  WorkerListResult,
+  CoordinatorStatusParams,
+  CoordinatorStatusResult,
 } from "./train.js";
 
 export { createBountyResource } from "./bounty.js";

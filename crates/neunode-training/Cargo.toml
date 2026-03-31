@@ -1,0 +1,30 @@
+[package]
+name = "neunode-training"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ts-rs = { workspace = true }
+neunode-core = { path = "../neunode-core" }
+neunode-crypto = { path = "../neunode-crypto" }
+neunode-storage = { path = "../neunode-storage" }
+neunode-p2p = { path = "../neunode-p2p" }
+neunode-bounty = { path = "../neunode-bounty" }
+neunode-token = { path = "../neunode-token" }
+neunode-feed = { path = "../neunode-feed" }
+blake3 = { workspace = true }
+axum = "0.8"
+reqwest = { version = "0.12", features = ["json"] }
+tower-http = { version = "0.6", features = ["cors"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+hex = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }

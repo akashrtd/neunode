@@ -8,6 +8,7 @@ pub const DOMAIN_P2P_MESSAGE: &[u8; 8] = b"NNP2P001";
 pub const DOMAIN_BOUNTY: &[u8; 8] = b"NNBNT001";
 pub const DOMAIN_MODEL_LINEAGE: &[u8; 8] = b"NNMOD001";
 pub const DOMAIN_AGENT_CARD: &[u8; 8] = b"NNACD001";
+pub const DOMAIN_CHECKPOINT_DIST: &[u8; 8] = b"NNCKP001";
 
 const SIPHASH_DEFAULT_KEY0: u64 = 0x_5be5_0b7d_6c3a_f093;
 const SIPHASH_DEFAULT_KEY1: u64 = 0x_62b2_8e4b_f352_7a1e;
@@ -47,6 +48,25 @@ pub fn siphash24_128_default(data: &[u8]) -> [u8; 16] {
 
 pub fn agent_did_hash(did: &str) -> [u8; 16] {
     siphash24_128_default(did.as_bytes())
+}
+
+pub fn blake3_hash(data: &[u8]) -> [u8; 32] {
+    blake3::hash(data).into()
+}
+
+pub fn blake3_hash_domain(domain: &[u8], data: &[u8]) -> [u8; 32] {
+    let mut key = [0u8; 32];
+    key[..domain.len().min(32)].copy_from_slice(&domain[..domain.len().min(32)]);
+    blake3::keyed_hash(&key, data).into()
+}
+
+pub fn multihash_blake3(data: &[u8]) -> Vec<u8> {
+    let hash = blake3_hash(data);
+    let mut out = Vec::with_capacity(34);
+    out.push(0x1e);
+    out.push(0x20);
+    out.extend_from_slice(&hash);
+    out
 }
 
 pub fn multihash_sha256(data: &[u8]) -> Vec<u8> {
@@ -181,5 +201,67 @@ mod tests {
         assert_eq!(DOMAIN_BOUNTY.len(), 8);
         assert_eq!(DOMAIN_MODEL_LINEAGE.len(), 8);
         assert_eq!(DOMAIN_AGENT_CARD.len(), 8);
+    }
+
+    #[test]
+    fn blake3_empty_string() {
+        let expected =
+            hex::decode("af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262")
+                .unwrap();
+        let result = blake3_hash(b"");
+        assert_eq!(result[..], expected[..]);
+    }
+
+    #[test]
+    fn blake3_abc() {
+        let expected =
+            hex::decode("6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85")
+                .unwrap();
+        let result = blake3_hash(b"abc");
+        assert_eq!(result[..], expected[..]);
+    }
+
+    #[test]
+    fn blake3_deterministic() {
+        let h1 = blake3_hash(b"checkpoint data");
+        let h2 = blake3_hash(b"checkpoint data");
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn blake3_different_inputs_differ() {
+        let h1 = blake3_hash(b"data A");
+        let h2 = blake3_hash(b"data B");
+        assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn blake3_hash_domain_separation() {
+        let data = b"checkpoint chunk";
+        let raw = blake3_hash(data);
+        let domained = blake3_hash_domain(DOMAIN_CHECKPOINT_DIST, data);
+        assert_ne!(raw, domained);
+    }
+
+    #[test]
+    fn multihash_blake3_format() {
+        let mh = multihash_blake3(b"hello");
+        assert_eq!(mh[0], 0x1e);
+        assert_eq!(mh[1], 0x20);
+        assert_eq!(mh.len(), 34);
+    }
+
+    #[test]
+    fn multihash_blake3_known_empty() {
+        let mh = multihash_blake3(b"");
+        let expected =
+            hex::decode("af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262")
+                .unwrap();
+        assert_eq!(&mh[2..], &expected[..]);
+    }
+
+    #[test]
+    fn domain_checkpoint_dist_is_8_bytes() {
+        assert_eq!(DOMAIN_CHECKPOINT_DIST.len(), 8);
     }
 }

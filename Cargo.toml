@@ -11,6 +11,9 @@ members = [
     "crates/neunode-reputation",
     "crates/neunode-bounty",
     "crates/neunode-inference",
+    "crates/neunode-training",
+    "crates/neunode-turboquant",
+    "crates/neunode-knowledge",
     "crates/agnetd",
     "tests",
 ]
@@ -29,6 +32,7 @@ tokio = { version = "1.44", features = ["rt-multi-thread", "macros", "io-util", 
 ed25519-dalek = { version = "2.1", features = ["serde", "rand_core"] }
 ring = "0.17"
 sha2 = "0.10.8"
+blake3 = "1.8"
 siphasher = "1.0"
 multihash = "0.19"
 k256 = "0.13"

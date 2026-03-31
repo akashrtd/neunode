@@ -300,6 +300,36 @@ pub enum TrainCommands {
     },
     /// List training jobs
     List,
+    /// Register as a training compute provider
+    WorkerRegister {
+        /// Number of GPUs
+        #[arg(long)]
+        gpu_count: u32,
+        /// Total GPU memory in GB
+        #[arg(long)]
+        gpu_memory: f64,
+        /// Max model parameters
+        #[arg(long)]
+        max_params: u64,
+        /// Supports bfloat16
+        #[arg(long, default_value_t = false)]
+        bf16: bool,
+    },
+    /// List registered training workers
+    WorkerList {
+        /// Filter by minimum GPU count
+        #[arg(long)]
+        min_gpu: Option<u32>,
+        /// Filter by minimum GPU memory (GB)
+        #[arg(long)]
+        min_memory: Option<f64>,
+    },
+    /// Show training coordinator status for a job
+    CoordinatorStatus {
+        /// Training job ID
+        #[arg(long)]
+        job_id: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]

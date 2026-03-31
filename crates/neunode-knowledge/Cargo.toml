@@ -1,0 +1,15 @@
+[package]
+name = "neunode-knowledge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+neunode-core = { path = "../neunode-core" }
+neunode-storage = { path = "../neunode-storage" }
+thiserror = { workspace = true }
+serde = { workspace = true }
+ts-rs = { workspace = true }
+siphasher = { workspace = true }
+moka = { workspace = true }
+rocksdb = { workspace = true }

@@ -9,6 +9,7 @@ neunode-core = { path = "../neunode-core" }
 ed25519-dalek = { workspace = true }
 sha2 = { workspace = true }
 sha3 = "0.10"
+blake3 = { workspace = true }
 siphasher = { workspace = true }
 multihash = { workspace = true }
 k256 = { workspace = true }

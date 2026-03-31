@@ -1,0 +1,16 @@
+[package]
+name = "neunode-turboquant"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+neunode-core = { path = "../neunode-core" }
+thiserror = { workspace = true }
+serde = { workspace = true }
+ts-rs = { workspace = true }
+rand = "0.9"
+bytemuck = "1.21"
+
+[dev-dependencies]
+serde_json = { workspace = true }

@@ -36,6 +36,17 @@ impl CID {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Construct a CID from a BLAKE3 hex hash string.
+    /// Format: "blake3:{hex}" — a Neunode convention for Phase A.
+    pub fn from_blake3_hex(hex_hash: &str) -> Self {
+        CID(format!("blake3:{hex_hash}"))
+    }
+
+    /// Check if this CID uses the blake3 convention.
+    pub fn is_blake3(&self) -> bool {
+        self.0.starts_with("blake3:")
+    }
 }
 
 impl std::fmt::Display for CID {
@@ -259,6 +270,32 @@ mod tests {
     #[test]
     fn cid_serde_roundtrip() {
         let cid = CID("bafkreihdwd".to_string());
+        let json = serde_json::to_string(&cid).unwrap();
+        let back: CID = serde_json::from_str(&json).unwrap();
+        assert_eq!(cid, back);
+    }
+
+    #[test]
+    fn cid_from_blake3_hex() {
+        let hex = "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
+        let cid = CID::from_blake3_hex(hex);
+        assert_eq!(
+            cid.as_str(),
+            "blake3:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
+        );
+    }
+
+    #[test]
+    fn cid_is_blake3() {
+        let cid = CID::from_blake3_hex("abc123");
+        assert!(cid.is_blake3());
+        let legacy = CID("bafkreihdwd".to_string());
+        assert!(!legacy.is_blake3());
+    }
+
+    #[test]
+    fn cid_blake3_serde_roundtrip() {
+        let cid = CID::from_blake3_hex("deadbeef");
         let json = serde_json::to_string(&cid).unwrap();
         let back: CID = serde_json::from_str(&json).unwrap();
         assert_eq!(cid, back);
