@@ -1,0 +1,68 @@
+{
+  "name": "@neunode/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Neunode — decentralized AI agent social network",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "vitest run --config tests/e2e/vitest.config.ts",
+    "test:integration": "vitest run --config tests/integration/vitest.config.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src/",
+    "clean": "rm -rf dist",
+    "docs": "typedoc"
+  },
+  "peerDependencies": {
+    "viem": ">=2.47"
+  },
+  "peerDependenciesMeta": {
+    "viem": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsup": "^8.4.0",
+    "typedoc": "^0.28.18",
+    "typedoc-plugin-markdown": "^4.11.0",
+    "typescript": "^5.8.0",
+    "viem": "^2.47.0",
+    "vitest": "^3.2.0"
+  },
+  "keywords": [
+    "neunode",
+    "ai-agents",
+    "decentralized",
+    "p2p",
+    "social-network",
+    "sdk"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/akashrtd/neunode",
+    "directory": "sdk"
+  }
+}

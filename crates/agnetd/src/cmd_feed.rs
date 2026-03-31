@@ -3,12 +3,12 @@ use neunode_core::kind::Kind;
 use neunode_core::types::Hash256;
 use neunode_storage::feed_store::StoredEvent;
 
-use crate::cli::{Cli, FeedCommands};
+use crate::cli::{FeedCommands, GlobalArgs};
 use crate::output::OutputWriter;
 use crate::state::AppState;
 
-pub fn execute(cmd: &FeedCommands, cli: &Cli, state: &mut AppState) -> Result<()> {
-    let writer = OutputWriter::new(cli.output);
+pub fn execute(cmd: &FeedCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
+    let writer = OutputWriter::new(args.output);
     match cmd {
         FeedCommands::Post { kind, content, tags } => {
             feed_post(*kind, content, tags, state, &writer)
@@ -16,7 +16,7 @@ pub fn execute(cmd: &FeedCommands, cli: &Cli, state: &mut AppState) -> Result<()
         FeedCommands::List { kind, author, limit } => {
             feed_list(*kind, author.as_deref(), *limit, state, &writer)
         }
-        FeedCommands::Subscribe { kind } => feed_subscribe(*kind, &writer),
+        FeedCommands::Subscribe { kind } => feed_subscribe(*kind, &writer, state),
         FeedCommands::Show { event_id } => feed_show(event_id, state, &writer),
     }
 }
@@ -164,26 +164,63 @@ fn feed_list(
     Ok(())
 }
 
-fn feed_subscribe(kind: Option<u32>, writer: &OutputWriter) -> Result<()> {
-    let topic = match kind {
+fn feed_subscribe(kind: Option<u32>, writer: &OutputWriter, state: &mut AppState) -> Result<()> {
+    let topic_filter = match kind {
         Some(k) => {
             let kind_val: Kind =
                 (k as u16).try_into().map_err(|e: neunode_core::NeunodeError| {
                     anyhow::anyhow!("invalid kind {k}: {e}")
                 })?;
-            kind_val.gossipsub_topic().to_string()
+            Some(kind_val.gossipsub_topic().to_string())
         }
-        None => "neunode/*".to_string(),
+        None => None,
     };
 
-    writer.write_status(&format!("Subscribed to {topic}"));
-    writer.write_warning("Streaming not yet available in Phase 1 MVP");
-    let info = serde_json::json!({
-        "topic": topic,
-        "status": "subscribed",
-        "streaming": false,
-    });
-    writer.write_json(&info);
+    let event_rx = state.mesh_handle.as_mut().and_then(|h| h.take_event_stream());
+
+    match event_rx {
+        Some(mut rx) => {
+            writer.write_status("Subscribed — streaming events (Ctrl+C to stop)");
+            loop {
+                match rx.blocking_recv() {
+                    Some(event) => {
+                        let matches = match &topic_filter {
+                            Some(tf) => event.kind.gossipsub_topic() == tf.as_str(),
+                            None => true,
+                        };
+                        if matches {
+                            let pairs = [
+                                ("Event ID", event.id.to_string()),
+                                (
+                                    "Kind",
+                                    format!("{} ({})", event.kind.as_u16(), kind_name(event.kind)),
+                                ),
+                                ("Author", event.author.0.clone()),
+                                ("Sequence", event.sequence.to_string()),
+                                ("Timestamp", event.timestamp.to_string()),
+                                ("Content", event.content.chars().take(200).collect::<String>()),
+                            ];
+                            writer.write_key_value_pairs(
+                                &pairs.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>(),
+                            );
+                        }
+                    }
+                    None => {
+                        writer.write_status("Event stream ended");
+                        break;
+                    }
+                }
+            }
+        }
+        None => {
+            writer.write_warning("Mesh not running — start mesh first for live streaming");
+            let info = serde_json::json!({
+                "status": "mesh_not_running",
+                "hint": "run 'agnetd mesh start' first",
+            });
+            writer.write_json(&info);
+        }
+    }
     Ok(())
 }
 

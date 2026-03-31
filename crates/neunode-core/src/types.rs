@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// Decentralized Identifier. Stored as string, validated on construction.
 /// Format: "did:neunode:0xABC123..." or "did:key:z6Mk..."
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub struct Did(pub String);
 
 impl Did {
@@ -26,7 +28,8 @@ impl std::fmt::Display for Did {
 }
 
 /// Content-addressed identifier (CID v1).
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub struct CID(pub String);
 
 impl CID {
@@ -42,7 +45,8 @@ impl std::fmt::Display for CID {
 }
 
 /// libp2p PeerId (multihash of Ed25519 public key, e.g. "12D3Koo...").
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub struct PeerId(pub String);
 
 impl PeerId {
@@ -58,7 +62,8 @@ impl std::fmt::Display for PeerId {
 }
 
 /// Unique bounty identifier.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub struct BountyId(pub String);
 
 impl std::fmt::Display for BountyId {
@@ -68,7 +73,8 @@ impl std::fmt::Display for BountyId {
 }
 
 /// Unique event identifier (= CID of the event body).
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub struct EventId(pub String);
 
 impl std::fmt::Display for EventId {
@@ -78,7 +84,8 @@ impl std::fmt::Display for EventId {
 }
 
 /// Token amount (u64, in smallest unit).
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, TS)]
+#[ts(export)]
 pub struct TokenAmount(pub u64);
 
 impl TokenAmount {
@@ -100,7 +107,8 @@ impl std::fmt::Display for TokenAmount {
 }
 
 /// Token types in the Neunode economy.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub enum TokenType {
     Compute,
     Train,
@@ -109,7 +117,8 @@ pub enum TokenType {
 }
 
 /// Agent lifecycle states.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub enum AgentLifecycle {
     Created,
     Active,
@@ -119,7 +128,8 @@ pub enum AgentLifecycle {
 }
 
 /// Bounty lifecycle states.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub enum BountyState {
     Open,
     Claimed,
@@ -148,7 +158,8 @@ impl BountyState {
 }
 
 /// Activity level for token decay calculation.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub enum ActivityLevel {
     Active,
     Moderate,
@@ -180,11 +191,13 @@ impl ActivityLevel {
 }
 
 /// SHA-256 hash, stored as hex string.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub struct Hash256(pub String);
 
 /// Ed25519 signature, stored as hex string with "ed25519:" prefix.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, TS)]
+#[ts(export)]
 pub struct Signature(pub String);
 
 /// Unix timestamp (seconds since epoch).

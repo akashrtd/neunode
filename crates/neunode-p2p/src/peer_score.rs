@@ -4,6 +4,7 @@ use std::time::Instant;
 use libp2p::PeerId;
 use neunode_core::constants::p2p;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 const DEFAULT_P1_WEIGHT: f64 = 1.0;
 const DEFAULT_P2_WEIGHT: f64 = 1.0;
@@ -26,7 +27,8 @@ const GOSSIP_THRESHOLD: f64 = -500.0;
 const DECAY_INTERVAL_SECS: f64 = 1.0;
 const DECAY_TO_ZERO: f64 = 0.01;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[ts(export)]
 pub struct PeerScoreParams {
     pub p1_weight: f64,
     pub p2_weight: f64,

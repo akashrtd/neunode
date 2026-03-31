@@ -2,12 +2,14 @@ use neunode_core::{Did, NeunodeError, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::keyring::Keyring;
+use ts_rs::TS;
 
 const ED25519_VM_TYPE: &str = "Ed25519VerificationKey2020";
 const SECP256K1_VM_TYPE: &str = "EcdsaSecp256k1VerificationKey2019";
 
 /// W3C DID Core verification method.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[ts(export)]
 pub struct VerificationMethod {
     pub id: String,
     #[serde(rename = "type")]
@@ -18,7 +20,8 @@ pub struct VerificationMethod {
 }
 
 /// W3C DID Core service endpoint.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[ts(export)]
 pub struct ServiceEndpoint {
     pub id: String,
     #[serde(rename = "type")]
@@ -28,7 +31,8 @@ pub struct ServiceEndpoint {
 }
 
 /// W3C DID Core Document.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct DidDocument {
     #[serde(rename = "@context")]
     pub context: Vec<String>,

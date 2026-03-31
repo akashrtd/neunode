@@ -36,6 +36,29 @@ pub enum OutputFormat {
     Ndjson,
 }
 
+/// Global flags shared across all commands.
+/// Extracted from Cli for cleaner function signatures.
+#[derive(Debug, Clone)]
+pub struct GlobalArgs {
+    pub output: OutputFormat,
+    pub config: Option<String>,
+    pub network: String,
+    pub identity: Option<String>,
+    pub verbose: bool,
+}
+
+impl GlobalArgs {
+    pub fn from_cli(cli: &Cli) -> Self {
+        Self {
+            output: cli.output,
+            config: cli.config.clone(),
+            network: cli.network.clone(),
+            identity: cli.identity.clone(),
+            verbose: cli.verbose,
+        }
+    }
+}
+
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Manage agent identity (alias: i)

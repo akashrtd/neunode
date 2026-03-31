@@ -8,8 +8,10 @@ use neunode_crypto::hash::DOMAIN_ATTESTATION;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{ReputationError, Result};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct Attestation {
     pub attester: Did,
     pub target: Did,

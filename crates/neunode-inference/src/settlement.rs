@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 use crate::error::{InferenceError, Result};
 use crate::openai::{ChatCompletionRequest, ChatCompletionResponse};
 use crate::provider::ModelInfo;
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct PricingConfig {
     pub protocol_fee_pct: f64,
     pub default_model: String,
@@ -17,7 +19,8 @@ impl Default for PricingConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct SettlementResult {
     pub requester_did: Did,
     pub provider_did: Did,

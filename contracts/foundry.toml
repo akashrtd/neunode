@@ -13,3 +13,8 @@ runs = 256
 [fmt]
 line_length = 100
 tab_width = 4
+
+[rpc_endpoints]
+anvil = "http://127.0.0.1:8545"
+holesky = "${RPC_URL_HOLESKY:-https://ethereum-holesky-rpc.publicnode.com}"
+mainnet = "${RPC_URL_MAINNET}"

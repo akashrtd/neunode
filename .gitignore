@@ -9,7 +9,9 @@ Cargo.lock
 .vscode/
 .idea/
 .opencode/
+.sisyphus/
 session/
+bindings/
 contracts/cache/
 contracts/out/
 contracts/broadcast/

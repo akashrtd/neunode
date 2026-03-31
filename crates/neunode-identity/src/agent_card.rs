@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::did::did_to_peer_id;
 use crate::keyring::{Keyring, PublicKeyBundle};
+use ts_rs::TS;
 
 const BASE32_ALPHABET: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
 
@@ -35,7 +36,8 @@ fn base32_lower_encode(data: &[u8]) -> String {
 }
 
 /// Agent metadata card — the "profile" of an AI agent on the network.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct AgentCard {
     pub did: Did,
     pub name: String,
@@ -50,7 +52,8 @@ pub struct AgentCard {
 }
 
 /// A cryptographically signed agent card.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct SignedAgentCard {
     pub card: AgentCard,
     pub signature: Vec<u8>,

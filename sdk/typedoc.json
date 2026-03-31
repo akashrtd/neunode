@@ -1,0 +1,13 @@
+{
+  "entryPoints": ["src/index.ts"],
+  "out": "docs/api",
+  "plugin": ["typedoc-plugin-markdown"],
+  "excludePrivate": true,
+  "excludeProtected": false,
+  "categorizeByGroup": true,
+  "categoryOrder": ["Client", "Transport", "Resources", "Types", "Contracts", "*"],
+  "readme": "none",
+  "textContentMappings": {
+    "title": "@neunode/sdk API Reference"
+  }
+}

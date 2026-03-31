@@ -9,8 +9,10 @@ use neunode_core::types::{
 use serde::{Deserialize, Serialize};
 
 use crate::error::{BountyError, Result};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct Deadlines {
     pub claim: Timestamp,
     pub work: Timestamp,
@@ -40,7 +42,8 @@ impl Deadlines {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct BountyData {
     pub id: BountyId,
     pub creator: Did,
@@ -63,7 +66,8 @@ impl BountyData {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub enum BountyEvent {
     Claim { claimant: Did, bond: TokenAmount },
     Submit { artifact_hash: Hash256 },

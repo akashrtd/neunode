@@ -5,8 +5,10 @@ use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{P2pError, Result};
+use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub struct DhtKey(pub Vec<u8>);
 
 impl DhtKey {
@@ -33,7 +35,8 @@ impl AsRef<[u8]> for DhtKey {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, TS)]
+#[ts(export)]
 pub struct RecordValue(pub Vec<u8>);
 
 impl RecordValue {

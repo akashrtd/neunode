@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::P2pError;
 use crate::error::Result;
+use ts_rs::TS;
 
 const MAX_MESSAGE_SIZE: usize = 1024 * 1024;
 const HEARTBEAT_INTERVAL_SECS: u64 = 300;
@@ -14,7 +15,8 @@ const FANOUT_TTL_SECS: u64 = 60;
 const HISTORY_LENGTH: usize = 10;
 const HISTORY_GOSSIP_LENGTH: usize = 10;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[ts(export)]
 pub struct GossipsubConfig {
     pub max_message_size: usize,
     pub mesh_degree: usize,
@@ -76,7 +78,8 @@ pub fn topic_for_kind(kind: &Kind) -> IdentTopic {
     IdentTopic::new(kind.gossipsub_topic())
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[ts(export)]
 pub struct FeedMessage {
     pub kind: u16,
     pub payload: Vec<u8>,

@@ -18,6 +18,7 @@ pub enum MeshCommand {
     Dial { addr: Multiaddr },
     GetStatus { reply: oneshot::Sender<MeshStatus> },
     GetPeers { reply: oneshot::Sender<Vec<PeerId>> },
+    Disconnect { peer_id: PeerId },
     Shutdown,
 }
 
@@ -44,6 +45,7 @@ pub struct MeshHandle {
     cmd_tx: mpsc::UnboundedSender<MeshCommand>,
     pub local_peer_id: PeerId,
     pub(crate) join_handle: tokio::task::JoinHandle<()>,
+    event_rx: Option<mpsc::UnboundedReceiver<neunode_feed::event::FeedEvent>>,
 }
 
 impl MeshHandle {
@@ -69,6 +71,13 @@ impl MeshHandle {
             .map_err(|_| anyhow::anyhow!("mesh task dropped"))
     }
 
+    /// Disconnect from a specific peer.
+    pub fn disconnect(&self, peer_id: PeerId) -> Result<()> {
+        self.cmd_tx
+            .send(MeshCommand::Disconnect { peer_id })
+            .map_err(|_| anyhow::anyhow!("mesh task dropped"))
+    }
+
     pub async fn status(&self) -> Result<MeshStatus> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
@@ -88,6 +97,13 @@ impl MeshHandle {
     /// Signal the background task to shut down.
     pub fn shutdown(&self) -> Result<()> {
         self.cmd_tx.send(MeshCommand::Shutdown).map_err(|_| anyhow::anyhow!("mesh task dropped"))
+    }
+
+    /// Take the event stream receiver (first call returns Some, subsequent calls return None).
+    pub fn take_event_stream(
+        &mut self,
+    ) -> Option<mpsc::UnboundedReceiver<neunode_feed::event::FeedEvent>> {
+        self.event_rx.take()
     }
 }
 
@@ -119,10 +135,11 @@ pub fn spawn_mesh_task(
 
     let local_peer_id = node.local_peer_id();
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+    let (event_tx, event_rx) = mpsc::unbounded_channel();
 
-    let join_handle = tokio::spawn(mesh_event_loop(node, cmd_rx, db));
+    let join_handle = tokio::spawn(mesh_event_loop(node, cmd_rx, db, event_tx));
 
-    Ok(MeshHandle { cmd_tx, local_peer_id, join_handle })
+    Ok(MeshHandle { cmd_tx, local_peer_id, join_handle, event_rx: Some(event_rx) })
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +150,7 @@ async fn mesh_event_loop(
     mut node: P2pNode,
     mut cmd_rx: mpsc::UnboundedReceiver<MeshCommand>,
     db: Arc<NeunodeDb>,
+    event_tx: mpsc::UnboundedSender<neunode_feed::event::FeedEvent>,
 ) {
     loop {
         tokio::select! {
@@ -147,6 +165,9 @@ async fn mesh_event_loop(
                     }
                     Some(MeshCommand::Dial { addr }) => {
                         let _ = node.dial(addr);
+                    }
+                    Some(MeshCommand::Disconnect { peer_id }) => {
+                        let _ = node.disconnect(peer_id);
                     }
                     Some(MeshCommand::GetStatus { reply }) => {
                         let status = MeshStatus {
@@ -182,13 +203,18 @@ async fn mesh_event_loop(
                                 } else {
                                     let stored = crate::feed_wire::feed_event_to_stored(&feed_event);
                                     let store = neunode_storage::feed_store::FeedStore::new(&db);
+                                    let event_id = feed_event.id.to_string();
+                                    let event_author = feed_event.author.0.clone();
                                     match store.append(&stored) {
-                                        Ok(()) => tracing::info!(
-                                            "Stored feed event {} from {} on {}",
-                                            feed_event.id,
-                                            feed_event.author.0,
-                                            topic
-                                        ),
+                                        Ok(()) => {
+                                            tracing::info!(
+                                                "Stored feed event {} from {} on {}",
+                                                event_id,
+                                                event_author,
+                                                topic
+                                            );
+                                            let _ = event_tx.send(feed_event);
+                                        }
                                         Err(e) => {
                                             tracing::warn!("Failed to store feed event: {}", e)
                                         }

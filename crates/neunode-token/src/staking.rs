@@ -6,8 +6,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::balance::BalanceSheet;
 use crate::error::{Result, TokenError};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct StakeEntry {
     pub amount: TokenAmount,
     pub token_type: TokenType,

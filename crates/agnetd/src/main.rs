@@ -1,4 +1,5 @@
-use anyhow::Result;
+use std::process::ExitCode;
+
 use clap::Parser;
 
 mod cli;
@@ -14,39 +15,85 @@ mod cmd_reputation;
 mod cmd_token;
 mod cmd_train;
 mod config;
+mod error;
 mod feed_wire;
 mod mesh_handle;
 mod output;
 mod state;
+mod util;
+
+#[cfg(test)]
+mod testutil;
 
 use cli::Commands;
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let cli_args = cli::Cli::parse();
-    init_logging(cli_args.verbose);
-    let mut app_state = state::AppState::init(&cli_args)?;
+fn main() -> ExitCode {
+    let cli_args = match cli::Cli::try_parse() {
+        Ok(args) => args,
+        Err(e) => {
+            e.print().unwrap();
+            return ExitCode::from(2);
+        }
+    };
 
-    match &cli_args.command {
-        Commands::Identity { command } => cmd_identity::execute(command, &cli_args, &mut app_state),
-        Commands::Config { command } => cmd_config::execute(command, &cli_args, &mut app_state),
-        Commands::Mesh { command } => cmd_mesh::execute(command, &cli_args, &mut app_state).await,
-        Commands::Feed { command } => cmd_feed::execute(command, &cli_args, &mut app_state),
-        Commands::Model { command } => cmd_model::execute(command, &cli_args, &mut app_state),
-        Commands::Train { command } => cmd_train::execute(command, &cli_args, &mut app_state),
-        Commands::Bounty { command } => cmd_bounty::execute(command, &cli_args, &mut app_state),
-        Commands::Token { command } => cmd_token::execute(command, &cli_args, &mut app_state),
+    init_logging(cli_args.verbose);
+
+    let global_args = cli::GlobalArgs::from_cli(&cli_args);
+
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("fatal: failed to create tokio runtime: {e}");
+            return ExitCode::from(1);
+        }
+    };
+
+    let mut app_state = match state::AppState::init_from_globals(&global_args) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("fatal: initialization failed: {e:#}");
+            return ExitCode::from(1);
+        }
+    };
+
+    let result = match &cli_args.command {
+        Commands::Identity { command } => {
+            cmd_identity::execute(command, &global_args, &mut app_state)
+        }
+        Commands::Config { command } => cmd_config::execute(command, &global_args, &mut app_state),
+        Commands::Mesh { command } => {
+            rt.block_on(cmd_mesh::execute(command, &global_args, &mut app_state))
+        }
+        Commands::Feed { command } => cmd_feed::execute(command, &global_args, &mut app_state),
+        Commands::Model { command } => cmd_model::execute(command, &global_args, &mut app_state),
+        Commands::Train { command } => cmd_train::execute(command, &global_args, &mut app_state),
+        Commands::Bounty { command } => cmd_bounty::execute(command, &global_args, &mut app_state),
+        Commands::Token { command } => cmd_token::execute(command, &global_args, &mut app_state),
         Commands::Reputation { command } => {
-            cmd_reputation::execute(command, &cli_args, &mut app_state)
+            cmd_reputation::execute(command, &global_args, &mut app_state)
         }
         Commands::Inference { command } => {
-            cmd_inference::execute(command, &cli_args, &mut app_state)
+            cmd_inference::execute(command, &global_args, &mut app_state)
         }
-        Commands::Dashboard => cmd_dashboard::execute(&cli_args, &mut app_state).await,
+        Commands::Dashboard => rt.block_on(cmd_dashboard::execute(&global_args, &mut app_state)),
         Commands::Version => {
             println!("agnetd v{}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
+    };
+
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => match e.downcast::<error::CliError>() {
+            Ok(cli_err) => {
+                eprintln!("{}", console::style(format!("✗ {}", cli_err.message())).red().bold());
+                cli_err.exit_code()
+            }
+            Err(other_err) => {
+                eprintln!("{}", console::style(format!("✗ {other_err:#}")).red().bold());
+                ExitCode::from(1)
+            }
+        },
     }
 }
 

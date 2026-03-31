@@ -1,7 +1,9 @@
 use neunode_core::types::{Hash256, Timestamp};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub enum VerificationLayer {
     Layer1,
     Layer2,
@@ -29,7 +31,8 @@ impl VerificationLayer {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct VerificationResult {
     pub layer: VerificationLayer,
     pub passed: bool,
@@ -73,7 +76,8 @@ pub fn verify_artifact(artifact_hash: &Hash256, requirements: &str) -> Verificat
     )
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct VerificationPipeline {
     pub layers: Vec<VerificationLayer>,
 }

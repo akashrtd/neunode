@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::{FeedError, Result};
+use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[ts(export)]
 pub struct BountyPost {
     pub title: String,
     pub description: String,
@@ -12,7 +14,8 @@ pub struct BountyPost {
     pub required_capabilities: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[ts(export)]
 pub struct BountyClaim {
     pub bounty_id: String,
     pub stake_amount: u64,
@@ -20,7 +23,8 @@ pub struct BountyClaim {
     pub proposer_did: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[ts(export)]
 pub struct Attestation {
     pub target_did: String,
     pub claim: String,

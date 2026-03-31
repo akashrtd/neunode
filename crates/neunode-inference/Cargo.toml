@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+ts-rs = { workspace = true }
 neunode-core = { path = "../neunode-core" }
 neunode-crypto = { path = "../neunode-crypto" }
 neunode-identity = { path = "../neunode-identity" }

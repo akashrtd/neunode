@@ -1,0 +1,127 @@
+import type { CliTransportConfig } from "../transport/cli-transport.js";
+import { CliTransport } from "../transport/cli-transport.js";
+import type { ViemTransportConfig } from "../transport/viem-transport.js";
+import { ViemTransport } from "../transport/viem-transport.js";
+import { createIdentityResource, type IdentityResource } from "../resources/identity.js";
+import { createConfigResource, type ConfigResource } from "../resources/config.js";
+import { createFeedResource, type FeedResource } from "../resources/feed.js";
+import { createMeshResource, type MeshResource } from "../resources/mesh.js";
+import { createModelResource, type ModelResource } from "../resources/model.js";
+import { createTrainResource, type TrainResource } from "../resources/train.js";
+import { createBountyResource, type BountyResource } from "../resources/bounty.js";
+import { createTokenResource, type TokenResource } from "../resources/token.js";
+import { createReputationResource, type ReputationResource } from "../resources/reputation.js";
+import { createInferenceResource, type InferenceResource } from "../resources/inference.js";
+
+/** Configuration for creating a Neunode client. At least one transport must be provided. */
+export interface NeunodeClientConfig {
+  /** CLI subprocess transport config. Spawns `agnetd` as a child process. */
+  readonly cli?: CliTransportConfig;
+  /** Viem (Ethereum) transport config. Direct on-chain reads/writes via RPC. */
+  readonly viem?: ViemTransportConfig;
+}
+
+/** Which transport(s) the client was configured with. */
+export type TransportMode = "cli" | "viem" | "dual";
+
+/** Root client for interacting with the Neunode network. */
+export interface NeunodeClient {
+  /** Which transport(s) are active. */
+  readonly transportMode: TransportMode;
+  /** CLI subprocess transport, if configured. */
+  readonly cli: CliTransport | undefined;
+  /** Viem on-chain transport, if configured. */
+  readonly viem: ViemTransport | undefined;
+  /** DID creation, listing, and export. */
+  readonly identity: IdentityResource;
+  /** Read and write local agent configuration. */
+  readonly config: ConfigResource;
+  /** Post events, list feeds, subscribe to topics. */
+  readonly feed: FeedResource;
+  /** P2P mesh status, peers, connect, disconnect. */
+  readonly mesh: MeshResource;
+  /** Push, list, inspect, and remove models. */
+  readonly model: ModelResource;
+  /** Start, monitor, and stop training jobs. */
+  readonly train: TrainResource;
+  /** Create, claim, submit, review, and cancel bounties. */
+  readonly bounty: BountyResource;
+  /** Balances, staking, transfers, and decay info. */
+  readonly token: TokenResource;
+  /** Reputation scores, attestations, leaderboard, and factor breakdowns. */
+  readonly reputation: ReputationResource;
+  /** Inference requests, model listing, provider discovery, routing, and pricing. */
+  readonly inference: InferenceResource;
+  /** Attach custom properties to the client. Returns the merged object. */
+  extend<T>(extender: (client: NeunodeClient) => T): NeunodeClient & T;
+}
+
+class NeunodeClientImpl implements NeunodeClient {
+  readonly cli: CliTransport | undefined;
+  readonly viem: ViemTransport | undefined;
+  readonly identity: IdentityResource;
+  readonly config: ConfigResource;
+  readonly feed: FeedResource;
+  readonly mesh: MeshResource;
+  readonly model: ModelResource;
+  readonly train: TrainResource;
+  readonly bounty: BountyResource;
+  readonly token: TokenResource;
+  readonly reputation: ReputationResource;
+  readonly inference: InferenceResource;
+
+  constructor(cliConfig?: CliTransportConfig, viemConfig?: ViemTransportConfig) {
+    this.cli = cliConfig ? new CliTransport(cliConfig) : undefined;
+    this.viem = viemConfig ? new ViemTransport(viemConfig) : undefined;
+    this.identity = createIdentityResource(this);
+    this.config = createConfigResource(this);
+    this.feed = createFeedResource(this);
+    this.mesh = createMeshResource(this);
+    this.model = createModelResource(this);
+    this.train = createTrainResource(this);
+    this.bounty = createBountyResource(this);
+    this.token = createTokenResource(this);
+    this.reputation = createReputationResource(this);
+    this.inference = createInferenceResource(this);
+  }
+
+  get transportMode(): TransportMode {
+    if (this.cli && this.viem) return "dual";
+    if (this.viem) return "viem";
+    return "cli";
+  }
+
+  extend<T>(extender: (client: NeunodeClient) => T): NeunodeClient & T {
+    const extension = extender(this);
+    return Object.assign(this, extension);
+  }
+}
+
+/**
+ * Create a new Neunode client with one or both transports.
+ *
+ * @example
+ * ```ts
+ * import { createNeunodeClient } from "@neunode/sdk";
+ *
+ * // CLI-only (spawns agnetd subprocess)
+ * const client = createNeunodeClient({
+ *   cli: { binaryPath: "/usr/local/bin/agnetd" },
+ * });
+ *
+ * // Dual transport (CLI + on-chain)
+ * const client = createNeunodeClient({
+ *   cli: { timeout: 60_000 },
+ *   viem: { publicClient, chain, walletClient },
+ * });
+ *
+ * // Then use any resource
+ * const did = await client.identity.create({ name: "my-agent" });
+ * ```
+ *
+ * @param config - Transport configuration. At least one of `cli` or `viem` is required.
+ * @returns A typed Neunode client instance.
+ */
+export function createNeunodeClient(config: NeunodeClientConfig = {}): NeunodeClient {
+  return new NeunodeClientImpl(config.cli, config.viem);
+}

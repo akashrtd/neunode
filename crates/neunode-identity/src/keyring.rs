@@ -5,9 +5,11 @@ use neunode_crypto::secp256k1;
 use serde::{Deserialize, Serialize};
 
 use crate::did::{generate_did_key, generate_did_neunode};
+use ts_rs::TS;
 
 /// Public key bundle — serializable, contains NO private key material.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[ts(export)]
 pub struct PublicKeyBundle {
     pub ed25519: Vec<u8>,
     pub secp256k1: Vec<u8>,

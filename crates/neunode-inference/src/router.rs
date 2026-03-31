@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{InferenceError, Result};
 use crate::provider::InferenceProvider;
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub enum RoutingStrategy {
     Cheapest,
     Fastest,

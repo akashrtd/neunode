@@ -6,8 +6,10 @@ use neunode_core::types::{Did, Signature, Timestamp};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{BountyError, Result};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct Review {
     pub reviewer: Did,
     pub score: u8,
@@ -31,14 +33,16 @@ impl Review {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub enum ReviewOutcome {
     Approved,
     Rejected,
     NeedsRevision,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct ReviewCommittee {
     pub reviewers: Vec<Did>,
     pub reviews: Vec<Review>,

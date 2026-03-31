@@ -1,11 +1,11 @@
 use anyhow::Result;
 
-use crate::cli::{Cli, ConfigCommands};
+use crate::cli::{ConfigCommands, GlobalArgs};
 use crate::output::OutputWriter;
 use crate::state::AppState;
 
-pub fn execute(cmd: &ConfigCommands, cli: &Cli, state: &mut AppState) -> Result<()> {
-    let writer = OutputWriter::new(cli.output);
+pub fn execute(cmd: &ConfigCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
+    let writer = OutputWriter::new(args.output);
     match cmd {
         ConfigCommands::Set { key, value } => config_set(key, value, state, &writer),
         ConfigCommands::Get { key } => config_get(key, state, &writer),
@@ -25,7 +25,6 @@ fn config_get(key: &str, state: &AppState, writer: &OutputWriter) -> Result<()> 
     match state.config.get(key) {
         Some(value) => writer.write_value(key, &value),
         None => {
-            writer.write_error(&format!("unknown config key: {key}"));
             anyhow::bail!("unknown config key: {key}");
         }
     }

@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[ts(export)]
 pub struct AppConfig {
     pub agent: AgentConfig,
     #[serde(default)]
@@ -13,7 +15,8 @@ pub struct AppConfig {
     pub active_identity: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[ts(export)]
 pub struct AgentConfig {
     pub name: String,
     #[serde(default = "default_did_method")]
@@ -36,7 +39,8 @@ fn default_log_level() -> String {
     "info".to_string()
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[ts(export)]
 pub struct NetworkConfig {
     #[serde(default = "default_listen_addr")]
     pub listen_addr: String,
@@ -62,7 +66,8 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[ts(export)]
 pub struct StorageConfig {
     #[serde(default = "default_db_path")]
     pub db_path: String,
@@ -84,7 +89,8 @@ fn default_cache_ttl() -> u64 {
     300
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[ts(export)]
 pub struct TokenConfig {
     #[serde(default = "default_decay_interval")]
     pub decay_check_interval_secs: u64,

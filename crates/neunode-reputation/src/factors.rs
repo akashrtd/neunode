@@ -3,8 +3,10 @@ use neunode_core::constants::reputation::{
 };
 use neunode_core::TokenAmount;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct FactorWeights {
     pub stake: f64,
     pub attest: f64,

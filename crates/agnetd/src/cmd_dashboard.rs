@@ -16,7 +16,7 @@ use ratatui::{
     Frame, Terminal,
 };
 
-use crate::cli::Cli;
+use crate::cli::GlobalArgs;
 use crate::mesh_handle::MeshStatus;
 use crate::state::AppState;
 
@@ -183,7 +183,7 @@ impl Drop for TerminalGuard {
 // Entry point
 // ---------------------------------------------------------------------------
 
-pub async fn execute(_cli: &Cli, state: &mut AppState) -> Result<()> {
+pub async fn execute(_args: &GlobalArgs, state: &mut AppState) -> Result<()> {
     let _guard = TerminalGuard::init()?;
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;

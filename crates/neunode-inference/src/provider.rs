@@ -4,8 +4,10 @@ use neunode_core::types::{Did, Timestamp, TokenAmount};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{InferenceError, Result};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct InferenceProvider {
     pub did: Did,
     pub name: String,
@@ -33,7 +35,8 @@ impl InferenceProvider {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct ModelInfo {
     pub id: String,
     pub base_model: Option<String>,
@@ -55,7 +58,8 @@ impl ModelInfo {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderStatus {
     Online,

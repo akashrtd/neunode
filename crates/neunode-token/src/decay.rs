@@ -3,8 +3,10 @@ use neunode_core::constants::token::{
 };
 use neunode_core::types::{ActivityLevel, TokenAmount};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct DecayDistribution {
     pub treasury: TokenAmount,
     pub staking_rewards: TokenAmount,

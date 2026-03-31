@@ -9,6 +9,7 @@ name = "agnetd"
 path = "src/main.rs"
 
 [dependencies]
+ts-rs = { workspace = true }
 neunode-core = { path = "../neunode-core" }
 neunode-crypto = { path = "../neunode-crypto" }
 neunode-identity = { path = "../neunode-identity" }
@@ -20,6 +21,9 @@ neunode-reputation = { path = "../neunode-reputation" }
 neunode-bounty = { path = "../neunode-bounty" }
 neunode-inference = { path = "../neunode-inference" }
 clap = { workspace = true }
+comfy-table = { workspace = true }
+indicatif = { workspace = true }
+console = { workspace = true }
 ratatui = { workspace = true }
 crossterm = { workspace = true }
 tokio = { workspace = true }

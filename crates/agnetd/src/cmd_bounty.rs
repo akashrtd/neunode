@@ -1,12 +1,13 @@
 use anyhow::Result;
 use neunode_core::types::{Timestamp, TokenType};
 
-use crate::cli::{BountyCommands, Cli};
+use crate::cli::{BountyCommands, GlobalArgs};
 use crate::output::OutputWriter;
 use crate::state::AppState;
+use crate::util::{parse_token_type, token_type_display};
 
-pub fn execute(cmd: &BountyCommands, cli: &Cli, state: &mut AppState) -> Result<()> {
-    let writer = OutputWriter::new(cli.output);
+pub fn execute(cmd: &BountyCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
+    let writer = OutputWriter::new(args.output);
     match cmd {
         BountyCommands::Create {
             title,
@@ -39,28 +40,6 @@ pub fn execute(cmd: &BountyCommands, cli: &Cli, state: &mut AppState) -> Result<
         BountyCommands::Cancel { id, reason } => {
             cancel_bounty(id, reason.as_deref().unwrap_or(""), &writer, state)
         }
-    }
-}
-
-fn parse_token_type(s: &str) -> Result<TokenType> {
-    match s.to_lowercase().as_str() {
-        "compute" | "ncompute" => Ok(TokenType::Compute),
-        "train" | "ntrain" => Ok(TokenType::Train),
-        "bandwidth" | "nbandwidth" => Ok(TokenType::Bandwidth),
-        "storage" | "nstorage" => Ok(TokenType::Storage),
-        _ => anyhow::bail!(
-            "invalid token type '{}'. Must be one of: compute, train, bandwidth, storage",
-            s
-        ),
-    }
-}
-
-fn token_type_str(t: &TokenType) -> &'static str {
-    match t {
-        TokenType::Compute => "Compute",
-        TokenType::Train => "Train",
-        TokenType::Bandwidth => "Bandwidth",
-        TokenType::Storage => "Storage",
     }
 }
 
@@ -127,7 +106,7 @@ fn create_bounty(
         "id": bounty_id,
         "title": title,
         "reward": reward,
-        "token": token_type_str(&token_type),
+        "token": token_type_display(&token_type),
         "state": "Open",
         "claim_deadline": claim_dl,
         "work_deadline": work_dl,
@@ -201,7 +180,18 @@ fn submit_bounty(
     }
 
     let store = state.bounty_store();
-    let _ = store.update_state(bounty_id, "Submitted").ok();
+    let mut bounty =
+        store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
+
+    if bounty.state != "Claimed" {
+        anyhow::bail!(
+            "bounty '{bounty_id}' cannot be submitted (current state: {}, expected: Claimed)",
+            bounty.state
+        );
+    }
+
+    bounty.state = "Submitted".to_string();
+    store.put(&bounty)?;
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
@@ -229,6 +219,16 @@ fn review_bounty(
     }
 
     let store = state.bounty_store();
+    let bounty =
+        store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
+
+    if bounty.state != "Submitted" && bounty.state != "UnderReview" {
+        anyhow::bail!(
+            "bounty '{bounty_id}' cannot be reviewed (current state: {}, expected: Submitted or UnderReview)",
+            bounty.state
+        );
+    }
+
     let new_state = if score >= 70 { "Accepted" } else { "UnderReview" };
     store.update_state(bounty_id, new_state)?;
 
@@ -317,6 +317,16 @@ fn cancel_bounty(
     }
 
     let store = state.bounty_store();
+    let bounty =
+        store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
+
+    if bounty.state != "Open" && bounty.state != "Claimed" {
+        anyhow::bail!(
+            "bounty '{bounty_id}' cannot be cancelled (current state: {}, can only cancel from Open or Claimed)",
+            bounty.state
+        );
+    }
+
     store.update_state(bounty_id, "Cancelled")?;
 
     let out = serde_json::json!({
@@ -333,46 +343,7 @@ fn cancel_bounty(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::OutputFormat;
-    use crate::config::CliConfig;
-    use crate::state::AppState;
-    use neunode_identity::keyring::Keyring;
-    use std::sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    };
-
-    fn test_writer() -> OutputWriter {
-        OutputWriter::new(OutputFormat::Json)
-    }
-
-    fn human_writer() -> OutputWriter {
-        OutputWriter::new(OutputFormat::Human)
-    }
-
-    fn test_state() -> AppState {
-        static TEST_ID: AtomicU64 = AtomicU64::new(0);
-        let id = TEST_ID.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "agnetd_test_bounty_{:?}_{}",
-            std::process::id(),
-            id
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let db = neunode_storage::db::NeunodeDb::open(&dir).unwrap();
-
-        let kr = Keyring::generate();
-        let did = kr.to_did();
-
-        AppState {
-            db: Arc::new(db),
-            config: CliConfig::load(None).unwrap(),
-            active_keyring: Some(kr),
-            active_did: Some(did),
-            mesh_handle: None,
-        }
-    }
+    use crate::testutil::{human_writer, json_writer as test_writer, test_state};
 
     #[test]
     fn create_bounty_valid() {
@@ -475,7 +446,14 @@ mod tests {
     fn submit_bounty_valid() {
         let state = test_state();
         let writer = test_writer();
-        submit_bounty("bnty_001", "ipfs://QmX7b", "{}", &writer, &state).unwrap();
+        create_bounty("Submit", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
+
+        let writer2 = test_writer();
+        claim_bounty(&bounty_id, 100, &writer2, &state).unwrap();
+
+        let writer3 = test_writer();
+        submit_bounty(&bounty_id, "ipfs://QmX7b", "{}", &writer3, &state).unwrap();
     }
 
     #[test]
@@ -500,7 +478,13 @@ mod tests {
         let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
 
         let writer2 = test_writer();
-        review_bounty(&bounty_id, 85, "Good work", &writer2, &state).unwrap();
+        claim_bounty(&bounty_id, 100, &writer2, &state).unwrap();
+
+        let writer3 = test_writer();
+        submit_bounty(&bounty_id, "ipfs://QmX7b", "{}", &writer3, &state).unwrap();
+
+        let writer4 = test_writer();
+        review_bounty(&bounty_id, 85, "Good work", &writer4, &state).unwrap();
     }
 
     #[test]
@@ -577,15 +561,74 @@ mod tests {
     }
 
     #[test]
-    fn parse_token_type_all_variants() {
-        assert!(matches!(parse_token_type("compute"), Ok(TokenType::Compute)));
-        assert!(matches!(parse_token_type("ncompute"), Ok(TokenType::Compute)));
-        assert!(matches!(parse_token_type("train"), Ok(TokenType::Train)));
-        assert!(matches!(parse_token_type("ntrain"), Ok(TokenType::Train)));
-        assert!(matches!(parse_token_type("bandwidth"), Ok(TokenType::Bandwidth)));
-        assert!(matches!(parse_token_type("nbandwidth"), Ok(TokenType::Bandwidth)));
-        assert!(matches!(parse_token_type("storage"), Ok(TokenType::Storage)));
-        assert!(matches!(parse_token_type("nstorage"), Ok(TokenType::Storage)));
-        assert!(parse_token_type("invalid").is_err());
+    fn submit_not_claimed_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        create_bounty("NoClaim", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
+
+        let writer2 = test_writer();
+        let result = submit_bounty(&bounty_id, "ipfs://QmX7b", "{}", &writer2, &state);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("expected: Claimed"), "unexpected error message: {err}");
+    }
+
+    #[test]
+    fn review_not_submitted_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        create_bounty("NoSubmit", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
+
+        let writer2 = test_writer();
+        let result = review_bounty(&bounty_id, 80, "nice", &writer2, &state);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("expected: Submitted or UnderReview"),
+            "unexpected error message: {err}"
+        );
+    }
+
+    #[test]
+    fn cancel_wrong_state_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        create_bounty("NoCancel", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
+
+        let writer2 = test_writer();
+        claim_bounty(&bounty_id, 100, &writer2, &state).unwrap();
+
+        let writer3 = test_writer();
+        submit_bounty(&bounty_id, "ipfs://QmX7b", "{}", &writer3, &state).unwrap();
+
+        let writer4 = test_writer();
+        let result = cancel_bounty(&bounty_id, "too late", &writer4, &state);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("can only cancel from Open or Claimed"),
+            "unexpected error message: {err}"
+        );
+    }
+
+    #[test]
+    fn cancel_from_claimed_ok() {
+        let state = test_state();
+        let writer = test_writer();
+        create_bounty("CancelClaimed", "Desc", 1000, "compute", None, None, &writer, &state)
+            .unwrap();
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
+
+        let writer2 = test_writer();
+        claim_bounty(&bounty_id, 100, &writer2, &state).unwrap();
+
+        let writer3 = test_writer();
+        cancel_bounty(&bounty_id, "changed mind", &writer3, &state).unwrap();
+
+        let updated = state.bounty_store().get(&bounty_id).unwrap().unwrap();
+        assert_eq!(updated.state, "Cancelled");
     }
 }

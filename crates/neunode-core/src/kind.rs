@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::error::{NeunodeError, Result};
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 #[repr(u16)]
 pub enum Kind {
     AgentMetadata = 0,
@@ -43,7 +45,8 @@ pub enum Kind {
     ParameterChange = 5010,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub enum KindCategory {
     System,
     Bounty,

@@ -4,12 +4,12 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 
-use crate::cli::{Cli, IdentityCommands};
+use crate::cli::{GlobalArgs, IdentityCommands};
 use crate::output::OutputWriter;
 use crate::state::AppState;
 
-pub fn execute(cmd: &IdentityCommands, cli: &Cli, state: &mut AppState) -> Result<()> {
-    let writer = OutputWriter::new(cli.output);
+pub fn execute(cmd: &IdentityCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
+    let writer = OutputWriter::new(args.output);
     match cmd {
         IdentityCommands::Create { name, method, output_dir } => {
             create_identity(name, method, output_dir.as_deref(), &writer, state)

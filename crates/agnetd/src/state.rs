@@ -22,7 +22,15 @@ pub struct AppState {
 impl AppState {
     pub fn init(cli: &crate::cli::Cli) -> Result<Self> {
         let config = crate::config::CliConfig::load(cli.config.as_deref())?;
+        Self::init_with_config(config)
+    }
 
+    pub fn init_from_globals(args: &crate::cli::GlobalArgs) -> Result<Self> {
+        let config = crate::config::CliConfig::load(args.config.as_deref())?;
+        Self::init_with_config(config)
+    }
+
+    fn init_with_config(config: crate::config::CliConfig) -> Result<Self> {
         let db_path = expand_db_path(&config.app_config.storage.db_path);
         std::fs::create_dir_all(&db_path)
             .with_context(|| format!("failed to create DB directory {}", db_path.display()))?;

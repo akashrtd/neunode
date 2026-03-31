@@ -1,4 +1,6 @@
 use crate::cli::OutputFormat;
+use comfy_table::presets::UTF8_FULL;
+use comfy_table::{ContentArrangement, Table};
 use serde::Serialize;
 
 const GREEN: &str = "\x1b[32m";
@@ -152,39 +154,20 @@ impl OutputWriter {
             return;
         }
 
-        let mut widths: Vec<usize> = headers.iter().map(|h| h.len()).collect();
-        for row in rows {
-            for (i, cell) in row.iter().enumerate() {
-                if i < widths.len() && cell.len() > widths[i] {
-                    widths[i] = cell.len();
-                }
-            }
-        }
+        let mut table = Table::new();
+        table.load_preset(UTF8_FULL).set_content_arrangement(ContentArrangement::Dynamic);
 
-        let header_line: String = headers
-            .iter()
-            .enumerate()
-            .map(|(i, h)| format!("{BOLD}{:>width$}{RESET}", h, width = widths[i]))
-            .collect::<Vec<_>>()
-            .join("  ");
-        println!("{header_line}");
-
-        let separator: String =
-            widths.iter().map(|&w| "─".repeat(w)).collect::<Vec<_>>().join("──");
-        println!("{separator}");
+        let header_cells: Vec<comfy_table::Cell> =
+            headers.iter().map(|h| comfy_table::Cell::new(*h)).collect();
+        table.set_header(header_cells);
 
         for row in rows {
-            let line: String = row
-                .iter()
-                .enumerate()
-                .map(|(i, cell)| {
-                    let w = widths.get(i).copied().unwrap_or(0);
-                    format!("{:>width$}", cell, width = w)
-                })
-                .collect::<Vec<_>>()
-                .join("  ");
-            println!("{line}");
+            let cells: Vec<comfy_table::Cell> =
+                row.iter().map(|cell| comfy_table::Cell::new(cell)).collect();
+            table.add_row(cells);
         }
+
+        println!("{table}");
     }
 
     fn write_json_value(&self, value: &serde_json::Value) {

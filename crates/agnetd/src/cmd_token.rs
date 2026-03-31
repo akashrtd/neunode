@@ -4,12 +4,13 @@ use neunode_core::types::{ActivityLevel, TokenType};
 use neunode_storage::token_store::{TOKEN_BANDWIDTH, TOKEN_COMPUTE, TOKEN_STORAGE, TOKEN_TRAINING};
 use neunode_token::decay::DecayCalculator;
 
-use crate::cli::{Cli, TokenCommands};
+use crate::cli::{GlobalArgs, TokenCommands};
 use crate::output::OutputWriter;
 use crate::state::AppState;
+use crate::util::{parse_token_type, token_type_display};
 
-pub fn execute(cmd: &TokenCommands, cli: &Cli, state: &mut AppState) -> Result<()> {
-    let writer = OutputWriter::new(cli.output);
+pub fn execute(cmd: &TokenCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
+    let writer = OutputWriter::new(args.output);
     match cmd {
         TokenCommands::Balance { token } => show_balance(token.as_deref(), &writer, state),
         TokenCommands::Transfer { to, amount, token } => {
@@ -19,28 +20,6 @@ pub fn execute(cmd: &TokenCommands, cli: &Cli, state: &mut AppState) -> Result<(
         TokenCommands::Unstake { amount } => unstake_tokens(*amount, &writer, state),
         TokenCommands::StakeStatus => show_stake_status(&writer, state),
         TokenCommands::DecayInfo => show_decay_info(&writer),
-    }
-}
-
-fn token_type_str(t: &TokenType) -> &'static str {
-    match t {
-        TokenType::Compute => "nCompute",
-        TokenType::Train => "nTrain",
-        TokenType::Bandwidth => "nBandwidth",
-        TokenType::Storage => "nStorage",
-    }
-}
-
-fn parse_token_type(s: &str) -> Result<TokenType> {
-    match s.to_lowercase().as_str() {
-        "compute" | "ncompute" => Ok(TokenType::Compute),
-        "train" | "ntrain" => Ok(TokenType::Train),
-        "bandwidth" | "nbandwidth" => Ok(TokenType::Bandwidth),
-        "storage" | "nstorage" => Ok(TokenType::Storage),
-        _ => anyhow::bail!(
-            "invalid token type '{}'. Must be one of: compute, train, bandwidth, storage",
-            s
-        ),
     }
 }
 
@@ -61,7 +40,7 @@ fn show_balance(token: Option<&str>, writer: &OutputWriter, state: &AppState) ->
     if let Some(t) = token {
         let tt = parse_token_type(t)?;
         let bal = store.get_balance(&did.0, token_type_to_u8(&tt))?;
-        writer.write_value("token", token_type_str(&tt));
+        writer.write_value("token", token_type_display(&tt));
         writer.write_value("balance", &bal.balance.to_string());
         writer.write_value("staked", &bal.staked.to_string());
     } else {
@@ -73,7 +52,7 @@ fn show_balance(token: Option<&str>, writer: &OutputWriter, state: &AppState) ->
             .map(|tt| {
                 let bal = store.get_balance(&did.0, token_type_to_u8(tt)).unwrap_or_default();
                 vec![
-                    token_type_str(tt).to_string(),
+                    token_type_display(tt).to_string(),
                     bal.balance.to_string(),
                     bal.staked.to_string(),
                 ]
@@ -103,7 +82,7 @@ fn transfer_tokens(
 
     let did = state.require_did()?;
     let tt = parse_token_type(token)?;
-    let token_name = token_type_str(&tt).to_string();
+    let token_name = token_type_display(&tt).to_string();
     let token_byte = token_type_to_u8(&tt);
 
     let store = state.token_store();
@@ -132,7 +111,7 @@ fn stake_tokens(amount: u64, token: &str, writer: &OutputWriter, state: &AppStat
 
     let did = state.require_did()?;
     let tt = parse_token_type(token)?;
-    let token_name = token_type_str(&tt).to_string();
+    let token_name = token_type_display(&tt).to_string();
     let token_byte = token_type_to_u8(&tt);
 
     let store = state.token_store();
@@ -195,7 +174,7 @@ fn unstake_tokens(amount: u64, writer: &OutputWriter, state: &AppState) -> Resul
         .as_secs()
         + UNBONDING_PERIOD_SECS;
 
-    let token_name = token_type_str(&tt).to_string();
+    let token_name = token_type_display(&tt).to_string();
     let out = serde_json::json!({
         "amount": amount,
         "token": token_name,
@@ -228,7 +207,7 @@ fn show_stake_status(writer: &OutputWriter, state: &AppState) -> Result<()> {
             total_staked += bal.staked;
             entries.push(serde_json::json!({
                 "amount": bal.staked,
-                "token": token_type_str(tt),
+                "token": token_type_display(tt),
                 "available": bal.balance,
             }));
         }
@@ -278,42 +257,10 @@ fn show_decay_info(writer: &OutputWriter) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::OutputFormat;
     use crate::config::CliConfig;
-    use crate::state::AppState;
-    use neunode_identity::keyring::Keyring;
+    use crate::testutil::{human_writer, json_writer as test_writer, test_state};
     use neunode_storage::token_store::TokenBalance;
     use std::sync::Arc;
-
-    fn test_writer() -> OutputWriter {
-        OutputWriter::new(OutputFormat::Json)
-    }
-
-    fn human_writer() -> OutputWriter {
-        OutputWriter::new(OutputFormat::Human)
-    }
-
-    fn test_state() -> AppState {
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static TEST_ID: AtomicU64 = AtomicU64::new(0);
-        let id = TEST_ID.fetch_add(1, Ordering::Relaxed);
-        let dir =
-            std::env::temp_dir().join(format!("agnetd_test_token_{:?}_{}", std::process::id(), id));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let db = neunode_storage::db::NeunodeDb::open(&dir).unwrap();
-
-        let kr = Keyring::generate();
-        let did = kr.to_did();
-
-        AppState {
-            db: Arc::new(db),
-            config: CliConfig::load(None).unwrap(),
-            active_keyring: Some(kr),
-            active_did: Some(did),
-            mesh_handle: None,
-        }
-    }
 
     fn seed_balance(state: &AppState, token_byte: u8, balance: u128, staked: u128) {
         let did = state.active_did.as_ref().unwrap();
@@ -497,12 +444,6 @@ mod tests {
     fn decay_info_json() {
         let writer = test_writer();
         show_decay_info(&writer).unwrap();
-    }
-
-    #[test]
-    fn parse_token_type_case_insensitive() {
-        assert!(matches!(parse_token_type("Compute"), Ok(TokenType::Compute)));
-        assert!(matches!(parse_token_type("TRAIN"), Ok(TokenType::Train)));
     }
 
     #[test]

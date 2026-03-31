@@ -3,12 +3,12 @@ use neunode_core::types::TokenAmount;
 use neunode_inference::provider::ModelInfo;
 use neunode_storage::db::NeunodeDb;
 
-use crate::cli::{Cli, ModelCommands};
+use crate::cli::{GlobalArgs, ModelCommands};
 use crate::output::OutputWriter;
 use crate::state::AppState;
 
-pub fn execute(cmd: &ModelCommands, cli: &Cli, state: &mut AppState) -> Result<()> {
-    let writer = OutputWriter::new(cli.output);
+pub fn execute(cmd: &ModelCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
+    let writer = OutputWriter::new(args.output);
     match cmd {
         ModelCommands::List { provider } => model_list(provider.as_deref(), &writer, state),
         ModelCommands::Show { model_id } => model_show(model_id, &writer, state),
@@ -120,7 +120,6 @@ fn model_show(model_id: &str, writer: &OutputWriter, state: &AppState) -> Result
             writer.write_key_value_pairs(&pairs);
         }
         None => {
-            writer.write_error(&format!("model not found: {model_id}"));
             anyhow::bail!("model not found: {model_id}");
         }
     }
@@ -137,7 +136,17 @@ fn model_push(path: &str, name: &str, writer: &OutputWriter, state: &AppState) -
         capabilities: vec!["chat".to_string()],
     };
 
+    let pb = indicatif::ProgressBar::new_spinner();
+    pb.set_style(
+        indicatif::ProgressStyle::default_spinner()
+            .template("{spinner:.green} {msg}")
+            .unwrap_or_else(|_| indicatif::ProgressStyle::default_spinner()),
+    );
+    pb.set_message(format!("Registering model {name}..."));
+
     store_model(state.db(), &model)?;
+
+    pb.finish_with_message(format!("Model '{name}' registered"));
 
     let pairs = [
         ("Status", "registered"),
@@ -166,7 +175,6 @@ fn model_rm(model_id: &str, writer: &OutputWriter, state: &AppState) -> Result<(
             Ok(())
         }
         None => {
-            writer.write_error(&format!("model not found: {model_id}"));
             anyhow::bail!("model not found: {model_id}");
         }
     }
@@ -175,43 +183,7 @@ fn model_rm(model_id: &str, writer: &OutputWriter, state: &AppState) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::OutputFormat;
-    use crate::config::CliConfig;
-    use crate::state::AppState;
-    use neunode_identity::keyring::Keyring;
-    use std::sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    };
-
-    fn test_writer() -> OutputWriter {
-        OutputWriter::new(OutputFormat::Json)
-    }
-
-    fn human_writer() -> OutputWriter {
-        OutputWriter::new(OutputFormat::Human)
-    }
-
-    fn test_state() -> AppState {
-        static TEST_ID: AtomicU64 = AtomicU64::new(0);
-        let id = TEST_ID.fetch_add(1, Ordering::Relaxed);
-        let dir =
-            std::env::temp_dir().join(format!("agnetd_test_model_{:?}_{}", std::process::id(), id));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let db = neunode_storage::db::NeunodeDb::open(&dir).unwrap();
-
-        let kr = Keyring::generate();
-        let did = kr.to_did();
-
-        AppState {
-            db: Arc::new(db),
-            config: CliConfig::load(None).unwrap(),
-            active_keyring: Some(kr),
-            active_did: Some(did),
-            mesh_handle: None,
-        }
-    }
+    use crate::testutil::{human_writer, json_writer as test_writer, test_state};
 
     #[test]
     fn list_empty_db() {

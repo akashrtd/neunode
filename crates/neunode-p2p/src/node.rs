@@ -125,6 +125,11 @@ impl P2pNode {
         self.swarm.is_connected(peer_id)
     }
 
+    pub fn disconnect(&mut self, peer_id: PeerId) -> Result<()> {
+        let _ = self.swarm.disconnect_peer_id(peer_id);
+        Ok(())
+    }
+
     pub fn subscribed_topics(&self) -> &HashSet<String> {
         &self.subscribed_topics
     }

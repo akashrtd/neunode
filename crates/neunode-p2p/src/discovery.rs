@@ -7,10 +7,12 @@ use neunode_core::constants::p2p;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{P2pError, Result};
+use ts_rs::TS;
 
 const DEFAULT_DISCOVERY_INTERVAL_SECS: u64 = 300;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, TS)]
+#[ts(export)]
 pub struct DiscoveryConfig {
     pub bootstrap_peers: Vec<String>,
     pub discovery_interval_secs: u64,

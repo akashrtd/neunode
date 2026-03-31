@@ -4,12 +4,12 @@ use neunode_core::types::Hash256;
 use neunode_feed::event::FeedEvent;
 use neunode_identity::did::did_to_peer_id;
 
-use crate::cli::{Cli, MeshCommands};
+use crate::cli::{GlobalArgs, MeshCommands};
 use crate::output::OutputWriter;
 use crate::state::AppState;
 
-pub async fn execute(cmd: &MeshCommands, cli: &Cli, state: &mut AppState) -> Result<()> {
-    let writer = OutputWriter::new(cli.output);
+pub async fn execute(cmd: &MeshCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
+    let writer = OutputWriter::new(args.output);
     match cmd {
         MeshCommands::Start { bootstrap, listen } => {
             mesh_start(bootstrap, listen, &writer, state).await
@@ -17,7 +17,7 @@ pub async fn execute(cmd: &MeshCommands, cli: &Cli, state: &mut AppState) -> Res
         MeshCommands::Status => mesh_status(&writer, state),
         MeshCommands::Peers { verbose } => mesh_peers(*verbose, &writer, state),
         MeshCommands::Connect { addr } => mesh_connect(addr, &writer, state),
-        MeshCommands::Disconnect { peer_id } => mesh_disconnect(peer_id, &writer),
+        MeshCommands::Disconnect { peer_id } => mesh_disconnect(peer_id, &writer, state),
     }
 }
 
@@ -441,14 +441,12 @@ fn mesh_connect(addr: &str, writer: &OutputWriter, state: &AppState) -> Result<(
     Ok(())
 }
 
-fn mesh_disconnect(peer_id: &str, writer: &OutputWriter) -> Result<()> {
-    writer.write_status(&format!("Disconnect from {peer_id} — not yet supported in Phase 1"));
-    let info = serde_json::json!({
-        "action": "disconnect",
-        "peer_id": peer_id,
-        "status": "not_supported",
-    });
-    writer.write_json(&info);
+fn mesh_disconnect(peer_id: &str, writer: &OutputWriter, state: &AppState) -> Result<()> {
+    let handle = state.require_mesh_handle()?;
+    let pid: libp2p::PeerId =
+        peer_id.parse().map_err(|e| anyhow::anyhow!("invalid peer ID '{peer_id}': {e}"))?;
+    handle.disconnect(pid)?;
+    writer.write_status(&format!("Disconnected from {peer_id}"));
     Ok(())
 }
 

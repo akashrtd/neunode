@@ -2,7 +2,7 @@ use anyhow::Result;
 use neunode_storage::db::NeunodeDb;
 use serde::{Deserialize, Serialize};
 
-use crate::cli::{Cli, TrainCommands};
+use crate::cli::{GlobalArgs, TrainCommands};
 use crate::output::OutputWriter;
 use crate::state::AppState;
 
@@ -17,8 +17,8 @@ struct TrainingJob {
     method: String,
 }
 
-pub fn execute(cmd: &TrainCommands, cli: &Cli, state: &mut AppState) -> Result<()> {
-    let writer = OutputWriter::new(cli.output);
+pub fn execute(cmd: &TrainCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
+    let writer = OutputWriter::new(args.output);
     match cmd {
         TrainCommands::Start { model, dataset, config } => {
             train_start(model, dataset, config.as_deref(), &writer, state)
@@ -103,7 +103,17 @@ fn train_start(
         method: "DiLoCo + SWARM".to_string(),
     };
 
+    let pb = indicatif::ProgressBar::new_spinner();
+    pb.set_style(
+        indicatif::ProgressStyle::default_spinner()
+            .template("{spinner:.green} {msg}")
+            .unwrap_or_else(|_| indicatif::ProgressStyle::default_spinner()),
+    );
+    pb.set_message(format!("Queuing training job for {model}..."));
+
     store_job(state.db(), &job)?;
+
+    pb.finish_with_message(format!("Training job {job_id} queued"));
 
     let pairs = [
         ("Job ID", job_id.as_str()),
@@ -176,7 +186,6 @@ fn train_stop(job_id: &str, writer: &OutputWriter, state: &AppState) -> Result<(
             Ok(())
         }
         None => {
-            writer.write_error(&format!("training job not found: {job_id}"));
             anyhow::bail!("training job not found: {job_id}");
         }
     }
@@ -214,43 +223,7 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::OutputFormat;
-    use crate::config::CliConfig;
-    use crate::state::AppState;
-    use neunode_identity::keyring::Keyring;
-    use std::sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    };
-
-    fn test_writer() -> OutputWriter {
-        OutputWriter::new(OutputFormat::Json)
-    }
-
-    fn human_writer() -> OutputWriter {
-        OutputWriter::new(OutputFormat::Human)
-    }
-
-    fn test_state() -> AppState {
-        static TEST_ID: AtomicU64 = AtomicU64::new(0);
-        let id = TEST_ID.fetch_add(1, Ordering::Relaxed);
-        let dir =
-            std::env::temp_dir().join(format!("agnetd_test_train_{:?}_{}", std::process::id(), id));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let db = neunode_storage::db::NeunodeDb::open(&dir).unwrap();
-
-        let kr = Keyring::generate();
-        let did = kr.to_did();
-
-        AppState {
-            db: Arc::new(db),
-            config: CliConfig::load(None).unwrap(),
-            active_keyring: Some(kr),
-            active_did: Some(did),
-            mesh_handle: None,
-        }
-    }
+    use crate::testutil::{human_writer, json_writer as test_writer, test_state};
 
     #[test]
     fn start_creates_job() {

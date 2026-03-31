@@ -5,8 +5,10 @@ use neunode_core::types::{BountyId, Did, Timestamp, TokenAmount, TokenType};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{BountyError, Result};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub enum EscrowState {
     Funded,
     Released,
@@ -14,7 +16,8 @@ pub enum EscrowState {
     Disputed,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct Escrow {
     pub amount: TokenAmount,
     pub token_type: TokenType,
@@ -76,7 +79,8 @@ impl Escrow {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct FeeBreakdown {
     pub gross_amount: TokenAmount,
     pub protocol_fee: TokenAmount,

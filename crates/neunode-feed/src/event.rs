@@ -7,20 +7,24 @@ use neunode_core::kind::Kind;
 use neunode_core::types::{Did, EventId, Hash256, Sequence, Signature, Timestamp};
 
 use crate::error::{FeedError, Result};
+use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub struct EventTag {
     pub key: String,
     pub value: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
+#[ts(export)]
 pub struct EventRef {
     pub event_id: EventId,
     pub author: Did,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, TS)]
+#[ts(export)]
 pub struct FeedEvent {
     pub id: EventId,
     pub kind: Kind,

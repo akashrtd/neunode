@@ -1,6 +1,7 @@
 use neunode_core::constants::reputation::MAX_SCORE;
 use neunode_core::TokenAmount;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::attestation::AttestationGraph;
 use crate::factors::{
@@ -8,7 +9,8 @@ use crate::factors::{
     compute_tenure_factor, compute_verify_factor, FactorWeights,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub enum ReputationGrade {
     A,
     B,
@@ -55,7 +57,8 @@ impl std::fmt::Display for ReputationGrade {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct FactorInputs {
     pub staked_amount: TokenAmount,
     pub total_staked: TokenAmount,
@@ -68,7 +71,8 @@ pub struct FactorInputs {
     pub days_since_creation: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export)]
 pub struct ReputationScore {
     pub total: f64,
     pub stake_factor: f64,
