@@ -13,10 +13,10 @@ contract NeunodeRegistry {
     // ─── Types ────────────────────────────────────────────────────────────
 
     struct AgentRegistration {
-        bytes32 didHash;          // DID identifier
-        string capabilities;      // JSON string of agent capabilities
-        string endpoint;          // P2P multiaddr or HTTP endpoint
-        uint256 stakeAmount;      // Staked tokens (tracked externally)
+        bytes32 didHash; // DID identifier
+        string capabilities; // JSON string of agent capabilities
+        string endpoint; // P2P multiaddr or HTTP endpoint
+        uint256 stakeAmount; // Staked tokens (tracked externally)
         uint256 registeredAt;
         uint256 updatedAt;
         bool active;
@@ -26,8 +26,8 @@ contract NeunodeRegistry {
 
     INeunodeIdentity public immutable identity;
 
-    mapping(bytes32 => AgentRegistration) public agents;   // didHash → registration
-    bytes32[] public agentList;                             // All registered DIDs
+    mapping(bytes32 => AgentRegistration) public agents; // didHash → registration
+    bytes32[] public agentList; // All registered DIDs
     uint256 public activeCount;
 
     // ─── Events ───────────────────────────────────────────────────────────
@@ -69,11 +69,11 @@ contract NeunodeRegistry {
     // ─── Functions ────────────────────────────────────────────────────────
 
     /// @notice Register a new agent with capabilities and endpoint
-    function register(
-        bytes32 didHash,
-        string calldata capabilities,
-        string calldata endpoint
-    ) external onlyDidController(didHash) requireActiveDid(didHash) {
+    function register(bytes32 didHash, string calldata capabilities, string calldata endpoint)
+        external
+        onlyDidController(didHash)
+        requireActiveDid(didHash)
+    {
         if (bytes(capabilities).length == 0) revert EmptyCapabilities();
         if (bytes(endpoint).length == 0) revert EmptyEndpoint();
         if (agents[didHash].active) revert AgentAlreadyRegistered(didHash);
@@ -95,11 +95,10 @@ contract NeunodeRegistry {
     }
 
     /// @notice Update agent capabilities and/or endpoint
-    function update(
-        bytes32 didHash,
-        string calldata capabilities,
-        string calldata endpoint
-    ) external onlyDidController(didHash) {
+    function update(bytes32 didHash, string calldata capabilities, string calldata endpoint)
+        external
+        onlyDidController(didHash)
+    {
         AgentRegistration storage agent = agents[didHash];
         if (!agent.active) revert AgentNotActive(didHash);
         if (bytes(capabilities).length == 0) revert EmptyCapabilities();

@@ -174,7 +174,9 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
         _transfer(account, decayConfig.devFund, devPortion);
 
         _lastDecayTimestamp[account] = block.timestamp;
-        emit DecayExecuted(account, decayAmount, treasuryPortion, stakingPortion, burnPortion, devPortion);
+        emit DecayExecuted(
+            account, decayAmount, treasuryPortion, stakingPortion, burnPortion, devPortion
+        );
     }
 
     // ─── Seed Tokens ──────────────────────────────────────────────────────

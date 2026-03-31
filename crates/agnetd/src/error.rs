@@ -5,6 +5,7 @@ use std::process::ExitCode;
 ///   0=success, 1=error, 2=usage, 10=network, 11=timeout,
 ///   20=auth, 30=insufficient, 40=notfound, 50=ratelimit, 60=conflict
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum CliError {
     /// Generic error (exit 1)
     General { message: String, source: Option<anyhow::Error> },
@@ -75,6 +76,7 @@ impl std::fmt::Display for CliError {
 
 impl std::error::Error for CliError {}
 
+#[allow(dead_code)]
 impl CliError {
     pub fn general(msg: impl Into<String>) -> Self {
         Self::General { message: msg.into(), source: None }

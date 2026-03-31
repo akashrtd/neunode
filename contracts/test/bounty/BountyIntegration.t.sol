@@ -182,7 +182,13 @@ contract BountyIntegrationTest is Test {
 
         // Second review with nonce=1 — inline to avoid vm.prank conflicts
         bytes32 structHash = keccak256(
-            abi.encode(review.REVIEW_TYPEHASH(), BOUNTY_ID, uint8(90), keccak256(bytes("good work")), uint256(1))
+            abi.encode(
+                review.REVIEW_TYPEHASH(),
+                BOUNTY_ID,
+                uint8(90),
+                keccak256(bytes("good work")),
+                uint256(1)
+            )
         );
         bytes32 digest = _getTypedDataHash(structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(reviewer1Pk, digest);
@@ -200,7 +206,9 @@ contract BountyIntegrationTest is Test {
 
         // Create a valid-looking signature but from an outsider address
         bytes32 structHash = keccak256(
-            abi.encode(review.REVIEW_TYPEHASH(), BOUNTY_ID, uint8(80), keccak256(bytes("test")), uint256(0))
+            abi.encode(
+                review.REVIEW_TYPEHASH(), BOUNTY_ID, uint8(80), keccak256(bytes("test")), uint256(0)
+            )
         );
         bytes32 digest = _getTypedDataHash(structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(reviewer1Pk, digest);
@@ -221,7 +229,13 @@ contract BountyIntegrationTest is Test {
 
         // reviewer3 hasn't reviewed yet, nonce=0 — inline to ensure expectRevert works
         bytes32 structHash = keccak256(
-            abi.encode(review.REVIEW_TYPEHASH(), BOUNTY_ID, uint8(90), keccak256(bytes("good work")), uint256(0))
+            abi.encode(
+                review.REVIEW_TYPEHASH(),
+                BOUNTY_ID,
+                uint8(90),
+                keccak256(bytes("good work")),
+                uint256(0)
+            )
         );
         bytes32 digest = _getTypedDataHash(structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(reviewer3Pk, digest);
@@ -267,7 +281,9 @@ contract BountyIntegrationTest is Test {
         vm.prank(requester);
         bounty.startReview(BOUNTY_ID, reviewers);
 
-        assertEq(uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.UnderReview));
+        assertEq(
+            uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.UnderReview)
+        );
 
         _submitSignedReview(reviewer1, reviewer1Pk, 80);
         _submitSignedReview(reviewer2, reviewer2Pk, 70);
@@ -465,7 +481,9 @@ contract BountyIntegrationTest is Test {
         vm.warp(revisionDeadline + 1);
 
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeBounty.DeadlinePassed.selector, revisionDeadline));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeBounty.DeadlinePassed.selector, revisionDeadline)
+        );
         bounty.submitWork(BOUNTY_ID, keccak256("late_revision"));
     }
 
@@ -476,7 +494,9 @@ contract BountyIntegrationTest is Test {
         vm.warp(disputeDeadline + 1);
 
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeBounty.DeadlinePassed.selector, disputeDeadline));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeBounty.DeadlinePassed.selector, disputeDeadline)
+        );
         bounty.disputeBounty(BOUNTY_ID);
     }
 
@@ -628,9 +648,13 @@ contract BountyIntegrationTest is Test {
         _submitSignedReviewWithNonce(reviewer, pk, score, 0);
     }
 
-    function _submitSignedReviewWithNonce(address reviewer, uint256 pk, uint8 score, uint256 nonce) internal {
+    function _submitSignedReviewWithNonce(address reviewer, uint256 pk, uint8 score, uint256 nonce)
+        internal
+    {
         bytes32 structHash = keccak256(
-            abi.encode(review.REVIEW_TYPEHASH(), BOUNTY_ID, score, keccak256(bytes("good work")), nonce)
+            abi.encode(
+                review.REVIEW_TYPEHASH(), BOUNTY_ID, score, keccak256(bytes("good work")), nonce
+            )
         );
 
         bytes32 digest = _getTypedDataHash(structHash);
@@ -647,8 +671,9 @@ contract BountyIntegrationTest is Test {
     }
 
     function _hashDomainSeparator() internal view returns (bytes32) {
-        bytes32 EIP712_DOMAIN_TYPEHASH =
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+        bytes32 EIP712_DOMAIN_TYPEHASH = keccak256(
+            "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+        );
         return keccak256(
             abi.encode(
                 EIP712_DOMAIN_TYPEHASH,
@@ -663,8 +688,15 @@ contract BountyIntegrationTest is Test {
     function _createBountyWithDeadlines() internal {
         vm.prank(requester);
         bounty.createBountyWithDeadlines(
-            BOUNTY_ID, REWARD, address(token), claimDeadline, workDeadline,
-            reviewDeadline, revisionDeadline, disputeDeadline, false
+            BOUNTY_ID,
+            REWARD,
+            address(token),
+            claimDeadline,
+            workDeadline,
+            reviewDeadline,
+            revisionDeadline,
+            disputeDeadline,
+            false
         );
     }
 

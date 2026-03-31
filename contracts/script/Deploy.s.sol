@@ -89,7 +89,7 @@ contract Deploy is Script {
 
         // ── 6. Deploy governance (uses nCompute for voting) ─────────────
         governance = new NeunodeGovernance(
-            address(computeToken),   // voting token
+            address(computeToken), // voting token
             VOTING_DELAY,
             VOTING_PERIOD,
             PROPOSAL_THRESHOLD,

@@ -15,17 +15,11 @@ interface IRoyaltySplitter {
     // ─── Events ───────────────────────────────────────────────────────────
 
     event RoyaltyDistributed(
-        bytes32 indexed modelCid,
-        address indexed token,
-        uint256 totalAmount,
-        uint256 recipientCount
+        bytes32 indexed modelCid, address indexed token, uint256 totalAmount, uint256 recipientCount
     );
 
     event RecipientPaid(
-        bytes32 indexed modelCid,
-        address indexed recipient,
-        uint256 amount,
-        uint256 depth
+        bytes32 indexed modelCid, address indexed recipient, uint256 amount, uint256 depth
     );
 
     event ProtocolRoyaltyBpsUpdated(uint256 oldBps, uint256 newBps);

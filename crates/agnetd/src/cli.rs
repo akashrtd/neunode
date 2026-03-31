@@ -39,6 +39,7 @@ pub enum OutputFormat {
 /// Global flags shared across all commands.
 /// Extracted from Cli for cleaner function signatures.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct GlobalArgs {
     pub output: OutputFormat,
     pub config: Option<String>,

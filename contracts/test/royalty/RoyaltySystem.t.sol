@@ -101,7 +101,9 @@ contract RoyaltySystemTest is Test {
 
     function testRegisterModelWithOneParent() public {
         _register(ROOT_MODEL, _emptyParents(), IModelRegistry.ContributionType.PreTraining);
-        _register(FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune);
+        _register(
+            FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune
+        );
 
         // Check parent link
         bytes32[] memory parents = registry.getParents(FINETUNE_MODEL);
@@ -118,9 +120,15 @@ contract RoyaltySystemTest is Test {
 
     function testRegisterModelWithMultipleParents() public {
         _register(ROOT_MODEL, _emptyParents(), IModelRegistry.ContributionType.PreTraining);
-        _register(FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune);
+        _register(
+            FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune
+        );
         _register(RL_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.RL);
-        _register(MERGE_MODEL, _twoParents(FINETUNE_MODEL, RL_MODEL), IModelRegistry.ContributionType.FineTune);
+        _register(
+            MERGE_MODEL,
+            _twoParents(FINETUNE_MODEL, RL_MODEL),
+            IModelRegistry.ContributionType.FineTune
+        );
 
         bytes32[] memory parents = registry.getParents(MERGE_MODEL);
         assertEq(parents.length, 2);
@@ -132,7 +140,9 @@ contract RoyaltySystemTest is Test {
 
     function testMultiGenerationLineageDepth() public {
         _register(ROOT_MODEL, _emptyParents(), IModelRegistry.ContributionType.PreTraining);
-        _register(FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune);
+        _register(
+            FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune
+        );
         _register(RL_MODEL, _singleParent(FINETUNE_MODEL), IModelRegistry.ContributionType.RL);
         _register(SERVING_MODEL, _singleParent(RL_MODEL), IModelRegistry.ContributionType.Serving);
 
@@ -151,7 +161,9 @@ contract RoyaltySystemTest is Test {
     function testRevertRegisterDuplicateCid() public {
         _register(ROOT_MODEL, _emptyParents(), IModelRegistry.ContributionType.PreTraining);
 
-        vm.expectRevert(abi.encodeWithSelector(ModelRegistry.ModelAlreadyExists.selector, ROOT_MODEL));
+        vm.expectRevert(
+            abi.encodeWithSelector(ModelRegistry.ModelAlreadyExists.selector, ROOT_MODEL)
+        );
         _register(ROOT_MODEL, _emptyParents(), IModelRegistry.ContributionType.PreTraining);
     }
 
@@ -165,7 +177,10 @@ contract RoyaltySystemTest is Test {
             )
         );
         registry.registerModel(
-            ROOT_MODEL, _emptyParents(), IModelRegistry.ContributionType.PreTraining, "ipfs://metadata"
+            ROOT_MODEL,
+            _emptyParents(),
+            IModelRegistry.ContributionType.PreTraining,
+            "ipfs://metadata"
         );
     }
 
@@ -196,7 +211,9 @@ contract RoyaltySystemTest is Test {
 
     function testLeafModelHasNoChildren() public {
         _register(ROOT_MODEL, _emptyParents(), IModelRegistry.ContributionType.PreTraining);
-        _register(FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune);
+        _register(
+            FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune
+        );
 
         bytes32[] memory children = registry.getChildren(FINETUNE_MODEL);
         assertEq(children.length, 0);
@@ -210,7 +227,9 @@ contract RoyaltySystemTest is Test {
         _register(ROOT_MODEL, _emptyParents(), IModelRegistry.ContributionType.PreTraining);
         assertEq(registry.getModelCount(), 1);
 
-        _register(FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune);
+        _register(
+            FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune
+        );
         assertEq(registry.getModelCount(), 2);
     }
 
@@ -228,21 +247,23 @@ contract RoyaltySystemTest is Test {
     function testEventsEmitted() public {
         vm.expectEmit(true, true, false, true);
         emit IModelRegistry.ModelRegistered(
-            ROOT_MODEL,
-            admin,
-            IModelRegistry.ContributionType.PreTraining,
-            _emptyParents()
+            ROOT_MODEL, admin, IModelRegistry.ContributionType.PreTraining, _emptyParents()
         );
         _register(ROOT_MODEL, _emptyParents(), IModelRegistry.ContributionType.PreTraining);
 
         // Register child and check both events
         vm.expectEmit(true, true, false, true);
         emit IModelRegistry.ModelRegistered(
-            FINETUNE_MODEL, admin, IModelRegistry.ContributionType.FineTune, _singleParent(ROOT_MODEL)
+            FINETUNE_MODEL,
+            admin,
+            IModelRegistry.ContributionType.FineTune,
+            _singleParent(ROOT_MODEL)
         );
         vm.expectEmit(true, true, true, true);
         emit IModelRegistry.LineageExtended(ROOT_MODEL, FINETUNE_MODEL, admin);
-        _register(FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune);
+        _register(
+            FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune
+        );
     }
 
     // ─── 14. Grant and revoke REGISTRAR_ROLE ──────────────────────────────
@@ -252,7 +273,10 @@ contract RoyaltySystemTest is Test {
 
         vm.prank(contributor1);
         registry.registerModel(
-            keccak256("contrib1_model"), _emptyParents(), IModelRegistry.ContributionType.Data, "ipfs://meta"
+            keccak256("contrib1_model"),
+            _emptyParents(),
+            IModelRegistry.ContributionType.Data,
+            "ipfs://meta"
         );
 
         assertTrue(registry.modelExists(keccak256("contrib1_model")));
@@ -271,15 +295,23 @@ contract RoyaltySystemTest is Test {
 
     function _setupMultiParentLineage() internal {
         _register(ROOT_MODEL, _emptyParents(), IModelRegistry.ContributionType.PreTraining);
-        _register(FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune);
+        _register(
+            FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune
+        );
         _register(RL_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.RL);
-        _register(MERGE_MODEL, _twoParents(FINETUNE_MODEL, RL_MODEL), IModelRegistry.ContributionType.Serving);
+        _register(
+            MERGE_MODEL,
+            _twoParents(FINETUNE_MODEL, RL_MODEL),
+            IModelRegistry.ContributionType.Serving
+        );
     }
 
     function _setupDeepLineage() internal {
         // 4-level chain: root → fineTune → RL → serving
         _register(ROOT_MODEL, _emptyParents(), IModelRegistry.ContributionType.PreTraining);
-        _register(FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune);
+        _register(
+            FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune
+        );
         _register(RL_MODEL, _singleParent(FINETUNE_MODEL), IModelRegistry.ContributionType.RL);
         _register(SERVING_MODEL, _singleParent(RL_MODEL), IModelRegistry.ContributionType.Serving);
     }
@@ -325,7 +357,10 @@ contract RoyaltySystemTest is Test {
         assertLe(adminBalBefore - adminBalAfter, 3);
 
         // Accumulated royalties should reflect the full amount
-        assertEq(splitter.accumulatedRoyalties(MERGE_MODEL, address(token)), DISTRIBUTION_AMOUNT - (adminBalBefore - adminBalAfter));
+        assertEq(
+            splitter.accumulatedRoyalties(MERGE_MODEL, address(token)),
+            DISTRIBUTION_AMOUNT - (adminBalBefore - adminBalAfter)
+        );
     }
 
     // ─── 17. Deep lineage royalty with recency decay ──────────────────────
@@ -402,7 +437,9 @@ contract RoyaltySystemTest is Test {
 
     function testGetChildrenOfParent() public {
         _register(ROOT_MODEL, _emptyParents(), IModelRegistry.ContributionType.PreTraining);
-        _register(FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune);
+        _register(
+            FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune
+        );
         _register(RL_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.RL);
 
         bytes32[] memory children = registry.getChildren(ROOT_MODEL);
@@ -415,11 +452,11 @@ contract RoyaltySystemTest is Test {
 
     function testContributionTypeWeights() public view {
         assertEq(splitter.getContributionTypeWeight(0), 100); // PreTraining
-        assertEq(splitter.getContributionTypeWeight(1), 80);  // FineTune
-        assertEq(splitter.getContributionTypeWeight(2), 70);  // RL
-        assertEq(splitter.getContributionTypeWeight(3), 60);  // Data
-        assertEq(splitter.getContributionTypeWeight(4), 50);  // Compute
-        assertEq(splitter.getContributionTypeWeight(5), 30);  // Serving
+        assertEq(splitter.getContributionTypeWeight(1), 80); // FineTune
+        assertEq(splitter.getContributionTypeWeight(2), 70); // RL
+        assertEq(splitter.getContributionTypeWeight(3), 60); // Data
+        assertEq(splitter.getContributionTypeWeight(4), 50); // Compute
+        assertEq(splitter.getContributionTypeWeight(5), 30); // Serving
     }
 
     // ─── 24. Multiple distributions accumulate ────────────────────────────
@@ -436,7 +473,9 @@ contract RoyaltySystemTest is Test {
         assertEq(token.balanceOf(admin), adminBalBefore);
 
         // Accumulated royalties should track 2x
-        assertEq(splitter.accumulatedRoyalties(SERVING_MODEL, address(token)), DISTRIBUTION_AMOUNT * 2);
+        assertEq(
+            splitter.accumulatedRoyalties(SERVING_MODEL, address(token)), DISTRIBUTION_AMOUNT * 2
+        );
     }
 
     // ─── 25. Admin can update protocol royalty BPS ────────────────────────
@@ -460,7 +499,9 @@ contract RoyaltySystemTest is Test {
         vm.prank(outsider);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, outsider, splitterAdminRole
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                outsider,
+                splitterAdminRole
             )
         );
         splitter.setProtocolRoyaltyBps(500);
@@ -503,8 +544,12 @@ contract RoyaltySystemTest is Test {
     function testRecipientWeightsProportionality() public {
         // Build lineage: root → fineTune → serving
         _register(ROOT_MODEL, _emptyParents(), IModelRegistry.ContributionType.PreTraining);
-        _register(FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune);
-        _register(SERVING_MODEL, _singleParent(FINETUNE_MODEL), IModelRegistry.ContributionType.Serving);
+        _register(
+            FINETUNE_MODEL, _singleParent(ROOT_MODEL), IModelRegistry.ContributionType.FineTune
+        );
+        _register(
+            SERVING_MODEL, _singleParent(FINETUNE_MODEL), IModelRegistry.ContributionType.Serving
+        );
 
         IRoyaltySplitter.RecipientInfo[] memory recipients = splitter.getRecipients(SERVING_MODEL);
 
@@ -567,7 +612,9 @@ contract RoyaltySystemTest is Test {
         emit IRoyaltySplitter.RecipientPaid(SERVING_MODEL, admin, DISTRIBUTION_AMOUNT, 1);
 
         vm.expectEmit(true, true, false, true);
-        emit IRoyaltySplitter.RoyaltyDistributed(SERVING_MODEL, address(token), DISTRIBUTION_AMOUNT, 1);
+        emit IRoyaltySplitter.RoyaltyDistributed(
+            SERVING_MODEL, address(token), DISTRIBUTION_AMOUNT, 1
+        );
 
         splitter.distributeRoyalties(SERVING_MODEL, DISTRIBUTION_AMOUNT, address(token));
     }

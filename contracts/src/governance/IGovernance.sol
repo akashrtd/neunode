@@ -60,11 +60,9 @@ interface IGovernance {
 
     function castVote(uint256 proposalId, uint8 support) external returns (uint256 weight);
 
-    function castVoteWithReason(
-        uint256 proposalId,
-        uint8 support,
-        string calldata reason
-    ) external returns (uint256 weight);
+    function castVoteWithReason(uint256 proposalId, uint8 support, string calldata reason)
+        external
+        returns (uint256 weight);
 
     function queue(uint256 proposalId) external;
     function execute(uint256 proposalId) external payable;

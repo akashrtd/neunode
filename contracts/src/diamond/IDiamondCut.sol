@@ -5,9 +5,9 @@ pragma solidity ^0.8.24;
 /// @notice Defines the standard for adding, replacing, and removing facet function selectors.
 interface IDiamondCut {
     enum FacetCutAction {
-        Add,     // Add new function selectors
+        Add, // Add new function selectors
         Replace, // Replace existing function selectors
-        Remove   // Remove function selectors
+        Remove // Remove function selectors
     }
 
     struct FacetCut {
@@ -20,11 +20,8 @@ interface IDiamondCut {
     /// @param _diamondCut Array of facet cut actions
     /// @param _init Address of contract to delegatecall for initialization (address(0) = none)
     /// @param _calldata Calldata for initialization function
-    function diamondCut(
-        FacetCut[] calldata _diamondCut,
-        address _init,
-        bytes calldata _calldata
-    ) external;
+    function diamondCut(FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata)
+        external;
 
     event DiamondCut(FacetCut[] _diamondCut, address _init, bytes _calldata);
 }

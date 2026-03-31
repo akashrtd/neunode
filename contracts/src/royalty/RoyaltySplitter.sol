@@ -162,7 +162,9 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
         override
         returns (RecipientInfo[] memory)
     {
-        if (!registry.modelExists(modelCid)) revert ModelNotFound(modelCid);
+        if (!registry.modelExists(modelCid)) {
+            revert ModelNotFound(modelCid);
+        }
         return _getLineageRecipients(modelCid);
     }
 
@@ -276,9 +278,7 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
                 uint256 weight = DEFAULT_SHAPLEY_SCORE * typeWeight * decay;
 
                 result[resultIndex] = RecipientInfo({
-                    contributor: info.contributor,
-                    weight: weight,
-                    depth: currentDepth
+                    contributor: info.contributor, weight: weight, depth: currentDepth
                 });
                 resultIndex++;
             }

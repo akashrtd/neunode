@@ -128,7 +128,9 @@ contract NeunodeEscrowTest is Test {
         escrow.fundEscrow(BOUNTY_ID, BOND);
 
         vm.prank(attacker);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeEscrow.NotRequester.selector, BOUNTY_ID, attacker));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeEscrow.NotRequester.selector, BOUNTY_ID, attacker)
+        );
         escrow.release(BOUNTY_ID);
     }
 
@@ -187,7 +189,9 @@ contract NeunodeEscrowTest is Test {
         escrow.fundEscrow(BOUNTY_ID, BOND);
 
         vm.prank(attacker);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeEscrow.NotProvider.selector, BOUNTY_ID, attacker));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeEscrow.NotProvider.selector, BOUNTY_ID, attacker)
+        );
         escrow.dispute(BOUNTY_ID);
     }
 

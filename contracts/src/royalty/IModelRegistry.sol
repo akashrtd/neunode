@@ -6,21 +6,21 @@ interface IModelRegistry {
     // ─── Types ────────────────────────────────────────────────────────────
 
     enum ContributionType {
-        PreTraining,  // 0
-        FineTune,     // 1
-        RL,           // 2
-        Data,         // 3
-        Compute,      // 4
-        Serving       // 5
+        PreTraining, // 0
+        FineTune, // 1
+        RL, // 2
+        Data, // 3
+        Compute, // 4
+        Serving // 5
     }
 
     struct ModelInfo {
-        bytes32 cid;                   // Content identifier (SHA-256 of safetensors)
-        address contributor;           // Agent DID controller who registered
+        bytes32 cid; // Content identifier (SHA-256 of safetensors)
+        address contributor; // Agent DID controller who registered
         ContributionType contribution; // Type of contribution
-        string metadataURI;            // Off-chain metadata URI
-        uint256 registeredAt;          // Timestamp of registration
-        bool exists;                   // Whether model has been registered
+        string metadataURI; // Off-chain metadata URI
+        uint256 registeredAt; // Timestamp of registration
+        bool exists; // Whether model has been registered
     }
 
     // ─── Events ───────────────────────────────────────────────────────────
@@ -33,9 +33,7 @@ interface IModelRegistry {
     );
 
     event LineageExtended(
-        bytes32 indexed parentCid,
-        bytes32 indexed childCid,
-        address indexed contributor
+        bytes32 indexed parentCid, bytes32 indexed childCid, address indexed contributor
     );
 
     // ─── Functions ────────────────────────────────────────────────────────

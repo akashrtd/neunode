@@ -162,8 +162,7 @@ impl OutputWriter {
         table.set_header(header_cells);
 
         for row in rows {
-            let cells: Vec<comfy_table::Cell> =
-                row.iter().map(|cell| comfy_table::Cell::new(cell)).collect();
+            let cells: Vec<comfy_table::Cell> = row.iter().map(comfy_table::Cell::new).collect();
             table.add_row(cells);
         }
 

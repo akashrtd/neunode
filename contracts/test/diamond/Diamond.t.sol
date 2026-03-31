@@ -57,7 +57,8 @@ contract DiamondTest is Test {
     address public nonOwner;
 
     // Selector constants
-    bytes4 constant DIAMOND_CUT_SELECTOR = bytes4(keccak256("diamondCut((address,uint8,bytes4[])[],address,bytes)"));
+    bytes4 constant DIAMOND_CUT_SELECTOR =
+        bytes4(keccak256("diamondCut((address,uint8,bytes4[])[],address,bytes)"));
     bytes4 constant FACETS_SELECTOR = IDiamondLoupe.facets.selector;
     bytes4 constant FACET_FUNCTION_SELECTORS_SELECTOR =
         IDiamondLoupe.facetFunctionSelectors.selector;
@@ -298,7 +299,9 @@ contract DiamondTest is Test {
         // Should not revert
         IDiamondCut(address(diamond)).diamondCut(cuts, address(0), "");
 
-        assertEq(IDiamondLoupe(address(diamond)).facetAddress(GET_VALUE_SELECTOR), address(testFacet1));
+        assertEq(
+            IDiamondLoupe(address(diamond)).facetAddress(GET_VALUE_SELECTOR), address(testFacet1)
+        );
     }
 
     // ─── 10. Multiple facet adds in single diamondCut ─────────────────────
@@ -324,8 +327,12 @@ contract DiamondTest is Test {
 
         _cut(cuts, address(0), "");
 
-        assertEq(IDiamondLoupe(address(diamond)).facetAddress(GET_VALUE_SELECTOR), address(testFacet1));
-        assertEq(IDiamondLoupe(address(diamond)).facetAddress(GET_OWNER_SELECTOR), address(testFacet2));
+        assertEq(
+            IDiamondLoupe(address(diamond)).facetAddress(GET_VALUE_SELECTOR), address(testFacet1)
+        );
+        assertEq(
+            IDiamondLoupe(address(diamond)).facetAddress(GET_OWNER_SELECTOR), address(testFacet2)
+        );
 
         address[] memory addresses = IDiamondLoupe(address(diamond)).facetAddresses();
         assertEq(addresses.length, 4); // cut + loupe + testFacet1 + testFacet2
@@ -497,7 +504,9 @@ contract DiamondTest is Test {
         });
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(LibDiamond.SelectorAlreadyExists.selector, FACETS_SELECTOR));
+        vm.expectRevert(
+            abi.encodeWithSelector(LibDiamond.SelectorAlreadyExists.selector, FACETS_SELECTOR)
+        );
         IDiamondCut(address(diamond)).diamondCut(cuts, address(0), "");
     }
 
@@ -515,7 +524,9 @@ contract DiamondTest is Test {
         });
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(LibDiamond.SameFacetForReplace.selector, FACETS_SELECTOR));
+        vm.expectRevert(
+            abi.encodeWithSelector(LibDiamond.SameFacetForReplace.selector, FACETS_SELECTOR)
+        );
         IDiamondCut(address(diamond)).diamondCut(cuts, address(0), "");
     }
 
@@ -533,7 +544,9 @@ contract DiamondTest is Test {
         });
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(LibDiamond.SelectorNotFound.selector, nonexistentSelector));
+        vm.expectRevert(
+            abi.encodeWithSelector(LibDiamond.SelectorNotFound.selector, nonexistentSelector)
+        );
         IDiamondCut(address(diamond)).diamondCut(cuts, address(0), "");
     }
 

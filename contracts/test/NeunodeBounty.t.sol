@@ -56,8 +56,7 @@ contract NeunodeBountyTest is Test {
             uint256 reward,
             address rewardToken,
             uint256 cDeadline,
-            uint256 wDeadline,
-            ,,,
+            uint256 wDeadline,,,,
         ) = bounty.bounties(BOUNTY_ID);
 
         assertEq(id, BOUNTY_ID);
@@ -117,7 +116,9 @@ contract NeunodeBountyTest is Test {
         vm.warp(claimDeadline + 1);
 
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeBounty.DeadlinePassed.selector, claimDeadline));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeBounty.DeadlinePassed.selector, claimDeadline)
+        );
         bounty.claimBounty(BOUNTY_ID);
     }
 
@@ -134,7 +135,9 @@ contract NeunodeBountyTest is Test {
         vm.prank(provider);
         bounty.submitWork(BOUNTY_ID, subHash);
 
-        assertEq(uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Submitted));
+        assertEq(
+            uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Submitted)
+        );
     }
 
     function testRevertSubmitNotProvider() public {
@@ -145,7 +148,9 @@ contract NeunodeBountyTest is Test {
         bounty.claimBounty(BOUNTY_ID);
 
         vm.prank(attacker);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeBounty.NotProvider.selector, BOUNTY_ID, attacker));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeBounty.NotProvider.selector, BOUNTY_ID, attacker)
+        );
         bounty.submitWork(BOUNTY_ID, keccak256("fake"));
     }
 
@@ -178,7 +183,9 @@ contract NeunodeBountyTest is Test {
         _createClaimSubmit();
 
         vm.prank(attacker);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeBounty.NotRequester.selector, BOUNTY_ID, attacker));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeBounty.NotRequester.selector, BOUNTY_ID, attacker)
+        );
         bounty.acceptSubmission(BOUNTY_ID);
     }
 
@@ -221,7 +228,9 @@ contract NeunodeBountyTest is Test {
         _createClaimSubmit();
 
         vm.prank(attacker);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeBounty.NotClaimer.selector, BOUNTY_ID, attacker));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeBounty.NotClaimer.selector, BOUNTY_ID, attacker)
+        );
         bounty.disputeBounty(BOUNTY_ID);
     }
 
@@ -236,7 +245,9 @@ contract NeunodeBountyTest is Test {
         vm.prank(requester);
         bounty.cancelBounty(BOUNTY_ID);
 
-        assertEq(uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Cancelled));
+        assertEq(
+            uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Cancelled)
+        );
         assertEq(token.balanceOf(requester), requesterBalBefore + REWARD);
     }
 
@@ -245,7 +256,9 @@ contract NeunodeBountyTest is Test {
         bounty.createBounty(BOUNTY_ID, REWARD, address(token), claimDeadline, workDeadline);
 
         vm.prank(attacker);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeBounty.NotRequester.selector, BOUNTY_ID, attacker));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeBounty.NotRequester.selector, BOUNTY_ID, attacker)
+        );
         bounty.cancelBounty(BOUNTY_ID);
     }
 
@@ -281,7 +294,9 @@ contract NeunodeBountyTest is Test {
         vm.prank(provider);
         bounty.submitWork(BOUNTY_ID, keccak256("revised_submission"));
 
-        assertEq(uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Submitted));
+        assertEq(
+            uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Submitted)
+        );
     }
 
     function testRevertMaxRevisions() public {
@@ -365,7 +380,9 @@ contract NeunodeBountyTest is Test {
         // Submit
         vm.prank(provider);
         bounty.submitWork(BOUNTY_ID, keccak256("final_work"));
-        assertEq(uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Submitted));
+        assertEq(
+            uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Submitted)
+        );
 
         // Accept
         vm.prank(requester);

@@ -8,7 +8,7 @@ contract NeunodeIdentity {
     // ─── Types ────────────────────────────────────────────────────────────
 
     struct DidDocument {
-        address controller;           // Ethereum address that controls this DID
+        address controller; // Ethereum address that controls this DID
         bytes32 ed25519PublicKeyHash; // keccak256 hash of Ed25519 public key (32 bytes)
         uint256 created;
         uint256 updated;
@@ -17,8 +17,8 @@ contract NeunodeIdentity {
 
     // ─── Storage ──────────────────────────────────────────────────────────
 
-    mapping(bytes32 => DidDocument) public documents;    // didHash → document
-    mapping(address => bytes32) public addressToDid;      // addr → didHash
+    mapping(bytes32 => DidDocument) public documents; // didHash → document
+    mapping(address => bytes32) public addressToDid; // addr → didHash
 
     // ─── Events ───────────────────────────────────────────────────────────
 
@@ -45,7 +45,8 @@ contract NeunodeIdentity {
         if (addressToDid[msg.sender] != bytes32(0)) revert AddressAlreadyHasDid(msg.sender);
 
         // Deterministic DID hash from controller + pubKeyHash + address (as salt)
-        bytes32 didHash = keccak256(abi.encodePacked(msg.sender, ed25519PubKeyHash, block.timestamp));
+        bytes32 didHash =
+            keccak256(abi.encodePacked(msg.sender, ed25519PubKeyHash, block.timestamp));
 
         if (documents[didHash].created != 0) revert DidAlreadyExists(didHash);
 
@@ -111,17 +112,16 @@ contract NeunodeIdentity {
     /// @param didHash The DID to verify against
     /// @param messageHash The keccak256 hash of the message
     /// @param signature The 65-byte ECDSA signature
-    function verifySignature(
-        bytes32 didHash,
-        bytes32 messageHash,
-        bytes calldata signature
-    ) external view returns (bool) {
+    function verifySignature(bytes32 didHash, bytes32 messageHash, bytes calldata signature)
+        external
+        view
+        returns (bool)
+    {
         DidDocument storage doc = documents[didHash];
         if (doc.created == 0 || !doc.active) return false;
 
-        bytes32 ethSignedHash = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash)
-        );
+        bytes32 ethSignedHash =
+            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
 
         // Recover signer from signature
         if (signature.length != 65) return false;

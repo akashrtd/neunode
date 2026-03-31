@@ -114,11 +114,7 @@ contract NeunodeGovernance is AccessControl, IGovernance {
     }
 
     /// @notice Get voting power at a specific block number
-    function getVotes(address account, uint256 blockNumber)
-        public
-        view
-        returns (uint256)
-    {
+    function getVotes(address account, uint256 blockNumber) public view returns (uint256) {
         return _getPastVotes(account, blockNumber);
     }
 
@@ -174,27 +170,22 @@ contract NeunodeGovernance is AccessControl, IGovernance {
     // ─── Vote ────────────────────────────────────────────────────────────
 
     /// @notice Cast a vote on an active proposal
-    function castVote(uint256 proposalId, uint8 support)
-        external
-        returns (uint256)
-    {
+    function castVote(uint256 proposalId, uint8 support) external returns (uint256) {
         return _castVote(proposalId, support, "");
     }
 
     /// @notice Cast a vote with a reason on an active proposal
-    function castVoteWithReason(
-        uint256 proposalId,
-        uint8 support,
-        string calldata reason
-    ) external returns (uint256) {
+    function castVoteWithReason(uint256 proposalId, uint8 support, string calldata reason)
+        external
+        returns (uint256)
+    {
         return _castVote(proposalId, support, reason);
     }
 
-    function _castVote(
-        uint256 proposalId,
-        uint8 support,
-        string memory reason
-    ) internal returns (uint256 weight) {
+    function _castVote(uint256 proposalId, uint8 support, string memory reason)
+        internal
+        returns (uint256 weight)
+    {
         Proposal storage p = _proposals[proposalId];
         if (p.id == 0) revert ProposalNotFound(proposalId);
         if (state(proposalId) != ProposalState.Active) {
@@ -256,8 +247,7 @@ contract NeunodeGovernance is AccessControl, IGovernance {
         p.executed = true;
 
         for (uint256 i = 0; i < p.targets.length; i++) {
-            (bool success,) =
-                p.targets[i].call{value: p.values[i]}(p.calldatas[i]);
+            (bool success,) = p.targets[i].call{value: p.values[i]}(p.calldatas[i]);
             require(success, "execution failed");
         }
 
@@ -323,55 +313,37 @@ contract NeunodeGovernance is AccessControl, IGovernance {
     // ─── Parameter Updates ───────────────────────────────────────────────
 
     /// @notice Update voting delay (GOVERNANCE_ROLE only)
-    function setVotingDelay(uint256 newVotingDelay)
-        external
-        onlyRole(GOVERNANCE_ROLE)
-    {
+    function setVotingDelay(uint256 newVotingDelay) external onlyRole(GOVERNANCE_ROLE) {
         votingDelay = newVotingDelay;
         emit GovernanceParametersUpdated(msg.sender);
     }
 
     /// @notice Update voting period (GOVERNANCE_ROLE only)
-    function setVotingPeriod(uint256 newVotingPeriod)
-        external
-        onlyRole(GOVERNANCE_ROLE)
-    {
+    function setVotingPeriod(uint256 newVotingPeriod) external onlyRole(GOVERNANCE_ROLE) {
         votingPeriod = newVotingPeriod;
         emit GovernanceParametersUpdated(msg.sender);
     }
 
     /// @notice Update proposal threshold (GOVERNANCE_ROLE only)
-    function setProposalThreshold(uint256 newThreshold)
-        external
-        onlyRole(GOVERNANCE_ROLE)
-    {
+    function setProposalThreshold(uint256 newThreshold) external onlyRole(GOVERNANCE_ROLE) {
         proposalThreshold = newThreshold;
         emit GovernanceParametersUpdated(msg.sender);
     }
 
     /// @notice Update quorum basis points (GOVERNANCE_ROLE only)
-    function setQuorumBps(uint256 newQuorumBps)
-        external
-        onlyRole(GOVERNANCE_ROLE)
-    {
+    function setQuorumBps(uint256 newQuorumBps) external onlyRole(GOVERNANCE_ROLE) {
         quorumBps = newQuorumBps;
         emit GovernanceParametersUpdated(msg.sender);
     }
 
     /// @notice Update timelock duration (GOVERNANCE_ROLE only)
-    function setTimelock(uint256 newTimelock)
-        external
-        onlyRole(GOVERNANCE_ROLE)
-    {
+    function setTimelock(uint256 newTimelock) external onlyRole(GOVERNANCE_ROLE) {
         timelock = newTimelock;
         emit GovernanceParametersUpdated(msg.sender);
     }
 
     /// @notice Update execution window (GOVERNANCE_ROLE only)
-    function setExecutionWindow(uint256 newWindow)
-        external
-        onlyRole(GOVERNANCE_ROLE)
-    {
+    function setExecutionWindow(uint256 newWindow) external onlyRole(GOVERNANCE_ROLE) {
         executionWindow = newWindow;
         emit GovernanceParametersUpdated(msg.sender);
     }
@@ -412,11 +384,7 @@ contract NeunodeGovernance is AccessControl, IGovernance {
     }
 
     /// @notice Check if an account has voted on a proposal
-    function hasVoted(uint256 proposalId, address account)
-        external
-        view
-        returns (bool)
-    {
+    function hasVoted(uint256 proposalId, address account) external view returns (bool) {
         return _hasVoted[proposalId][account];
     }
 
@@ -424,11 +392,7 @@ contract NeunodeGovernance is AccessControl, IGovernance {
     function getProposalActions(uint256 proposalId)
         external
         view
-        returns (
-            address[] memory targets,
-            uint256[] memory values,
-            bytes[] memory calldatas
-        )
+        returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas)
     {
         Proposal storage p = _proposals[proposalId];
         if (p.id == 0) revert ProposalNotFound(proposalId);
@@ -442,9 +406,7 @@ contract NeunodeGovernance is AccessControl, IGovernance {
             ? _checkpoints[account][_checkpoints[account].length - 1].power
             : 0;
 
-        _checkpoints[account].push(
-            Checkpoint({fromBlock: block.number, power: newPower})
-        );
+        _checkpoints[account].push(Checkpoint({fromBlock: block.number, power: newPower}));
 
         // Update total power checkpoints
         uint256 currentTotal = _totalPowerCheckpoints.length > 0
@@ -458,16 +420,10 @@ contract NeunodeGovernance is AccessControl, IGovernance {
             newTotal = currentTotal - (oldPower - newPower);
         }
 
-        _totalPowerCheckpoints.push(
-            Checkpoint({fromBlock: block.number, power: newTotal})
-        );
+        _totalPowerCheckpoints.push(Checkpoint({fromBlock: block.number, power: newTotal}));
     }
 
-    function _getPastVotes(address account, uint256 blockNumber)
-        internal
-        view
-        returns (uint256)
-    {
+    function _getPastVotes(address account, uint256 blockNumber) internal view returns (uint256) {
         Checkpoint[] storage cps = _checkpoints[account];
         if (cps.length == 0) return 0;
 
@@ -488,11 +444,7 @@ contract NeunodeGovernance is AccessControl, IGovernance {
         return cps[low - 1].power;
     }
 
-    function _getPastTotalPower(uint256 blockNumber)
-        internal
-        view
-        returns (uint256)
-    {
+    function _getPastTotalPower(uint256 blockNumber) internal view returns (uint256) {
         if (_totalPowerCheckpoints.length == 0) return 0;
 
         uint256 low = 0;

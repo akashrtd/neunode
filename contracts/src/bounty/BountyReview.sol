@@ -16,7 +16,7 @@ contract BountyReview is IBountyReview, AccessControl, EIP712 {
 
     struct Review {
         address reviewer;
-        uint8 score;       // 0-100
+        uint8 score; // 0-100
         string feedback;
         bytes signature;
     }
@@ -45,7 +45,9 @@ contract BountyReview is IBountyReview, AccessControl, EIP712 {
 
     // ─── Events ───────────────────────────────────────────────────────────
 
-    event ReviewSubmitted(bytes32 indexed bountyId, address indexed reviewer, uint8 score, bool accepted);
+    event ReviewSubmitted(
+        bytes32 indexed bountyId, address indexed reviewer, uint8 score, bool accepted
+    );
     event CommitteeAssigned(bytes32 indexed bountyId, address[3] reviewers);
     event ReviewCompleted(bytes32 indexed bountyId, bool accepted);
 
@@ -68,16 +70,13 @@ contract BountyReview is IBountyReview, AccessControl, EIP712 {
             "zero address reviewer"
         );
         require(
-            reviewers[0] != reviewers[1] && reviewers[1] != reviewers[2] && reviewers[0] != reviewers[2],
+            reviewers[0] != reviewers[1] && reviewers[1] != reviewers[2]
+                && reviewers[0] != reviewers[2],
             "duplicate reviewer"
         );
 
         committees[bountyId] = ReviewCommittee({
-            reviewers: reviewers,
-            acceptCount: 0,
-            rejectCount: 0,
-            resolved: false,
-            assigned: true
+            reviewers: reviewers, acceptCount: 0, rejectCount: 0, resolved: false, assigned: true
         });
 
         emit CommitteeAssigned(bountyId, reviewers);
@@ -107,7 +106,9 @@ contract BountyReview is IBountyReview, AccessControl, EIP712 {
 
         // Verify EIP-712 signature
         bytes32 structHash = keccak256(
-            abi.encode(REVIEW_TYPEHASH, bountyId, score, keccak256(bytes(feedback)), nonces[msg.sender])
+            abi.encode(
+                REVIEW_TYPEHASH, bountyId, score, keccak256(bytes(feedback)), nonces[msg.sender]
+            )
         );
         bytes32 hash = _hashTypedDataV4(structHash);
         address signer = hash.recover(signature);

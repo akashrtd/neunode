@@ -62,7 +62,9 @@ contract NeunodeRegistryTest is Test {
 
     function testRevertRegisterNotController() public {
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeRegistry.NotDidController.selector, aliceDid, bob));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeRegistry.NotDidController.selector, aliceDid, bob)
+        );
         registry.register(aliceDid, CAPABILITIES, ENDPOINT);
     }
 
@@ -92,7 +94,9 @@ contract NeunodeRegistryTest is Test {
         registry.register(aliceDid, CAPABILITIES, ENDPOINT);
 
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeRegistry.AgentAlreadyRegistered.selector, aliceDid));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeRegistry.AgentAlreadyRegistered.selector, aliceDid)
+        );
         registry.register(aliceDid, CAPABILITIES_V2, ENDPOINT_V2);
     }
 
@@ -115,7 +119,9 @@ contract NeunodeRegistryTest is Test {
         registry.register(aliceDid, CAPABILITIES, ENDPOINT);
 
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeRegistry.NotDidController.selector, aliceDid, bob));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeRegistry.NotDidController.selector, aliceDid, bob)
+        );
         registry.update(aliceDid, CAPABILITIES_V2, ENDPOINT_V2);
     }
 
@@ -150,7 +156,9 @@ contract NeunodeRegistryTest is Test {
         registry.register(aliceDid, CAPABILITIES, ENDPOINT);
 
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeRegistry.NotDidController.selector, aliceDid, bob));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeRegistry.NotDidController.selector, aliceDid, bob)
+        );
         registry.deregister(aliceDid);
     }
 

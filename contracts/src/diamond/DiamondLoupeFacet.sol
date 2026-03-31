@@ -37,12 +37,7 @@ contract DiamondLoupeFacet is IDiamondLoupe {
     }
 
     /// @notice Returns the facet address that handles a given function selector
-    function facetAddress(bytes4 _functionSelector)
-        external
-        view
-        override
-        returns (address)
-    {
+    function facetAddress(bytes4 _functionSelector) external view override returns (address) {
         return LibDiamond.diamondStorage().selectorToFacet[_functionSelector].facetAddress;
     }
 }

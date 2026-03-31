@@ -45,7 +45,9 @@ contract NeunodeIdentityTest is Test {
         identity.createDid(alicePubKeyHash);
 
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeIdentity.AddressAlreadyHasDid.selector, alice));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeIdentity.AddressAlreadyHasDid.selector, alice)
+        );
         identity.createDid(keccak256("different_key"));
     }
 
@@ -68,7 +70,9 @@ contract NeunodeIdentityTest is Test {
         bytes32 didHash = identity.createDid(alicePubKeyHash);
 
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeIdentity.NotController.selector, didHash, bob));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeIdentity.NotController.selector, didHash, bob)
+        );
         identity.updateController(didHash, bob);
     }
 
@@ -111,7 +115,9 @@ contract NeunodeIdentityTest is Test {
         bytes32 didHash = identity.createDid(alicePubKeyHash);
 
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeIdentity.NotController.selector, didHash, bob));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeIdentity.NotController.selector, didHash, bob)
+        );
         identity.deactivateDid(didHash);
     }
 
@@ -134,14 +140,12 @@ contract NeunodeIdentityTest is Test {
         bytes32 didHash = identity.createDid(alicePubKeyHash);
 
         bytes32 messageHash = keccak256("test_message");
-        bytes32 ethSignedHash = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash)
-        );
+        bytes32 ethSignedHash =
+            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
 
         // Sign with alice's key (foundry cheatcode)
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
-            uint256(keccak256("alice_private_key")), ethSignedHash
-        );
+        (uint8 v, bytes32 r, bytes32 s) =
+            vm.sign(uint256(keccak256("alice_private_key")), ethSignedHash);
         // Note: This won't match alice's address since we can't get alice's real private key
         // So we test with a funded signer instead
 
@@ -181,7 +185,11 @@ contract NeunodeIdentityTest is Test {
     function testDidCreatedEvent() public {
         vm.prank(alice);
         vm.expectEmit(true, true, false, true);
-        emit NeunodeIdentity.DidCreated(keccak256(abi.encodePacked(alice, alicePubKeyHash, block.timestamp)), alice, block.timestamp);
+        emit NeunodeIdentity.DidCreated(
+            keccak256(abi.encodePacked(alice, alicePubKeyHash, block.timestamp)),
+            alice,
+            block.timestamp
+        );
         identity.createDid(alicePubKeyHash);
     }
 }

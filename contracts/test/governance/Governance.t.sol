@@ -231,9 +231,7 @@ contract GovernanceTest is Test {
 
         vm.prank(voter1);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                NeunodeGovernance.AlreadyVoted.selector, proposalId, voter1
-            )
+            abi.encodeWithSelector(NeunodeGovernance.AlreadyVoted.selector, proposalId, voter1)
         );
         gov.castVote(proposalId, uint8(IGovernance.VoteType.Against));
     }
@@ -246,9 +244,7 @@ contract GovernanceTest is Test {
         // Don't advance time — proposal is still Pending
         vm.prank(voter1);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                NeunodeGovernance.ProposalNotActive.selector, proposalId
-            )
+            abi.encodeWithSelector(NeunodeGovernance.ProposalNotActive.selector, proposalId)
         );
         gov.castVote(proposalId, uint8(IGovernance.VoteType.For));
     }
@@ -268,10 +264,7 @@ contract GovernanceTest is Test {
         // Advance past voting period
         vm.warp(block.timestamp + VOTING_PERIOD + 1);
 
-        assertEq(
-            uint8(gov.state(proposalId)),
-            uint8(IGovernance.ProposalState.Succeeded)
-        );
+        assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Succeeded));
     }
 
     // ─── 9. Proposal Defeated with More Against-Votes ────────────────────
@@ -290,10 +283,7 @@ contract GovernanceTest is Test {
 
         vm.warp(block.timestamp + VOTING_PERIOD + 1);
 
-        assertEq(
-            uint8(gov.state(proposalId)),
-            uint8(IGovernance.ProposalState.Defeated)
-        );
+        assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Defeated));
     }
 
     // ─── 10. Quorum Check: Fails Even with Majority For ──────────────────
@@ -320,10 +310,7 @@ contract GovernanceTest is Test {
         vm.warp(block.timestamp + VOTING_PERIOD + 1);
 
         // Defeated because quorum not reached
-        assertEq(
-            uint8(gov.state(proposalId)),
-            uint8(IGovernance.ProposalState.Defeated)
-        );
+        assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Defeated));
     }
 
     // ─── 11. Execute Succeeded Proposal ──────────────────────────────────
@@ -351,10 +338,7 @@ contract GovernanceTest is Test {
         gov.execute(proposalId);
 
         // Verify execution
-        assertEq(
-            uint8(gov.state(proposalId)),
-            uint8(IGovernance.ProposalState.Executed)
-        );
+        assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Executed));
         // Verify target was called
         assertEq(target.value(), 42);
     }
@@ -366,9 +350,7 @@ contract GovernanceTest is Test {
 
         // Still pending, not even active
         vm.expectRevert(
-            abi.encodeWithSelector(
-                NeunodeGovernance.ProposalNotQueued.selector, proposalId
-            )
+            abi.encodeWithSelector(NeunodeGovernance.ProposalNotQueued.selector, proposalId)
         );
         gov.execute(proposalId);
     }
@@ -382,10 +364,7 @@ contract GovernanceTest is Test {
         vm.prank(proposer);
         gov.cancel(proposalId);
 
-        assertEq(
-            uint8(gov.state(proposalId)),
-            uint8(IGovernance.ProposalState.Cancelled)
-        );
+        assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Cancelled));
     }
 
     // ─── 14. Cannot Cancel After Voting Starts ───────────────────────────
@@ -398,9 +377,7 @@ contract GovernanceTest is Test {
 
         vm.prank(proposer);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                NeunodeGovernance.ProposalNotCancellable.selector, proposalId
-            )
+            abi.encodeWithSelector(NeunodeGovernance.ProposalNotCancellable.selector, proposalId)
         );
         gov.cancel(proposalId);
     }
@@ -411,17 +388,11 @@ contract GovernanceTest is Test {
         uint256 proposalId = _createProposal();
 
         // Pending
-        assertEq(
-            uint8(gov.state(proposalId)),
-            uint8(IGovernance.ProposalState.Pending)
-        );
+        assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Pending));
 
         // Active
         vm.warp(block.timestamp + VOTING_DELAY + 1);
-        assertEq(
-            uint8(gov.state(proposalId)),
-            uint8(IGovernance.ProposalState.Active)
-        );
+        assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Active));
 
         // Vote for
         vm.prank(voter1);
@@ -429,27 +400,18 @@ contract GovernanceTest is Test {
 
         // Succeeded
         vm.warp(block.timestamp + VOTING_PERIOD + 1);
-        assertEq(
-            uint8(gov.state(proposalId)),
-            uint8(IGovernance.ProposalState.Succeeded)
-        );
+        assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Succeeded));
 
         // Queued
         gov.queue(proposalId);
-        assertEq(
-            uint8(gov.state(proposalId)),
-            uint8(IGovernance.ProposalState.Queued)
-        );
+        assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Queued));
 
         // Wait for timelock
         vm.warp(block.timestamp + TIMELOCK + 1);
 
         // Executed
         gov.execute(proposalId);
-        assertEq(
-            uint8(gov.state(proposalId)),
-            uint8(IGovernance.ProposalState.Executed)
-        );
+        assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Executed));
     }
 
     // ─── 16. Voting Power = Staked Balance at Snapshot Block ─────────────
@@ -522,10 +484,7 @@ contract GovernanceTest is Test {
         vm.warp(block.timestamp + VOTING_PERIOD + 1);
 
         // Succeeded because for > against (10k > 0) and quorum met (30k >= 21.6k)
-        assertEq(
-            uint8(gov.state(proposalId)),
-            uint8(IGovernance.ProposalState.Succeeded)
-        );
+        assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Succeeded));
     }
 
     // ─── 19. Proposal Expired If Not Executed Within Window ──────────────
@@ -547,10 +506,7 @@ contract GovernanceTest is Test {
         // Wait past execution window
         vm.warp(block.timestamp + EXECUTION_WINDOW + 1);
 
-        assertEq(
-            uint8(gov.state(proposalId)),
-            uint8(IGovernance.ProposalState.Expired)
-        );
+        assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Expired));
     }
 
     // ─── 20. Update Governance Parameters (GOVERNANCE_ROLE only) ─────────
@@ -622,9 +578,7 @@ contract GovernanceTest is Test {
         vm.warp(block.timestamp + VOTING_DELAY + 1);
 
         vm.prank(voter1);
-        gov.castVoteWithReason(
-            proposalId, uint8(IGovernance.VoteType.For), "I support this"
-        );
+        gov.castVoteWithReason(proposalId, uint8(IGovernance.VoteType.For), "I support this");
 
         assertTrue(gov.hasVoted(proposalId, voter1));
 
@@ -641,9 +595,7 @@ contract GovernanceTest is Test {
 
         vm.prank(attacker);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                NeunodeGovernance.VotingPowerZero.selector, attacker
-            )
+            abi.encodeWithSelector(NeunodeGovernance.VotingPowerZero.selector, attacker)
         );
         gov.castVote(proposalId, uint8(IGovernance.VoteType.For));
     }
@@ -651,9 +603,7 @@ contract GovernanceTest is Test {
     // ─── 25. Proposal Not Found ──────────────────────────────────────────
 
     function testRevertProposalNotFound() public {
-        vm.expectRevert(
-            abi.encodeWithSelector(NeunodeGovernance.ProposalNotFound.selector, 999)
-        );
+        vm.expectRevert(abi.encodeWithSelector(NeunodeGovernance.ProposalNotFound.selector, 999));
         gov.state(999);
     }
 
@@ -673,9 +623,7 @@ contract GovernanceTest is Test {
 
         // Try to execute immediately — timelock not passed
         vm.expectRevert(
-            abi.encodeWithSelector(
-                NeunodeGovernance.ProposalNotReady.selector, proposalId
-            )
+            abi.encodeWithSelector(NeunodeGovernance.ProposalNotReady.selector, proposalId)
         );
         gov.execute(proposalId);
     }
@@ -687,9 +635,7 @@ contract GovernanceTest is Test {
 
         // Still pending
         vm.expectRevert(
-            abi.encodeWithSelector(
-                NeunodeGovernance.ProposalNotSucceeded.selector, proposalId
-            )
+            abi.encodeWithSelector(NeunodeGovernance.ProposalNotSucceeded.selector, proposalId)
         );
         gov.queue(proposalId);
     }

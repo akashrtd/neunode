@@ -18,24 +18,24 @@ contract NeunodeBounty is AccessControl {
     // ─── Types ────────────────────────────────────────────────────────────
 
     enum BountyState {
-        Open,         // Accepting claims
-        Claimed,      // Provider working
-        Submitted,    // Work submitted, awaiting review
-        UnderReview,  // Review in progress
-        Revision,     // Provider revising work
-        Accepted,     // Work accepted, pending payment
-        Rejected,     // Work rejected
-        Disputed,     // Under dispute
-        Paid,         // Payment released
-        Expired,      // Deadline passed
-        Cancelled     // Cancelled by requester
+        Open, // Accepting claims
+        Claimed, // Provider working
+        Submitted, // Work submitted, awaiting review
+        UnderReview, // Review in progress
+        Revision, // Provider revising work
+        Accepted, // Work accepted, pending payment
+        Rejected, // Work rejected
+        Disputed, // Under dispute
+        Paid, // Payment released
+        Expired, // Deadline passed
+        Cancelled // Cancelled by requester
     }
 
     /// @notice Fee configuration for bounty payouts
     struct FeeConfig {
-        uint256 protocolBps;      // Protocol fee in basis points (e.g., 300 = 3%)
-        uint256 reviewerBps;      // Reviewer fee in basis points
-        uint256 verificationBps;  // Verification fee in basis points
+        uint256 protocolBps; // Protocol fee in basis points (e.g., 300 = 3%)
+        uint256 reviewerBps; // Reviewer fee in basis points
+        uint256 verificationBps; // Verification fee in basis points
         address protocolFeeRecipient;
         address reviewerFeeRecipient;
         address verificationFeeRecipient;
@@ -153,7 +153,9 @@ contract NeunodeBounty is AccessControl {
         address reviewerFeeRecipient,
         address verificationFeeRecipient
     ) external onlyRole(ADMIN_ROLE) {
-        if (protocolBps + reviewerBps + verificationBps > 1000) revert TotalFeesExceed100();
+        if (protocolBps + reviewerBps + verificationBps > 1000) {
+            revert TotalFeesExceed100();
+        }
         feeConfig = FeeConfig({
             protocolBps: protocolBps,
             reviewerBps: reviewerBps,
@@ -202,11 +204,27 @@ contract NeunodeBounty is AccessControl {
         uint256 disputeDeadline_,
         bool useEscrow_
     ) external {
-        if (reviewDeadline_ != 0 && reviewDeadline_ <= workDeadline) revert InvalidDeadline();
-        if (revisionDeadline_ != 0 && revisionDeadline_ <= reviewDeadline_) revert InvalidDeadline();
-        if (disputeDeadline_ != 0 && disputeDeadline_ <= revisionDeadline_) revert InvalidDeadline();
+        if (reviewDeadline_ != 0 && reviewDeadline_ <= workDeadline) {
+            revert InvalidDeadline();
+        }
+        if (revisionDeadline_ != 0 && revisionDeadline_ <= reviewDeadline_) {
+            revert InvalidDeadline();
+        }
+        if (disputeDeadline_ != 0 && disputeDeadline_ <= revisionDeadline_) {
+            revert InvalidDeadline();
+        }
 
-        _createBounty(id, reward, rewardToken, claimDeadline, workDeadline, reviewDeadline_, revisionDeadline_, disputeDeadline_, useEscrow_);
+        _createBounty(
+            id,
+            reward,
+            rewardToken,
+            claimDeadline,
+            workDeadline,
+            reviewDeadline_,
+            revisionDeadline_,
+            disputeDeadline_,
+            useEscrow_
+        );
     }
 
     function _createBounty(
@@ -319,10 +337,7 @@ contract NeunodeBounty is AccessControl {
     function acceptSubmission(bytes32 id) external {
         Bounty storage bounty = bounties[id];
         if (bounty.created == 0) revert BountyNotFound(id);
-        if (
-            bounty.state != BountyState.Submitted
-                && bounty.state != BountyState.UnderReview
-        ) {
+        if (bounty.state != BountyState.Submitted && bounty.state != BountyState.UnderReview) {
             revert InvalidState(id, bounty.state, BountyState.Submitted);
         }
         if (bounty.requester != msg.sender) revert NotRequester(id, msg.sender);
@@ -338,10 +353,7 @@ contract NeunodeBounty is AccessControl {
     function rejectSubmission(bytes32 id) external {
         Bounty storage bounty = bounties[id];
         if (bounty.created == 0) revert BountyNotFound(id);
-        if (
-            bounty.state != BountyState.Submitted
-                && bounty.state != BountyState.UnderReview
-        ) {
+        if (bounty.state != BountyState.Submitted && bounty.state != BountyState.UnderReview) {
             revert InvalidState(id, bounty.state, BountyState.Submitted);
         }
         if (bounty.requester != msg.sender) revert NotRequester(id, msg.sender);
@@ -369,8 +381,7 @@ contract NeunodeBounty is AccessControl {
         Bounty storage bounty = bounties[id];
         if (bounty.created == 0) revert BountyNotFound(id);
         if (
-            bounty.state != BountyState.Submitted
-                && bounty.state != BountyState.UnderReview
+            bounty.state != BountyState.Submitted && bounty.state != BountyState.UnderReview
                 && bounty.state != BountyState.Accepted
         ) {
             revert InvalidState(id, bounty.state, BountyState.Submitted);
@@ -450,9 +461,7 @@ contract NeunodeBounty is AccessControl {
             activeCount--;
             IERC20(bounty.rewardToken).safeTransfer(bounty.requester, bounty.reward);
             emit BountyExpired(id);
-        } else if (
-            bounty.state == BountyState.Claimed && block.timestamp > bounty.workDeadline
-        ) {
+        } else if (bounty.state == BountyState.Claimed && block.timestamp > bounty.workDeadline) {
             bounty.state = BountyState.Expired;
             activeCount--;
             IERC20(bounty.rewardToken).safeTransfer(bounty.requester, bounty.reward);
@@ -564,7 +573,8 @@ contract NeunodeBounty is AccessControl {
     }
 
     function _payWithFees(Bounty storage bounty, bytes32 id) internal {
-        uint256 totalFeesBps = feeConfig.protocolBps + feeConfig.reviewerBps + feeConfig.verificationBps;
+        uint256 totalFeesBps =
+            feeConfig.protocolBps + feeConfig.reviewerBps + feeConfig.verificationBps;
         uint256 totalFee = (bounty.reward * totalFeesBps) / 10_000;
         uint256 providerPayout = bounty.reward - totalFee;
 
@@ -583,7 +593,8 @@ contract NeunodeBounty is AccessControl {
         }
         if (feeConfig.verificationBps > 0) {
             verificationFee = (bounty.reward * feeConfig.verificationBps) / 10_000;
-            IERC20(bounty.rewardToken).safeTransfer(feeConfig.verificationFeeRecipient, verificationFee);
+            IERC20(bounty.rewardToken)
+                .safeTransfer(feeConfig.verificationFeeRecipient, verificationFee);
         }
 
         // Pay provider

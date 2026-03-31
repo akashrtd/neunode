@@ -16,11 +16,11 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
     // ─── Types ────────────────────────────────────────────────────────────
 
     enum EscrowState {
-        Created,   // Deposit held, waiting for provider
-        Funded,    // Provider bonded, work in progress
+        Created, // Deposit held, waiting for provider
+        Funded, // Provider bonded, work in progress
         Completed, // Funds released to provider
-        Refunded,  // Funds returned to requester
-        Disputed   // Under dispute resolution
+        Refunded, // Funds returned to requester
+        Disputed // Under dispute resolution
     }
 
     // NOTE: Escrow struct kept at original 9 fields to preserve tuple layout
@@ -29,11 +29,11 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
         bytes32 bountyId;
         address requester;
         address provider;
-        address token;           // ERC-20 token address
-        uint256 amount;          // Payment amount
-        uint256 providerBond;    // 15% bond from provider
+        address token; // ERC-20 token address
+        uint256 amount; // Payment amount
+        uint256 providerBond; // 15% bond from provider
         uint256 created;
-        uint256 deadline;        // Work deadline
+        uint256 deadline; // Work deadline
         EscrowState state;
     }
 
@@ -54,15 +54,9 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
     event EscrowCreated(
         bytes32 indexed bountyId, address indexed requester, address token, uint256 amount
     );
-    event EscrowFunded(
-        bytes32 indexed bountyId, address indexed provider, uint256 bond
-    );
-    event EscrowReleased(
-        bytes32 indexed bountyId, address indexed provider, uint256 amount
-    );
-    event EscrowRefunded(
-        bytes32 indexed bountyId, address indexed requester, uint256 amount
-    );
+    event EscrowFunded(bytes32 indexed bountyId, address indexed provider, uint256 bond);
+    event EscrowReleased(bytes32 indexed bountyId, address indexed provider, uint256 amount);
+    event EscrowRefunded(bytes32 indexed bountyId, address indexed requester, uint256 amount);
     event EscrowDisputed(bytes32 indexed bountyId, uint256 timestamp);
     event EscrowReleasedWithFees(
         bytes32 indexed bountyId,
@@ -208,11 +202,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
     }
 
     /// @notice Refund requester (called by bounty contract)
-    function refundRequester(bytes32 bountyId)
-        external
-        override
-        onlyRole(BOUNTY_CONTRACT_ROLE)
-    {
+    function refundRequester(bytes32 bountyId) external override onlyRole(BOUNTY_CONTRACT_ROLE) {
         Escrow storage escrow = escrows[bountyId];
         if (escrow.created == 0) revert EscrowNotFound(bountyId);
         if (escrow.state != EscrowState.Funded) revert EscrowNotFunded(bountyId);
@@ -237,12 +227,9 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
     // ─── Direct Escrow Functions (backward-compatible) ────────────────────
 
     /// @notice Create escrow — requester deposits payment tokens
-    function createEscrow(
-        bytes32 bountyId,
-        address token,
-        uint256 amount,
-        uint256 deadline
-    ) external {
+    function createEscrow(bytes32 bountyId, address token, uint256 amount, uint256 deadline)
+        external
+    {
         if (amount == 0) revert InvalidAmount();
         if (token == address(0)) revert InvalidToken();
         if (escrows[bountyId].created != 0) revert EscrowNotFound(bountyId); // reentrancy guard
