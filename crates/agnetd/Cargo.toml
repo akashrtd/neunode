@@ -20,6 +20,7 @@ neunode-token = { path = "../neunode-token" }
 neunode-reputation = { path = "../neunode-reputation" }
 neunode-bounty = { path = "../neunode-bounty" }
 neunode-inference = { path = "../neunode-inference" }
+neunode-training = { path = "../neunode-training" }
 clap = { workspace = true }
 comfy-table = { workspace = true }
 indicatif = { workspace = true }

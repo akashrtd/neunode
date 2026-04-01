@@ -215,6 +215,31 @@ impl From<neunode_bounty::error::BountyError> for CliError {
     }
 }
 
+impl From<neunode_training::error::TrainingError> for CliError {
+    fn from(err: neunode_training::error::TrainingError) -> Self {
+        match &err {
+            neunode_training::error::TrainingError::ConfigInvalid(_) => {
+                Self::Usage(err.to_string())
+            }
+            neunode_training::error::TrainingError::CoordinatorTimeout(_)
+            | neunode_training::error::TrainingError::TransferTimeout(_)
+            | neunode_training::error::TrainingError::CollectionTimeout { .. } => {
+                Self::Timeout(err.to_string())
+            }
+            neunode_training::error::TrainingError::PeerUnavailable(_)
+            | neunode_training::error::TrainingError::ServerUnavailable(_) => {
+                Self::Network { message: err.to_string(), source: None }
+            }
+            neunode_training::error::TrainingError::EscrowError(msg) => Self::Insufficient {
+                resource: "escrow".to_string(),
+                needed: msg.clone(),
+                available: "N/A".to_string(),
+            },
+            _ => Self::General { message: err.to_string(), source: None },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -465,6 +490,46 @@ mod tests {
     #[test]
     fn from_bounty_error_general() {
         let err: CliError = neunode_bounty::error::BountyError::NotClaimed.into();
+        assert_eq!(err.exit_code(), ExitCode::from(1));
+    }
+
+    // --- From<TrainingError> tests ---
+
+    #[test]
+    fn from_training_error_config_invalid() {
+        let err: CliError = neunode_training::error::TrainingError::ConfigInvalid(
+            "local_steps must be > 0".to_string(),
+        )
+        .into();
+        assert_eq!(err.exit_code(), ExitCode::from(2));
+    }
+
+    #[test]
+    fn from_training_error_coordinator_timeout() {
+        let err: CliError =
+            neunode_training::error::TrainingError::CoordinatorTimeout("sync deadline".to_string())
+                .into();
+        assert_eq!(err.exit_code(), ExitCode::from(11));
+    }
+
+    #[test]
+    fn from_training_error_peer_unavailable() {
+        let err: CliError =
+            neunode_training::error::TrainingError::PeerUnavailable("12D3Koo".to_string()).into();
+        assert_eq!(err.exit_code(), ExitCode::from(10));
+    }
+
+    #[test]
+    fn from_training_error_escrow() {
+        let err: CliError =
+            neunode_training::error::TrainingError::EscrowError("insufficient deposit".to_string())
+                .into();
+        assert_eq!(err.exit_code(), ExitCode::from(30));
+    }
+
+    #[test]
+    fn from_training_error_general() {
+        let err: CliError = neunode_training::error::TrainingError::GradientMismatch.into();
         assert_eq!(err.exit_code(), ExitCode::from(1));
     }
 }

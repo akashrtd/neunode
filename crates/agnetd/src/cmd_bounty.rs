@@ -1,5 +1,8 @@
 use anyhow::Result;
-use neunode_core::types::{Timestamp, TokenType};
+use neunode_bounty::state_machine::{
+    BountyData as LibBountyData, BountyEvent, BountyStateMachine, Deadlines,
+};
+use neunode_core::types::{BountyId, BountyState, Did, Hash256, Timestamp, TokenAmount, TokenType};
 
 use crate::cli::{BountyCommands, GlobalArgs};
 use crate::output::OutputWriter;
@@ -58,6 +61,94 @@ fn generate_bounty_id() -> String {
     format!("bnty_{:012x}{:04x}", ts, cnt & 0xFFFF)
 }
 
+// --- Private conversion helpers ---
+
+fn parse_bounty_state(s: &str) -> Option<BountyState> {
+    match s.to_lowercase().as_str() {
+        "open" => Some(BountyState::Open),
+        "claimed" => Some(BountyState::Claimed),
+        "submitted" => Some(BountyState::Submitted),
+        "underreview" => Some(BountyState::UnderReview),
+        "revision" => Some(BountyState::Revision),
+        "accepted" => Some(BountyState::Accepted),
+        "rejected" => Some(BountyState::Rejected),
+        "disputed" => Some(BountyState::Disputed),
+        "paid" => Some(BountyState::Paid),
+        "expired" => Some(BountyState::Expired),
+        "cancelled" => Some(BountyState::Cancelled),
+        _ => None,
+    }
+}
+
+fn u8_to_token_type(code: u8) -> Option<TokenType> {
+    match code {
+        0x01 => Some(TokenType::Compute),
+        0x02 => Some(TokenType::Train),
+        0x03 => Some(TokenType::Bandwidth),
+        0x04 => Some(TokenType::Storage),
+        _ => None,
+    }
+}
+
+fn token_type_to_u8(t: &TokenType) -> u8 {
+    match t {
+        TokenType::Compute => 0x01,
+        TokenType::Train => 0x02,
+        TokenType::Bandwidth => 0x03,
+        TokenType::Storage => 0x04,
+    }
+}
+
+fn storage_to_lib(data: &neunode_storage::bounty_store::BountyData) -> Result<LibBountyData> {
+    let state = parse_bounty_state(&data.state)
+        .ok_or_else(|| anyhow::anyhow!("invalid bounty state in storage: '{}'", data.state))?;
+    let reward_token = u8_to_token_type(data.reward_token_type)
+        .ok_or_else(|| anyhow::anyhow!("invalid token type code: {}", data.reward_token_type))?;
+
+    let mut deadlines = Deadlines::from_created_at(data.created_at);
+    deadlines.claim = data.claim_deadline;
+    deadlines.work = data.work_deadline;
+    deadlines.review = data.review_deadline;
+
+    Ok(LibBountyData {
+        id: BountyId(data.id.clone()),
+        creator: Did(data.requester_did.clone()),
+        title: data.title.clone(),
+        description: data.description.clone(),
+        reward_amount: TokenAmount(data.reward_amount),
+        reward_token,
+        state,
+        claimant: data.provider_did.as_ref().map(|d| Did(d.clone())),
+        created_at: data.created_at,
+        deadlines,
+        artifact_hash: data.artifact_hash.as_ref().map(|h| Hash256(h.clone())),
+        bond: data.bond.map(TokenAmount),
+    })
+}
+
+fn lib_to_storage(data: &LibBountyData, escrow: u64) -> neunode_storage::bounty_store::BountyData {
+    neunode_storage::bounty_store::BountyData {
+        id: data.id.0.clone(),
+        state: format!("{:?}", data.state),
+        requester_did: data.creator.0.clone(),
+        provider_did: data.claimant.as_ref().map(|d| d.0.clone()),
+        reward_amount: data.reward_amount.0,
+        reward_token_type: token_type_to_u8(&data.reward_token),
+        deadline: data.deadlines.work,
+        created_at: data.created_at,
+        escrow_deposited: escrow,
+        title: data.title.clone(),
+        description: data.description.clone(),
+        claim_deadline: data.deadlines.claim,
+        work_deadline: data.deadlines.work,
+        review_deadline: data.deadlines.review,
+        artifact_hash: data.artifact_hash.as_ref().map(|h| h.0.clone()),
+        bond: data.bond.map(|b| b.0),
+    }
+}
+
+// --- Subcommand handlers ---
+
 #[allow(clippy::too_many_arguments)]
 fn create_bounty(
     title: &str,
@@ -84,23 +175,34 @@ fn create_bounty(
     let creator = state.require_did()?.clone();
     let bounty_id = generate_bounty_id();
 
-    let claim_dl =
-        claim_deadline.map(|d| now.saturating_add(d)).unwrap_or(now.saturating_add(7 * 24 * 3600));
-    let work_dl =
-        work_deadline.map(|d| now.saturating_add(d)).unwrap_or(now.saturating_add(30 * 24 * 3600));
+    let mut deadlines = Deadlines::from_created_at(now);
+    if let Some(hours) = claim_deadline {
+        deadlines.claim = now.saturating_add(hours * 3600);
+    }
+    if let Some(hours) = work_deadline {
+        deadlines.work = now.saturating_add(hours * 3600);
+    }
+
+    let lib_data = LibBountyData {
+        id: BountyId(bounty_id.clone()),
+        creator,
+        title: title.to_string(),
+        description: description.to_string(),
+        reward_amount: TokenAmount(reward),
+        reward_token: token_type,
+        state: BountyState::Open,
+        claimant: None,
+        created_at: now,
+        deadlines,
+        artifact_hash: None,
+        bond: None,
+    };
+
+    let sm = BountyStateMachine::new(lib_data);
+    let store_data = lib_to_storage(sm.data(), reward);
 
     let store = state.bounty_store();
-    store.put(&neunode_storage::bounty_store::BountyData {
-        id: bounty_id.clone(),
-        state: "Open".to_string(),
-        requester_did: creator.to_string(),
-        provider_did: None,
-        reward_amount: reward,
-        reward_token_type: token_type_to_u8(&token_type),
-        deadline: work_dl,
-        created_at: now,
-        escrow_deposited: reward,
-    })?;
+    store.put(&store_data)?;
 
     let out = serde_json::json!({
         "id": bounty_id,
@@ -108,22 +210,13 @@ fn create_bounty(
         "reward": reward,
         "token": token_type_display(&token_type),
         "state": "Open",
-        "claim_deadline": claim_dl,
-        "work_deadline": work_dl,
+        "claim_deadline": sm.data().deadlines.claim,
+        "work_deadline": sm.data().deadlines.work,
     });
 
     writer.write_json(&out);
     writer.write_status(&format!("Bounty created and persisted: {bounty_id}"));
     Ok(())
-}
-
-fn token_type_to_u8(t: &TokenType) -> u8 {
-    match t {
-        TokenType::Compute => 0x01,
-        TokenType::Train => 0x02,
-        TokenType::Bandwidth => 0x03,
-        TokenType::Storage => 0x04,
-    }
 }
 
 fn claim_bounty(
@@ -142,22 +235,26 @@ fn claim_bounty(
     let claimant = state.require_did()?.clone();
     let store = state.bounty_store();
 
-    let mut bounty =
+    let bounty =
         store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
 
-    if bounty.state != "Open" {
-        anyhow::bail!("bounty '{bounty_id}' is not Open (current state: {})", bounty.state);
-    }
+    let lib_data = storage_to_lib(&bounty)?;
+    let mut sm = BountyStateMachine::new(lib_data);
+    let now = current_timestamp();
 
-    bounty.state = "Claimed".to_string();
-    bounty.provider_did = Some(claimant.0.clone());
-    store.put(&bounty)?;
+    sm.try_transition(
+        BountyEvent::Claim { claimant: claimant.clone(), bond: TokenAmount(stake) },
+        now,
+    )?;
+
+    let updated = lib_to_storage(sm.data(), bounty.escrow_deposited);
+    store.put(&updated)?;
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
         "claimant": claimant.to_string(),
         "bond": stake,
-        "state": "Claimed",
+        "state": format!("{:?}", sm.current_state()),
     });
 
     writer.write_json(&out);
@@ -180,23 +277,22 @@ fn submit_bounty(
     }
 
     let store = state.bounty_store();
-    let mut bounty =
+    let bounty =
         store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
 
-    if bounty.state != "Claimed" {
-        anyhow::bail!(
-            "bounty '{bounty_id}' cannot be submitted (current state: {}, expected: Claimed)",
-            bounty.state
-        );
-    }
+    let lib_data = storage_to_lib(&bounty)?;
+    let mut sm = BountyStateMachine::new(lib_data);
+    let now = current_timestamp();
 
-    bounty.state = "Submitted".to_string();
-    store.put(&bounty)?;
+    sm.try_transition(BountyEvent::Submit { artifact_hash: Hash256(artifact.to_string()) }, now)?;
+
+    let updated = lib_to_storage(sm.data(), bounty.escrow_deposited);
+    store.put(&updated)?;
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
         "artifact_cid": artifact,
-        "state": "Submitted",
+        "state": format!("{:?}", sm.current_state()),
     });
 
     writer.write_json(&out);
@@ -222,21 +318,38 @@ fn review_bounty(
     let bounty =
         store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
 
-    if bounty.state != "Submitted" && bounty.state != "UnderReview" {
-        anyhow::bail!(
-            "bounty '{bounty_id}' cannot be reviewed (current state: {}, expected: Submitted or UnderReview)",
-            bounty.state
-        );
+    let lib_data = storage_to_lib(&bounty)?;
+    let mut sm = BountyStateMachine::new(lib_data);
+    let now = current_timestamp();
+
+    // Transition Submitted → UnderReview if needed
+    if sm.current_state() == BountyState::Submitted {
+        sm.try_transition(BountyEvent::StartReview, now)?;
     }
 
-    let new_state = if score >= 70 { "Accepted" } else { "UnderReview" };
-    store.update_state(bounty_id, new_state)?;
+    // Submit review (FSM validates state is UnderReview)
+    let reviewer = state.require_did()?.clone();
+    sm.try_transition(
+        BountyEvent::SubmitReview { reviewer, score, notes: feedback.to_string(), signature: None },
+        now,
+    )?;
+
+    // Score-based decision
+    if score >= 60 {
+        sm.try_transition(BountyEvent::Accept, now)?;
+    } else if score < 40 {
+        sm.try_transition(BountyEvent::Reject, now)?;
+    }
+
+    let new_state_str = format!("{:?}", sm.current_state());
+    let updated = lib_to_storage(sm.data(), bounty.escrow_deposited);
+    store.put(&updated)?;
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
         "score": score,
         "feedback": feedback,
-        "state": new_state,
+        "state": new_state_str,
     });
 
     writer.write_json(&out);
@@ -256,7 +369,9 @@ fn list_bounties(
 
     let filtered: Vec<_> = all
         .iter()
-        .filter(|b| state_filter.is_none_or(|sf| b.state.eq_ignore_ascii_case(sf)))
+        .filter(|b| {
+            state_filter.is_none_or(|sf| parse_bounty_state(sf) == parse_bounty_state(&b.state))
+        })
         .filter(|b| creator_filter.is_none_or(|cf| b.requester_did.contains(cf)))
         .take(limit)
         .collect();
@@ -293,13 +408,17 @@ fn show_bounty(bounty_id: &str, writer: &OutputWriter, state: &AppState) -> Resu
 
     let pairs = [
         ("ID", bounty.id.clone()),
+        ("Title", bounty.title.clone()),
+        ("Description", bounty.description.clone()),
         ("State", bounty.state.clone()),
         ("Creator", bounty.requester_did.clone()),
         ("Claimant", bounty.provider_did.clone().unwrap_or_else(|| "none".to_string())),
         ("Reward", format!("{} (type {})", bounty.reward_amount, bounty.reward_token_type)),
-        ("Deadline", bounty.deadline.to_string()),
-        ("Created", bounty.created_at.to_string()),
         ("Escrow", bounty.escrow_deposited.to_string()),
+        ("Created", bounty.created_at.to_string()),
+        ("Claim Deadline", bounty.claim_deadline.to_string()),
+        ("Work Deadline", bounty.work_deadline.to_string()),
+        ("Review Deadline", bounty.review_deadline.to_string()),
     ];
 
     writer.write_key_value_pairs(&pairs.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>());
@@ -320,14 +439,14 @@ fn cancel_bounty(
     let bounty =
         store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
 
-    if bounty.state != "Open" && bounty.state != "Claimed" {
-        anyhow::bail!(
-            "bounty '{bounty_id}' cannot be cancelled (current state: {}, can only cancel from Open or Claimed)",
-            bounty.state
-        );
-    }
+    let lib_data = storage_to_lib(&bounty)?;
+    let mut sm = BountyStateMachine::new(lib_data);
+    let now = current_timestamp();
 
-    store.update_state(bounty_id, "Cancelled")?;
+    sm.try_transition(BountyEvent::Cancel, now)?;
+
+    let updated = lib_to_storage(sm.data(), bounty.escrow_deposited);
+    store.put(&updated)?;
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
@@ -400,7 +519,7 @@ mod tests {
     fn create_bounty_with_deadlines() {
         let state = test_state();
         let writer = test_writer();
-        create_bounty("Title", "Desc", 500, "compute", Some(3600), Some(7200), &writer, &state)
+        create_bounty("Title", "Desc", 500, "compute", Some(48), Some(72), &writer, &state)
             .unwrap();
     }
 
@@ -415,7 +534,8 @@ mod tests {
         let bounty_id = &all[0].id;
 
         let writer2 = test_writer();
-        claim_bounty(bounty_id, 100, &writer2, &state).unwrap();
+        // Stake must be >= 15% of reward (150 for 1000 reward)
+        claim_bounty(bounty_id, 200, &writer2, &state).unwrap();
 
         let updated = store.get(bounty_id).unwrap().unwrap();
         assert_eq!(updated.state, "Claimed");
@@ -425,7 +545,7 @@ mod tests {
     fn claim_bounty_not_found_fails() {
         let state = test_state();
         let writer = test_writer();
-        assert!(claim_bounty("nonexistent", 100, &writer, &state).is_err());
+        assert!(claim_bounty("nonexistent", 200, &writer, &state).is_err());
     }
 
     #[test]
@@ -439,7 +559,7 @@ mod tests {
     fn claim_bounty_empty_id_fails() {
         let state = test_state();
         let writer = test_writer();
-        assert!(claim_bounty("", 100, &writer, &state).is_err());
+        assert!(claim_bounty("", 200, &writer, &state).is_err());
     }
 
     #[test]
@@ -450,7 +570,7 @@ mod tests {
         let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
 
         let writer2 = test_writer();
-        claim_bounty(&bounty_id, 100, &writer2, &state).unwrap();
+        claim_bounty(&bounty_id, 200, &writer2, &state).unwrap();
 
         let writer3 = test_writer();
         submit_bounty(&bounty_id, "ipfs://QmX7b", "{}", &writer3, &state).unwrap();
@@ -478,7 +598,7 @@ mod tests {
         let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
 
         let writer2 = test_writer();
-        claim_bounty(&bounty_id, 100, &writer2, &state).unwrap();
+        claim_bounty(&bounty_id, 200, &writer2, &state).unwrap();
 
         let writer3 = test_writer();
         submit_bounty(&bounty_id, "ipfs://QmX7b", "{}", &writer3, &state).unwrap();
@@ -571,7 +691,7 @@ mod tests {
         let result = submit_bounty(&bounty_id, "ipfs://QmX7b", "{}", &writer2, &state);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("expected: Claimed"), "unexpected error message: {err}");
+        assert!(err.contains("invalid state transition"), "unexpected error message: {err}");
     }
 
     #[test]
@@ -585,10 +705,7 @@ mod tests {
         let result = review_bounty(&bounty_id, 80, "nice", &writer2, &state);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("expected: Submitted or UnderReview"),
-            "unexpected error message: {err}"
-        );
+        assert!(err.contains("invalid state transition"), "unexpected error message: {err}");
     }
 
     #[test]
@@ -599,7 +716,7 @@ mod tests {
         let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
 
         let writer2 = test_writer();
-        claim_bounty(&bounty_id, 100, &writer2, &state).unwrap();
+        claim_bounty(&bounty_id, 200, &writer2, &state).unwrap();
 
         let writer3 = test_writer();
         submit_bounty(&bounty_id, "ipfs://QmX7b", "{}", &writer3, &state).unwrap();
@@ -608,10 +725,7 @@ mod tests {
         let result = cancel_bounty(&bounty_id, "too late", &writer4, &state);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("can only cancel from Open or Claimed"),
-            "unexpected error message: {err}"
-        );
+        assert!(err.contains("invalid state transition"), "unexpected error message: {err}");
     }
 
     #[test]
@@ -623,7 +737,7 @@ mod tests {
         let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
 
         let writer2 = test_writer();
-        claim_bounty(&bounty_id, 100, &writer2, &state).unwrap();
+        claim_bounty(&bounty_id, 200, &writer2, &state).unwrap();
 
         let writer3 = test_writer();
         cancel_bounty(&bounty_id, "changed mind", &writer3, &state).unwrap();

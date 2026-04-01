@@ -14,6 +14,20 @@ pub struct BountyData {
     pub deadline: u64,
     pub created_at: u64,
     pub escrow_deposited: u64,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub claim_deadline: u64,
+    #[serde(default)]
+    pub work_deadline: u64,
+    #[serde(default)]
+    pub review_deadline: u64,
+    #[serde(default)]
+    pub artifact_hash: Option<String>,
+    #[serde(default)]
+    pub bond: Option<u64>,
 }
 
 pub struct BountyStore<'a> {
@@ -96,6 +110,13 @@ mod tests {
             deadline: 1700001000,
             created_at: 1700000000,
             escrow_deposited: 500,
+            title: String::new(),
+            description: String::new(),
+            claim_deadline: 1700000000 + 7 * 86400,
+            work_deadline: 1700000000 + 14 * 86400,
+            review_deadline: 1700000000 + 17 * 86400,
+            artifact_hash: None,
+            bond: None,
         }
     }
 
