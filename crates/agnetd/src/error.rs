@@ -240,6 +240,58 @@ impl From<neunode_training::error::TrainingError> for CliError {
     }
 }
 
+impl From<neunode_knowledge::error::KnowledgeError> for CliError {
+    fn from(err: neunode_knowledge::error::KnowledgeError) -> Self {
+        match &err {
+            neunode_knowledge::error::KnowledgeError::QueryFailed(_) => {
+                Self::Usage(err.to_string())
+            }
+            neunode_knowledge::error::KnowledgeError::StorageError(_) => {
+                Self::General { message: err.to_string(), source: None }
+            }
+            _ => Self::General { message: err.to_string(), source: None },
+        }
+    }
+}
+
+impl From<neunode_lineage::error::LineageError> for CliError {
+    fn from(err: neunode_lineage::error::LineageError) -> Self {
+        match &err {
+            neunode_lineage::error::LineageError::ParentNotFound(id) => {
+                Self::NotFound { resource_type: "model".to_string(), id: id.clone() }
+            }
+            neunode_lineage::error::LineageError::ModelNotFound(id) => {
+                Self::NotFound { resource_type: "model".to_string(), id: id.clone() }
+            }
+            neunode_lineage::error::LineageError::AlreadyRegistered(id) => {
+                Self::Conflict { message: format!("model already registered: {id}") }
+            }
+            neunode_lineage::error::LineageError::ConfigInvalid(_) => Self::Usage(err.to_string()),
+            _ => Self::General { message: err.to_string(), source: None },
+        }
+    }
+}
+
+impl From<neunode_verification::error::VerificationError> for CliError {
+    fn from(err: neunode_verification::error::VerificationError) -> Self {
+        match &err {
+            neunode_verification::error::VerificationError::VerificationFailed { .. } => {
+                Self::General { message: err.to_string(), source: None }
+            }
+            neunode_verification::error::VerificationError::HashMismatch { .. } => {
+                Self::Conflict { message: err.to_string() }
+            }
+            neunode_verification::error::VerificationError::Timeout { .. } => {
+                Self::Timeout(err.to_string())
+            }
+            neunode_verification::error::VerificationError::ConfigInvalid(_) => {
+                Self::Usage(err.to_string())
+            }
+            _ => Self::General { message: err.to_string(), source: None },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -122,6 +122,24 @@ pub enum Commands {
         #[command(subcommand)]
         command: InferenceCommands,
     },
+    /// Query knowledge graph (alias: k)
+    #[command(alias = "k")]
+    Knowledge {
+        #[command(subcommand)]
+        command: KnowledgeCommands,
+    },
+    /// Manage model lineage and royalties (alias: lin)
+    #[command(alias = "lin")]
+    Lineage {
+        #[command(subcommand)]
+        command: LineageCommands,
+    },
+    /// Verify compute and artifacts (alias: v)
+    #[command(alias = "v")]
+    Verify {
+        #[command(subcommand)]
+        command: VerifyCommands,
+    },
     /// Real-time dashboard (alias: d)
     #[command(alias = "d")]
     Dashboard,
@@ -541,6 +559,194 @@ pub enum InferenceCommands {
         #[arg(long, default_value = "500")]
         output_tokens: u32,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum KnowledgeCommands {
+    /// Query the knowledge graph
+    Query {
+        /// Filter by subject URI
+        #[arg(long)]
+        subject: Option<String>,
+        /// Filter by predicate URI
+        #[arg(long)]
+        predicate: Option<String>,
+        /// Filter by object URI
+        #[arg(long)]
+        object: Option<String>,
+        /// Filter by graph URI
+        #[arg(long)]
+        graph: Option<String>,
+        /// Max results
+        #[arg(long, default_value = "20")]
+        limit: usize,
+    },
+    /// Register an agent in the knowledge graph
+    RegisterAgent {
+        /// Agent DID
+        #[arg(long)]
+        did: String,
+        /// Comma-separated capabilities
+        #[arg(long)]
+        capabilities: String,
+    },
+    /// Register a model in the knowledge graph
+    RegisterModel {
+        /// Owner DID
+        #[arg(long)]
+        did: String,
+        /// Model CID
+        #[arg(long)]
+        cid: String,
+        /// Parent model CID (optional)
+        #[arg(long)]
+        parent: Option<String>,
+    },
+    /// Register a bounty in the knowledge graph
+    RegisterBounty {
+        /// Bounty ID
+        #[arg(long)]
+        id: String,
+        /// Comma-separated required capabilities
+        #[arg(long)]
+        capabilities: String,
+    },
+    /// Record agent joining a training job
+    JoinJob {
+        /// Agent DID
+        #[arg(long)]
+        did: String,
+        /// Job ID
+        #[arg(long)]
+        job_id: String,
+    },
+    /// List ontology classes
+    ListClasses,
+    /// List ontology predicates
+    ListPredicates,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum LineageCommands {
+    /// Register a model in the lineage DAG
+    Register {
+        /// Model CID (sha256:hex)
+        #[arg(long)]
+        cid: String,
+        /// Comma-separated parent CIDs
+        #[arg(long)]
+        parents: Option<String>,
+        /// Contribution type (pre_training|fine_tune|merge|rl|data|compute)
+        #[arg(long, default_value = "fine_tune")]
+        contribution_type: String,
+        /// LoRA rank (for fine_tune)
+        #[arg(long)]
+        lora_rank: Option<u32>,
+        /// LoRA alpha (for fine_tune)
+        #[arg(long)]
+        lora_alpha: Option<f64>,
+    },
+    /// Show model details
+    Show {
+        /// Model CID
+        cid: String,
+    },
+    /// Show direct parents of a model
+    Parents {
+        /// Model CID
+        cid: String,
+    },
+    /// Show direct children of a model
+    Children {
+        /// Model CID
+        cid: String,
+    },
+    /// Show all ancestors of a model
+    Ancestors {
+        /// Model CID
+        cid: String,
+    },
+    /// Show lineage depth (longest path to root)
+    Depth {
+        /// Model CID
+        cid: String,
+    },
+    /// Compute royalty distribution for a model
+    Royalties {
+        /// Serving model CID
+        cid: String,
+        /// Total amount in basis points
+        #[arg(long)]
+        amount: u32,
+    },
+    /// Compute content hash of a file
+    Hash {
+        /// File path
+        #[arg(short, long)]
+        file: String,
+    },
+    /// Verify model signature
+    Verify {
+        /// Model CID
+        cid: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum VerifyCommands {
+    /// Run gauntlet adversarial test
+    Gauntlet {
+        /// Test name
+        #[arg(long)]
+        test_name: String,
+        /// Input artifact hash
+        #[arg(long)]
+        input_hash: String,
+        /// Expected output hash
+        #[arg(long)]
+        expected_hash: String,
+    },
+    /// Run spot-check verification
+    SpotCheck {
+        /// Path to original output file
+        #[arg(long)]
+        original: String,
+        /// Path to recomputed output file
+        #[arg(long)]
+        recomputed: String,
+    },
+    /// Compare two RepOps execution results
+    Repops {
+        /// Comma-separated hashes from execution A
+        #[arg(long)]
+        hashes_a: String,
+        /// Comma-separated hashes from execution B
+        #[arg(long)]
+        hashes_b: String,
+    },
+    /// Run bisection to find disagreement point
+    Bisection {
+        /// Comma-separated claimant hashes
+        #[arg(long)]
+        claimant: String,
+        /// Comma-separated challenger hashes
+        #[arg(long)]
+        challenger: String,
+    },
+    /// Verify a TEE attestation quote
+    Tee {
+        /// Expected measurement hash
+        #[arg(long)]
+        measurement: String,
+        /// Nonce in hex
+        #[arg(long)]
+        nonce: String,
+        /// TEE type (intel_tdx|amd_sev|nvidia_ccn|apple_se)
+        #[arg(long, default_value = "intel_tdx")]
+        tee_type: String,
+    },
+    /// Show available verification layers
+    Status,
 }
 
 #[cfg(test)]

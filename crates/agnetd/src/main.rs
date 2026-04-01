@@ -9,11 +9,14 @@ mod cmd_dashboard;
 mod cmd_feed;
 mod cmd_identity;
 mod cmd_inference;
+mod cmd_knowledge;
+mod cmd_lineage;
 mod cmd_mesh;
 mod cmd_model;
 mod cmd_reputation;
 mod cmd_token;
 mod cmd_train;
+mod cmd_verify;
 mod config;
 mod error;
 mod feed_wire;
@@ -75,6 +78,13 @@ fn main() -> ExitCode {
         Commands::Inference { command } => {
             cmd_inference::execute(command, &global_args, &mut app_state)
         }
+        Commands::Knowledge { command } => {
+            cmd_knowledge::execute(command, &global_args, &mut app_state)
+        }
+        Commands::Lineage { command } => {
+            cmd_lineage::execute(command, &global_args, &mut app_state)
+        }
+        Commands::Verify { command } => cmd_verify::execute(command, &global_args, &mut app_state),
         Commands::Dashboard => rt.block_on(cmd_dashboard::execute(&global_args, &mut app_state)),
         Commands::Version => {
             println!("agnetd v{}", env!("CARGO_PKG_VERSION"));

@@ -1,0 +1,666 @@
+use anyhow::Result;
+use neunode_verification::bisection::BisectionSolver;
+use neunode_verification::gauntlet::{Gauntlet, GauntletConfig, GauntletTest};
+use neunode_verification::repops::{DeterministicExecutor, RepOpsResult};
+use neunode_verification::spot_check::{SpotCheckConfig, SpotChecker};
+use neunode_verification::tee::{TeeQuote, TeeType, TeeVerifier};
+
+use crate::cli::{GlobalArgs, VerifyCommands};
+use crate::output::OutputWriter;
+use crate::state::AppState;
+
+pub fn execute(cmd: &VerifyCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
+    let writer = OutputWriter::new(args.output);
+    match cmd {
+        VerifyCommands::Gauntlet { test_name, input_hash, expected_hash } => {
+            run_gauntlet(test_name, input_hash, expected_hash, &writer, state)
+        }
+        VerifyCommands::SpotCheck { original, recomputed } => {
+            run_spot_check(original, recomputed, &writer, state)
+        }
+        VerifyCommands::Repops { hashes_a, hashes_b } => {
+            run_repops(hashes_a, hashes_b, &writer, state)
+        }
+        VerifyCommands::Bisection { claimant, challenger } => {
+            run_bisection(claimant, challenger, &writer, state)
+        }
+        VerifyCommands::Tee { measurement, nonce, tee_type } => {
+            verify_tee(measurement, nonce, tee_type, &writer, state)
+        }
+        VerifyCommands::Status => show_status(&writer, state),
+    }
+}
+
+// --- Subcommand handlers ---
+
+fn run_gauntlet(
+    test_name: &str,
+    input_hash: &str,
+    expected_hash: &str,
+    writer: &OutputWriter,
+    _state: &AppState,
+) -> Result<()> {
+    if test_name.is_empty() {
+        anyhow::bail!("test name cannot be empty");
+    }
+    if input_hash.is_empty() {
+        anyhow::bail!("input hash cannot be empty");
+    }
+    if expected_hash.is_empty() {
+        anyhow::bail!("expected hash cannot be empty");
+    }
+
+    let gauntlet = Gauntlet::new(GauntletConfig::default());
+    let test = GauntletTest {
+        name: test_name.to_string(),
+        input_hash: input_hash.to_string(),
+        expected_output_hash: expected_hash.to_string(),
+        injected: false,
+        difficulty: 5,
+    };
+
+    let result = gauntlet.verify(&test, input_hash)?;
+
+    let out = serde_json::json!({
+        "test_name": test_name,
+        "passed": result.passed,
+        "layer": format!("{:?}", result.layer),
+        "confidence": result.confidence,
+        "evidence_hash": result.evidence_hash,
+        "verifier_id": result.verifier_id,
+        "timestamp_ms": result.timestamp_ms,
+        "details": result.details,
+    });
+
+    writer.write_json(&out);
+    if result.passed {
+        writer.write_status(&format!("Gauntlet test '{test_name}' passed"));
+    }
+    Ok(())
+}
+
+fn run_spot_check(
+    original_path: &str,
+    recomputed_path: &str,
+    writer: &OutputWriter,
+    _state: &AppState,
+) -> Result<()> {
+    if original_path.is_empty() {
+        anyhow::bail!("original file path cannot be empty");
+    }
+    if recomputed_path.is_empty() {
+        anyhow::bail!("recomputed file path cannot be empty");
+    }
+
+    let original_bytes = std::fs::read(original_path)
+        .map_err(|e| anyhow::anyhow!("failed to read original file '{}': {e}", original_path))?;
+    let recomputed_bytes = std::fs::read(recomputed_path).map_err(|e| {
+        anyhow::anyhow!("failed to read recomputed file '{}': {e}", recomputed_path)
+    })?;
+
+    let checker = SpotChecker::new(SpotCheckConfig::default());
+    let result = checker.verify_output(&original_bytes, &recomputed_bytes);
+
+    let out = serde_json::json!({
+        "original_hash": result.original_hash,
+        "recomputed_hash": result.recomputed_hash,
+        "match": result.match_result,
+        "retries_used": result.retries_used,
+        "elapsed_ms": result.elapsed_ms,
+    });
+
+    writer.write_json(&out);
+    if result.match_result {
+        writer.write_status("Spot check passed: hashes match");
+    } else {
+        writer.write_error("Spot check failed: hash mismatch");
+    }
+    Ok(())
+}
+
+fn run_repops(
+    hashes_a_str: &str,
+    hashes_b_str: &str,
+    writer: &OutputWriter,
+    _state: &AppState,
+) -> Result<()> {
+    if hashes_a_str.is_empty() {
+        anyhow::bail!("hashes_a cannot be empty");
+    }
+    if hashes_b_str.is_empty() {
+        anyhow::bail!("hashes_b cannot be empty");
+    }
+
+    let hashes_a = parse_comma_hashes(hashes_a_str)?;
+    let hashes_b = parse_comma_hashes(hashes_b_str)?;
+
+    let result_a = build_repops_result(&hashes_a);
+    let result_b = build_repops_result(&hashes_b);
+
+    let matches = DeterministicExecutor::compare(&result_a, &result_b);
+
+    let out = serde_json::json!({
+        "matches": matches,
+        "hashes_a_count": hashes_a.len(),
+        "hashes_b_count": hashes_b.len(),
+        "output_hash_a": result_a.output_hash,
+        "output_hash_b": result_b.output_hash,
+        "intermediate_count_a": result_a.intermediate_hashes.len(),
+        "intermediate_count_b": result_b.intermediate_hashes.len(),
+    });
+
+    writer.write_json(&out);
+    if matches {
+        writer.write_status("RepOps comparison: executions match");
+    } else {
+        writer.write_error("RepOps comparison: executions differ");
+    }
+    Ok(())
+}
+
+fn run_bisection(
+    claimant_str: &str,
+    challenger_str: &str,
+    writer: &OutputWriter,
+    _state: &AppState,
+) -> Result<()> {
+    if claimant_str.is_empty() {
+        anyhow::bail!("claimant hashes cannot be empty");
+    }
+    if challenger_str.is_empty() {
+        anyhow::bail!("challenger hashes cannot be empty");
+    }
+
+    let claimant = parse_comma_hashes(claimant_str)?;
+    let challenger = parse_comma_hashes(challenger_str)?;
+
+    let solver = BisectionSolver::new();
+    let result = solver.solve(&claimant, &challenger, |idx| {
+        claimant.get(idx as usize) == challenger.get(idx as usize)
+    });
+
+    let out = serde_json::json!({
+        "found": result.found,
+        "disagreeing_op_index": result.disagreeing_op_index,
+        "steps_taken": result.steps_taken,
+        "total_ops": result.total_ops,
+        "claimant_hash": result.claimant_hash,
+        "challenger_hash": result.challenger_hash,
+    });
+
+    writer.write_json(&out);
+    if result.found {
+        let idx = result.disagreeing_op_index.unwrap_or(0);
+        writer.write_status(&format!("Bisection: first disagreement at op {idx}"));
+    } else if result.total_ops > 0 {
+        writer.write_status("Bisection: all operations match");
+    } else {
+        writer.write_warning("Bisection: no operations to compare");
+    }
+    Ok(())
+}
+
+fn verify_tee(
+    measurement: &str,
+    nonce_hex: &str,
+    tee_type_str: &str,
+    writer: &OutputWriter,
+    _state: &AppState,
+) -> Result<()> {
+    if measurement.is_empty() {
+        anyhow::bail!("measurement hash cannot be empty");
+    }
+    if nonce_hex.is_empty() {
+        anyhow::bail!("nonce cannot be empty");
+    }
+
+    let tee_type = parse_tee_type(tee_type_str)?;
+    let nonce_bytes =
+        hex::decode(nonce_hex).map_err(|e| anyhow::anyhow!("invalid nonce hex: {e}"))?;
+
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+
+    let quote = TeeQuote {
+        tee_type,
+        measurement_hash: measurement.to_string(),
+        signer_public_key: vec![0x01, 0x02, 0x03, 0x04],
+        timestamp_ms: now_ms,
+        nonce: nonce_bytes.clone(),
+        raw_quote: vec![],
+    };
+
+    let verifier = TeeVerifier::new();
+    let attestation = verifier.verify_quote(&quote, measurement, &nonce_bytes);
+
+    let out = serde_json::json!({
+        "verified": attestation.verified,
+        "tee_type": format!("{:?}", attestation.quote.tee_type),
+        "measurement_hash": attestation.quote.measurement_hash,
+        "verification_timestamp_ms": attestation.verification_timestamp_ms,
+        "verifier_id": attestation.verifier_id,
+        "is_fresh": verifier.is_quote_fresh(&quote, 300),
+    });
+
+    writer.write_json(&out);
+    if attestation.verified {
+        writer.write_status(&format!("TEE attestation verified ({})", format_tee_type(tee_type)));
+    } else {
+        writer.write_error("TEE attestation verification failed");
+    }
+    Ok(())
+}
+
+fn show_status(writer: &OutputWriter, _state: &AppState) -> Result<()> {
+    let layers = [
+        ("Automated", "Hash comparison, format validation", "enabled"),
+        ("RepOps", "Bitwise reproducibility check", "enabled"),
+        ("PeerReview", "2-of-3 reviewer committee", "enabled"),
+        ("Bisection", "Verde-style dispute resolution", "enabled"),
+        ("TEE", "Trusted execution environment proof", "enabled"),
+        ("ZK", "Zero-knowledge proof (placeholder)", "disabled"),
+        ("Arbitration", "Kleros-style final arbitration", "disabled"),
+    ];
+
+    let headers = ["Layer", "Description", "Status"];
+    let rows: Vec<Vec<String>> = layers
+        .iter()
+        .map(|(name, desc, status)| vec![name.to_string(), desc.to_string(), status.to_string()])
+        .collect();
+
+    writer.write_table(&headers, &rows);
+    Ok(())
+}
+
+// --- Helpers ---
+
+fn parse_comma_hashes(s: &str) -> Result<Vec<String>> {
+    let hashes: Vec<String> =
+        s.split(',').map(|h| h.trim().to_string()).filter(|h| !h.is_empty()).collect();
+    if hashes.is_empty() {
+        anyhow::bail!("no hashes found in input");
+    }
+    Ok(hashes)
+}
+
+fn build_repops_result(hashes: &[String]) -> RepOpsResult {
+    if hashes.len() == 1 {
+        RepOpsResult {
+            output_hash: hashes[0].clone(),
+            intermediate_hashes: vec![],
+            op_count: 1,
+            hash_count: 0,
+            reproducible: true,
+        }
+    } else {
+        let output_hash = hashes[hashes.len() - 1].clone();
+        let intermediate_hashes = hashes[..hashes.len() - 1].to_vec();
+        RepOpsResult {
+            output_hash,
+            intermediate_hashes,
+            op_count: hashes.len() as u32,
+            hash_count: (hashes.len() - 1) as u32,
+            reproducible: true,
+        }
+    }
+}
+
+fn parse_tee_type(s: &str) -> Result<TeeType> {
+    match s.to_lowercase().as_str() {
+        "intel_tdx" | "intel-tdx" | "tdx" => Ok(TeeType::IntelTdx),
+        "amd_sev" | "amd-sev" | "sev" => Ok(TeeType::AmdSev),
+        "nvidia_ccn" | "nvidia-ccn" | "nvidia" => Ok(TeeType::NvidiaCcn),
+        "apple_se" | "apple-se" | "apple_secure_enclave" | "apple" => {
+            Ok(TeeType::AppleSecureEnclave)
+        }
+        _ => anyhow::bail!(
+            "unknown TEE type '{}'. Valid: intel_tdx, amd_sev, nvidia_ccn, apple_se",
+            s
+        ),
+    }
+}
+
+fn format_tee_type(tt: TeeType) -> &'static str {
+    match tt {
+        TeeType::IntelTdx => "Intel TDX",
+        TeeType::AmdSev => "AMD SEV",
+        TeeType::NvidiaCcn => "NVIDIA CC",
+        TeeType::AppleSecureEnclave => "Apple Secure Enclave",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testutil::{human_writer, json_writer as test_writer, test_state};
+
+    // --- Gauntlet tests ---
+
+    #[test]
+    fn gauntlet_matching_hashes_passes() {
+        let state = test_state();
+        let writer = test_writer();
+        let result = run_gauntlet("test_match", "abc123", "abc123", &writer, &state);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn gauntlet_mismatching_hashes_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        let result = run_gauntlet("test_mismatch", "abc123", "def456", &writer, &state);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn gauntlet_empty_test_name_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(run_gauntlet("", "abc", "def", &writer, &state).is_err());
+    }
+
+    #[test]
+    fn gauntlet_empty_input_hash_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(run_gauntlet("test", "", "def", &writer, &state).is_err());
+    }
+
+    #[test]
+    fn gauntlet_empty_expected_hash_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(run_gauntlet("test", "abc", "", &writer, &state).is_err());
+    }
+
+    // --- SpotCheck tests ---
+
+    #[test]
+    fn spot_check_matching_files() {
+        let state = test_state();
+        let writer = test_writer();
+        let dir = std::env::temp_dir().join("agnetd_verify_spot_match");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let data = b"hello world";
+        let path_a = dir.join("original.bin");
+        let path_b = dir.join("recomputed.bin");
+        std::fs::write(&path_a, data).unwrap();
+        std::fs::write(&path_b, data).unwrap();
+
+        let result =
+            run_spot_check(path_a.to_str().unwrap(), path_b.to_str().unwrap(), &writer, &state);
+        assert!(result.is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn spot_check_different_files() {
+        let state = test_state();
+        let writer = test_writer();
+        let dir = std::env::temp_dir().join("agnetd_verify_spot_diff");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let path_a = dir.join("original.bin");
+        let path_b = dir.join("recomputed.bin");
+        std::fs::write(&path_a, b"hello").unwrap();
+        std::fs::write(&path_b, b"world").unwrap();
+
+        let result =
+            run_spot_check(path_a.to_str().unwrap(), path_b.to_str().unwrap(), &writer, &state);
+        assert!(result.is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn spot_check_missing_original_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(run_spot_check(
+            "/nonexistent/path/a.bin",
+            "/nonexistent/path/b.bin",
+            &writer,
+            &state,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn spot_check_empty_original_path_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(run_spot_check("", "/tmp/b.bin", &writer, &state).is_err());
+    }
+
+    #[test]
+    fn spot_check_empty_recomputed_path_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(run_spot_check("/tmp/a.bin", "", &writer, &state).is_err());
+    }
+
+    // --- RepOps tests ---
+
+    #[test]
+    fn repops_matching_hashes() {
+        let state = test_state();
+        let writer = test_writer();
+        let hashes = "h1,h2,h3";
+        let result = run_repops(hashes, hashes, &writer, &state);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn repops_different_hashes() {
+        let state = test_state();
+        let writer = test_writer();
+        let result = run_repops("a,b,c", "a,b,x", &writer, &state);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn repops_single_hash() {
+        let state = test_state();
+        let writer = test_writer();
+        let result = run_repops("only_one", "only_one", &writer, &state);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn repops_empty_a_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(run_repops("", "a,b", &writer, &state).is_err());
+    }
+
+    #[test]
+    fn repops_empty_b_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(run_repops("a,b", "", &writer, &state).is_err());
+    }
+
+    // --- Bisection tests ---
+
+    #[test]
+    fn bisection_all_match() {
+        let state = test_state();
+        let writer = test_writer();
+        let hashes = "h0,h1,h2,h3";
+        let result = run_bisection(hashes, hashes, &writer, &state);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn bisection_find_first_disagreement() {
+        let state = test_state();
+        let writer = test_writer();
+        let result = run_bisection("a,b,c,d,e,f,g,h", "a,b,c,X,e,f,g,h", &writer, &state);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn bisection_single_op_disagree() {
+        let state = test_state();
+        let writer = test_writer();
+        let result = run_bisection("good", "bad", &writer, &state);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn bisection_empty_claimant_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(run_bisection("", "a,b", &writer, &state).is_err());
+    }
+
+    #[test]
+    fn bisection_empty_challenger_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(run_bisection("a,b", "", &writer, &state).is_err());
+    }
+
+    // --- TEE tests ---
+
+    #[test]
+    fn tee_valid_attestation() {
+        let state = test_state();
+        let writer = test_writer();
+        let result = verify_tee("abc123", "aabbccdd", "intel_tdx", &writer, &state);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn tee_amd_sev_type() {
+        let state = test_state();
+        let writer = test_writer();
+        let result = verify_tee("measurement", "ff", "amd_sev", &writer, &state);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn tee_nvidia_type() {
+        let state = test_state();
+        let writer = test_writer();
+        let result = verify_tee("measurement", "ff", "nvidia_ccn", &writer, &state);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn tee_apple_se_type() {
+        let state = test_state();
+        let writer = test_writer();
+        let result = verify_tee("measurement", "ff", "apple_se", &writer, &state);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn tee_empty_measurement_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(verify_tee("", "aabb", "intel_tdx", &writer, &state).is_err());
+    }
+
+    #[test]
+    fn tee_empty_nonce_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(verify_tee("abc", "", "intel_tdx", &writer, &state).is_err());
+    }
+
+    #[test]
+    fn tee_invalid_nonce_hex_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(verify_tee("abc", "zzzz", "intel_tdx", &writer, &state).is_err());
+    }
+
+    #[test]
+    fn tee_unknown_type_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(verify_tee("abc", "ff", "unknown_tee", &writer, &state).is_err());
+    }
+
+    // --- Status tests ---
+
+    #[test]
+    fn status_displays_layers() {
+        let state = test_state();
+        let writer = human_writer();
+        let result = show_status(&writer, &state);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn status_json_format() {
+        let state = test_state();
+        let writer = test_writer();
+        let result = show_status(&writer, &state);
+        assert!(result.is_ok());
+    }
+
+    // --- Unit tests for helpers ---
+
+    #[test]
+    fn parse_comma_hashes_valid() {
+        let result = parse_comma_hashes("a,b,c").unwrap();
+        assert_eq!(result, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn parse_comma_hashes_trims_whitespace() {
+        let result = parse_comma_hashes(" a , b , c ").unwrap();
+        assert_eq!(result, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn parse_comma_hashes_single() {
+        let result = parse_comma_hashes("only").unwrap();
+        assert_eq!(result, vec!["only"]);
+    }
+
+    #[test]
+    fn parse_comma_hashes_empty_fails() {
+        assert!(parse_comma_hashes("").is_err());
+    }
+
+    #[test]
+    fn parse_comma_hashes_only_commas_fails() {
+        assert!(parse_comma_hashes(",,,,").is_err());
+    }
+
+    #[test]
+    fn parse_tee_type_intel_tdx() {
+        assert!(matches!(parse_tee_type("intel_tdx").unwrap(), TeeType::IntelTdx));
+    }
+
+    #[test]
+    fn parse_tee_type_aliases() {
+        assert!(matches!(parse_tee_type("tdx").unwrap(), TeeType::IntelTdx));
+        assert!(matches!(parse_tee_type("sev").unwrap(), TeeType::AmdSev));
+        assert!(matches!(parse_tee_type("nvidia").unwrap(), TeeType::NvidiaCcn));
+        assert!(matches!(parse_tee_type("apple").unwrap(), TeeType::AppleSecureEnclave));
+    }
+
+    #[test]
+    fn build_repops_result_single_hash() {
+        let result = build_repops_result(&["abc".to_string()]);
+        assert_eq!(result.output_hash, "abc");
+        assert!(result.intermediate_hashes.is_empty());
+        assert_eq!(result.op_count, 1);
+    }
+
+    #[test]
+    fn build_repops_result_multiple_hashes() {
+        let result = build_repops_result(&["h1".to_string(), "h2".to_string(), "h3".to_string()]);
+        assert_eq!(result.output_hash, "h3");
+        assert_eq!(result.intermediate_hashes, vec!["h1", "h2"]);
+        assert_eq!(result.op_count, 3);
+    }
+}

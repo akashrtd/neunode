@@ -21,6 +21,9 @@ neunode-reputation = { path = "../neunode-reputation" }
 neunode-bounty = { path = "../neunode-bounty" }
 neunode-inference = { path = "../neunode-inference" }
 neunode-training = { path = "../neunode-training" }
+neunode-knowledge = { path = "../neunode-knowledge" }
+neunode-lineage = { path = "../neunode-lineage" }
+neunode-verification = { path = "../neunode-verification" }
 clap = { workspace = true }
 comfy-table = { workspace = true }
 indicatif = { workspace = true }
