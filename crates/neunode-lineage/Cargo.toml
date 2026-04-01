@@ -1,0 +1,18 @@
+[package]
+name = "neunode-lineage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+neunode-core = { path = "../neunode-core" }
+neunode-crypto = { path = "../neunode-crypto" }
+ed25519-dalek = { workspace = true }
+petgraph = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+ts-rs = { workspace = true }
+chrono = { workspace = true }
