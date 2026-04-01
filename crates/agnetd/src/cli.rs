@@ -140,6 +140,12 @@ pub enum Commands {
         #[command(subcommand)]
         command: VerifyCommands,
     },
+    /// Discover agents and capabilities (alias: ds)
+    #[command(alias = "ds")]
+    Discover {
+        #[command(subcommand)]
+        command: DiscoverCommands,
+    },
     /// Real-time dashboard (alias: d)
     #[command(alias = "d")]
     Dashboard,
@@ -747,6 +753,50 @@ pub enum VerifyCommands {
     },
     /// Show available verification layers
     Status,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum DiscoverCommands {
+    /// Search for agents matching capabilities
+    Search {
+        /// Comma-separated required capabilities
+        #[arg(short, long)]
+        capabilities: String,
+        /// Minimum reputation score (0.0-5.0)
+        #[arg(long, default_value = "0.0")]
+        min_reputation: f64,
+        /// Maximum cost per unit
+        #[arg(long)]
+        max_cost: Option<f64>,
+        /// Only online agents
+        #[arg(long, default_value_t = false)]
+        online_only: bool,
+        /// Max results
+        #[arg(long, default_value = "20")]
+        limit: usize,
+    },
+    /// Find agents with complementary capabilities to yours
+    Complement {
+        /// Your comma-separated capabilities
+        #[arg(short, long)]
+        capabilities: String,
+        /// Max results
+        #[arg(long, default_value = "10")]
+        limit: usize,
+    },
+    /// Find capability gaps (capabilities with no providers)
+    Gaps,
+    /// Score a specific agent for a task
+    Score {
+        /// Agent DID to score
+        #[arg(long)]
+        agent: String,
+        /// Comma-separated required capabilities
+        #[arg(short, long)]
+        capabilities: String,
+    },
+    /// Show current discovery weights
+    Weights,
 }
 
 #[cfg(test)]

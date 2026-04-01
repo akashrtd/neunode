@@ -16,6 +16,7 @@ members = [
     "crates/neunode-knowledge",
     "crates/neunode-lineage",
     "crates/neunode-verification",
+    "crates/neunode-discovery",
     "crates/agnetd",
     "tests",
 ]

@@ -292,6 +292,24 @@ impl From<neunode_verification::error::VerificationError> for CliError {
     }
 }
 
+impl From<neunode_discovery::error::DiscoveryError> for CliError {
+    fn from(err: neunode_discovery::error::DiscoveryError) -> Self {
+        match &err {
+            neunode_discovery::error::DiscoveryError::NoMatches => {
+                Self::NotFound { resource_type: "agent".to_string(), id: "no matches".to_string() }
+            }
+            neunode_discovery::error::DiscoveryError::InvalidWeights { .. } => {
+                Self::Usage(err.to_string())
+            }
+            neunode_discovery::error::DiscoveryError::EmptyPool => Self::NotFound {
+                resource_type: "agent".to_string(),
+                id: "no agents registered".to_string(),
+            },
+            _ => Self::General { message: err.to_string(), source: None },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

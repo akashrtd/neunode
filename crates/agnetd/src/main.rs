@@ -6,6 +6,7 @@ mod cli;
 mod cmd_bounty;
 mod cmd_config;
 mod cmd_dashboard;
+mod cmd_discover;
 mod cmd_feed;
 mod cmd_identity;
 mod cmd_inference;
@@ -85,6 +86,9 @@ fn main() -> ExitCode {
             cmd_lineage::execute(command, &global_args, &mut app_state)
         }
         Commands::Verify { command } => cmd_verify::execute(command, &global_args, &mut app_state),
+        Commands::Discover { command } => {
+            cmd_discover::execute(command, &global_args, &mut app_state)
+        }
         Commands::Dashboard => rt.block_on(cmd_dashboard::execute(&global_args, &mut app_state)),
         Commands::Version => {
             println!("agnetd v{}", env!("CARGO_PKG_VERSION"));
