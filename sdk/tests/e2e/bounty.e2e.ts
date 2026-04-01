@@ -845,20 +845,21 @@ describe("Review System", () => {
     const { walletClient, publicClient, addresses } = getFixture();
     const id = await createAndClaimBounty("review-submit");
 
-    // Submit work
+    // Submit work — MUST await receipt before proceeding
     const providerClient = makeWalletClient(
       "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
     );
-    await providerClient.writeContract({
+    const submitWorkHash = await providerClient.writeContract({
       abi: neunodeBountyAbi,
       address: addresses.neunodeBounty,
       functionName: "submitWork",
       args: [id, SUBMISSION_HASH],
       account: providerClient.account,
     });
+    await publicClient.waitForTransactionReceipt({ hash: submitWorkHash });
 
-    // Grant bounty contract admin role on review
-    await walletClient.writeContract({
+    // Grant bounty contract admin role on review — MUST await receipt
+    const grantHash = await walletClient.writeContract({
       abi: bountyReviewAbi,
       address: addresses.bountyReview,
       functionName: "grantRole",
@@ -868,16 +869,18 @@ describe("Review System", () => {
       ],
       account: walletClient.account,
     });
+    await publicClient.waitForTransactionReceipt({ hash: grantHash });
 
-    // Start review
+    // Start review — MUST await receipt before signing with nonce
     const reviewers = [REVIEWER_1, REVIEWER_2, REVIEWER_3] as const;
-    await walletClient.writeContract({
+    const startHash = await walletClient.writeContract({
       abi: neunodeBountyAbi,
       address: addresses.neunodeBounty,
       functionName: "startReview",
       args: [id, reviewers],
       account: walletClient.account,
     });
+    await publicClient.waitForTransactionReceipt({ hash: startHash });
 
     // Build EIP-712 domain from contract
     const domainData = await publicClient.readContract({

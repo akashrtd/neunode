@@ -35,6 +35,9 @@ pub enum P2pError {
 
     #[error("channel closed")]
     ChannelClosed,
+
+    #[error("configuration error: {0}")]
+    ConfigError(String),
 }
 
 /// Result alias for P2P operations.

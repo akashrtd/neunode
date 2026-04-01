@@ -45,11 +45,12 @@ contract NeunodeRegistry {
     error AgentNotActive(bytes32 didHash);
     error EmptyCapabilities();
     error EmptyEndpoint();
+    error ZeroAddress();
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
     constructor(address identity_) {
-        require(identity_ != address(0), "invalid identity address");
+        if (identity_ == address(0)) revert ZeroAddress();
         identity = INeunodeIdentity(identity_);
     }
 

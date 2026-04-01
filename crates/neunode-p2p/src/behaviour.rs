@@ -59,7 +59,7 @@ impl From<client::Event> for NeunodeEvent {
 }
 
 pub fn build_behaviour(keypair: &Keypair, local_peer_id: PeerId) -> Result<NeunodeBehaviour> {
-    let gs_config = create_gossipsub_config();
+    let gs_config = create_gossipsub_config()?;
     let message_authenticity = gossipsub::MessageAuthenticity::Signed(keypair.clone());
     let gossipsub = gossipsub::Behaviour::new(message_authenticity, gs_config)
         .map_err(|e| P2pError::ConnectionFailed(e.to_string()))?;
@@ -69,7 +69,7 @@ pub fn build_behaviour(keypair: &Keypair, local_peer_id: PeerId) -> Result<Neuno
         libp2p::StreamProtocol::try_from_owned(
             neunode_core::constants::p2p::DHT_PROTOCOL.to_string(),
         )
-        .expect("DHT protocol name is valid"),
+        .map_err(|e| P2pError::ConfigError(format!("invalid DHT protocol name: {e}")))?,
     );
     let kademlia = libp2p::kad::Behaviour::with_config(local_peer_id, store, kad_config);
 

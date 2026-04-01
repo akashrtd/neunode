@@ -1,4 +1,4 @@
-import { neunodeTokenAbi } from './neunode-token.js';
+import { neunodeTokenAbi } from "./neunode-token.js";
 
 /**
  * ComputeToken ABI — nCompute (GPU/CPU hours).

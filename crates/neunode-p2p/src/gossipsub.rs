@@ -45,12 +45,12 @@ impl Default for GossipsubConfig {
     }
 }
 
-pub fn create_gossipsub_config() -> libp2p::gossipsub::Config {
+pub fn create_gossipsub_config() -> Result<libp2p::gossipsub::Config> {
     let our_config = GossipsubConfig::default();
     create_gossipsub_config_from(&our_config)
 }
 
-pub fn create_gossipsub_config_from(cfg: &GossipsubConfig) -> libp2p::gossipsub::Config {
+pub fn create_gossipsub_config_from(cfg: &GossipsubConfig) -> Result<libp2p::gossipsub::Config> {
     ConfigBuilder::default()
         .max_transmit_size(cfg.max_message_size)
         .mesh_n(cfg.mesh_degree)
@@ -71,7 +71,7 @@ pub fn create_gossipsub_config_from(cfg: &GossipsubConfig) -> libp2p::gossipsub:
             MessageId::from(std::hash::Hasher::finish(&hasher).to_string())
         })
         .build()
-        .expect("gossipsub config is valid")
+        .map_err(|e| P2pError::ConfigError(format!("gossipsub config build failed: {e}")))
 }
 
 pub fn topic_for_kind(kind: &Kind) -> IdentTopic {

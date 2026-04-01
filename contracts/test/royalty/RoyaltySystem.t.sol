@@ -491,7 +491,7 @@ contract RoyaltySystemTest is Test {
     }
 
     function testRevertSetProtocolRoyaltyBpsTooHigh() public {
-        vm.expectRevert("max 50%");
+        vm.expectRevert(abi.encodeWithSelector(RoyaltySplitter.BpsExceedsMax.selector, 5001, 5000));
         splitter.setProtocolRoyaltyBps(5001);
     }
 
@@ -578,7 +578,7 @@ contract RoyaltySystemTest is Test {
     }
 
     function testRevertSetDefaultReceiverZeroAddress() public {
-        vm.expectRevert("zero address");
+        vm.expectRevert(RoyaltySplitter.ZeroAddress.selector);
         splitter.setDefaultReceiver(address(0));
     }
 

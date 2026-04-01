@@ -193,7 +193,7 @@ contract NeunodeRegistryTest is Test {
     // ─── Revert Constructor ───────────────────────────────────────────────
 
     function testRevertConstructorZeroAddress() public {
-        vm.expectRevert("invalid identity address");
+        vm.expectRevert(NeunodeRegistry.ZeroAddress.selector);
         new NeunodeRegistry(address(0));
     }
 

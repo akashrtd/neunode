@@ -54,7 +54,10 @@ impl<'a> TokenStore<'a> {
         let types = [TOKEN_COMPUTE, TOKEN_TRAINING, TOKEN_BANDWIDTH, TOKEN_STORAGE];
         let balances: Vec<TokenBalance> =
             types.iter().map(|tt| self.get_balance(agent_did, *tt)).collect::<Result<Vec<_>>>()?;
-        Ok(balances.try_into().expect("exactly 4 token types matched"))
+        balances.try_into().map_err(|v: Vec<TokenBalance>| StorageError::TokenCountMismatch {
+            expected: 4,
+            got: v.len(),
+        })
     }
 
     pub fn transfer(

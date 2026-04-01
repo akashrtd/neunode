@@ -51,6 +51,9 @@ contract GovernanceTest is Test {
         // Grant governanceAdmin the GOVERNANCE_ROLE
         gov.grantRole(gov.GOVERNANCE_ROLE(), governanceAdmin);
 
+        // Allowlist the mock target for execute() calls
+        gov.setAllowedTarget(address(target), true);
+
         // Mint tokens to test accounts
         token.mint(proposer, STAKE_AMOUNT);
         token.mint(voter1, STAKE_AMOUNT);
@@ -646,7 +649,7 @@ contract GovernanceTest is Test {
         uint256 proposalId = _createProposal();
 
         vm.prank(attacker);
-        vm.expectRevert("not authorized");
+        vm.expectRevert(abi.encodeWithSelector(NeunodeGovernance.NotAuthorized.selector, attacker));
         gov.cancel(proposalId);
     }
 
@@ -672,6 +675,103 @@ contract GovernanceTest is Test {
         vm.prank(proposer);
         vm.expectRevert(NeunodeGovernance.ArrayLengthMismatch.selector);
         gov.propose(targets, values, calldatas, "Mismatch");
+    }
+
+    // ─── 31. Execute Reverts When Target Not Allowed ─────────────────────
+
+    function testRevertExecuteTargetNotAllowed() public {
+        // Create a proposal targeting a disallowed address
+        TargetMock disallowedTarget = new TargetMock();
+
+        address[] memory targets = new address[](1);
+        uint256[] memory values = new uint256[](1);
+        bytes[] memory calldatas = new bytes[](1);
+        targets[0] = address(disallowedTarget);
+        values[0] = 0;
+        calldatas[0] = abi.encodeCall(TargetMock.setValue, (99));
+
+        vm.prank(proposer);
+        uint256 proposalId = gov.propose(targets, values, calldatas, "Disallowed Target");
+
+        // Advance to voting, vote For, pass
+        vm.warp(block.timestamp + VOTING_DELAY + 1);
+        vm.prank(voter1);
+        gov.castVote(proposalId, uint8(IGovernance.VoteType.For));
+        vm.prank(voter2);
+        gov.castVote(proposalId, uint8(IGovernance.VoteType.For));
+
+        vm.warp(block.timestamp + VOTING_PERIOD + 1);
+        gov.queue(proposalId);
+        vm.warp(block.timestamp + TIMELOCK + 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                NeunodeGovernance.TargetNotAllowed.selector, address(disallowedTarget)
+            )
+        );
+        gov.execute(proposalId);
+    }
+
+    // ─── 32. setAllowedTarget Works ──────────────────────────────────────
+
+    function testSetAllowedTarget() public {
+        TargetMock newTarget = new TargetMock();
+
+        // Initially not allowed
+        assertFalse(gov.allowedTargets(address(newTarget)));
+
+        // Governance admin adds it
+        vm.prank(governanceAdmin);
+        gov.setAllowedTarget(address(newTarget), true);
+        assertTrue(gov.allowedTargets(address(newTarget)));
+
+        // Governance admin removes it
+        vm.prank(governanceAdmin);
+        gov.setAllowedTarget(address(newTarget), false);
+        assertFalse(gov.allowedTargets(address(newTarget)));
+    }
+
+    // ─── 33. Non-Governance Cannot setAllowedTarget ──────────────────────
+
+    function testRevertSetAllowedTargetNonGovernance() public {
+        TargetMock newTarget = new TargetMock();
+
+        vm.prank(attacker);
+        vm.expectRevert();
+        gov.setAllowedTarget(address(newTarget), true);
+    }
+
+    // ─── 34. Execute Allowed Target Succeeds ────────────────────────────
+
+    function testExecuteAllowedTarget() public {
+        // Create a new target and allowlist it
+        TargetMock newTarget = new TargetMock();
+        gov.setAllowedTarget(address(newTarget), true);
+
+        address[] memory targets = new address[](1);
+        uint256[] memory values = new uint256[](1);
+        bytes[] memory calldatas = new bytes[](1);
+        targets[0] = address(newTarget);
+        values[0] = 0;
+        calldatas[0] = abi.encodeCall(TargetMock.setValue, (77));
+
+        vm.prank(proposer);
+        uint256 proposalId = gov.propose(targets, values, calldatas, "New Allowed Target");
+
+        vm.warp(block.timestamp + VOTING_DELAY + 1);
+        vm.prank(voter1);
+        gov.castVote(proposalId, uint8(IGovernance.VoteType.For));
+        vm.prank(voter2);
+        gov.castVote(proposalId, uint8(IGovernance.VoteType.For));
+
+        vm.warp(block.timestamp + VOTING_PERIOD + 1);
+        gov.queue(proposalId);
+        vm.warp(block.timestamp + TIMELOCK + 1);
+
+        gov.execute(proposalId);
+
+        assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Executed));
+        assertEq(newTarget.value(), 77);
     }
 }
 

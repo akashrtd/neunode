@@ -57,11 +57,15 @@ contract NeunodeGovernance is AccessControl, IGovernance {
     uint256 public timelock;
     uint256 public executionWindow;
 
+    // Target whitelist for execute() — only allowed addresses can be called
+    mapping(address => bool) public allowedTargets;
+
     bytes32 public constant GOVERNANCE_ROLE = keccak256("GOVERNANCE_ROLE");
 
     // ─── Events ───────────────────────────────────────────────────────────
 
     event GovernanceParametersUpdated(address indexed updater);
+    event AllowedTargetUpdated(address indexed target, bool allowed);
 
     // ─── Errors ───────────────────────────────────────────────────────────
 
@@ -79,6 +83,10 @@ contract NeunodeGovernance is AccessControl, IGovernance {
     error ProposalNotCancellable(uint256 proposalId);
     error ArrayLengthMismatch();
     error EmptyProposal();
+    error ZeroAddress();
+    error ExecutionFailed(uint256 proposalId);
+    error NotAuthorized(address caller);
+    error TargetNotAllowed(address target);
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
@@ -91,7 +99,7 @@ contract NeunodeGovernance is AccessControl, IGovernance {
         uint256 timelock_,
         uint256 executionWindow_
     ) {
-        require(token_ != address(0), "zero address");
+        if (token_ == address(0)) revert ZeroAddress();
 
         token = INeunodeToken(token_);
         votingDelay = votingDelay_;
@@ -247,8 +255,9 @@ contract NeunodeGovernance is AccessControl, IGovernance {
         p.executed = true;
 
         for (uint256 i = 0; i < p.targets.length; i++) {
+            if (!allowedTargets[p.targets[i]]) revert TargetNotAllowed(p.targets[i]);
             (bool success,) = p.targets[i].call{value: p.values[i]}(p.calldatas[i]);
-            require(success, "execution failed");
+            if (!success) revert ExecutionFailed(proposalId);
         }
 
         emit ProposalExecuted(proposalId);
@@ -266,7 +275,7 @@ contract NeunodeGovernance is AccessControl, IGovernance {
             revert ProposalNotCancellable(proposalId);
         }
         if (msg.sender != p.proposer && !hasRole(GOVERNANCE_ROLE, msg.sender)) {
-            revert("not authorized");
+            revert NotAuthorized(msg.sender);
         }
 
         p.cancelled = true;
@@ -346,6 +355,14 @@ contract NeunodeGovernance is AccessControl, IGovernance {
     function setExecutionWindow(uint256 newWindow) external onlyRole(GOVERNANCE_ROLE) {
         executionWindow = newWindow;
         emit GovernanceParametersUpdated(msg.sender);
+    }
+
+    /// @notice Add or remove an address from the allowed targets whitelist
+    /// @param target The address to update
+    /// @param allowed Whether the target is allowed for execution
+    function setAllowedTarget(address target, bool allowed) external onlyRole(GOVERNANCE_ROLE) {
+        allowedTargets[target] = allowed;
+        emit AllowedTargetUpdated(target, allowed);
     }
 
     // ─── View Helpers ────────────────────────────────────────────────────

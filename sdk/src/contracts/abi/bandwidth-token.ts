@@ -1,4 +1,4 @@
-import { neunodeTokenAbi } from './neunode-token.js';
+import { neunodeTokenAbi } from "./neunode-token.js";
 
 /**
  * BandwidthToken ABI — nBandwidth (transfer volume).

@@ -97,20 +97,22 @@ contract BountyIntegrationTest is Test {
 
     function testRevertAssignCommitteeZeroAddress() public {
         address[3] memory reviewers = [reviewer1, address(0), reviewer3];
-        vm.expectRevert("zero address reviewer");
+        vm.expectRevert(BountyReview.ZeroAddressReviewer.selector);
         review.assignCommittee(BOUNTY_ID, reviewers);
     }
 
     function testRevertAssignCommitteeDuplicate() public {
         address[3] memory reviewers = [reviewer1, reviewer1, reviewer3];
-        vm.expectRevert("duplicate reviewer");
+        vm.expectRevert(BountyReview.DuplicateReviewer.selector);
         review.assignCommittee(BOUNTY_ID, reviewers);
     }
 
     function testRevertAssignCommitteeTwice() public {
         address[3] memory reviewers = [reviewer1, reviewer2, reviewer3];
         review.assignCommittee(BOUNTY_ID, reviewers);
-        vm.expectRevert("committee already assigned");
+        vm.expectRevert(
+            abi.encodeWithSelector(BountyReview.CommitteeAlreadyAssigned.selector, BOUNTY_ID)
+        );
         review.assignCommittee(BOUNTY_ID, reviewers);
     }
 
@@ -195,7 +197,9 @@ contract BountyIntegrationTest is Test {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         vm.prank(reviewer1);
-        vm.expectRevert("already reviewed");
+        vm.expectRevert(
+            abi.encodeWithSelector(BountyReview.AlreadyReviewed.selector, BOUNTY_ID, reviewer1)
+        );
         review.submitReview(BOUNTY_ID, 90, "good work", sig);
     }
 
@@ -215,7 +219,9 @@ contract BountyIntegrationTest is Test {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         vm.prank(outsider);
-        vm.expectRevert("not a reviewer");
+        vm.expectRevert(
+            abi.encodeWithSelector(BountyReview.NotReviewer.selector, BOUNTY_ID, outsider)
+        );
         review.submitReview(BOUNTY_ID, 80, "test", sig);
     }
 
@@ -242,7 +248,9 @@ contract BountyIntegrationTest is Test {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         vm.prank(reviewer3);
-        vm.expectRevert("already resolved");
+        vm.expectRevert(
+            abi.encodeWithSelector(BountyReview.CommitteeAlreadyResolved.selector, BOUNTY_ID)
+        );
         review.submitReview(BOUNTY_ID, 90, "good work", sig);
     }
 

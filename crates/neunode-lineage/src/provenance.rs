@@ -19,7 +19,9 @@ pub fn compute_safetensors_hash(data: &[u8]) -> Result<String> {
             "safetensors data too short for header".to_string(),
         ));
     }
-    let header_len = u64::from_le_bytes(data[..8].try_into().expect("slice is 8 bytes"));
+    let header_len = u64::from_le_bytes(data[..8].try_into().map_err(|_| {
+        LineageError::ConfigInvalid("safetensors header length bytes conversion failed".to_string())
+    })?);
     let header_end = 8 + header_len as usize;
     if data.len() < header_end {
         return Err(LineageError::ConfigInvalid(

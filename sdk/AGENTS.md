@@ -52,7 +52,7 @@ sdk/
 
 ## NOTES
 
-- No SDK CI workflow — only Rust and Solidity are in CI. Run `npm test` + `npm run typecheck` locally.
+- SDK CI runs in the `sdk` job of `.github/workflows/ci.yml` (build, typecheck, lint, test).
 - E2E tests require `anvil` binary installed. Sequential execution (single-fork, shared Anvil state).
 - 1 known flaky test: `bounty.e2e.ts > Review System > submitReview` (Anvil snapshot isolation issue).
 - `docs/api/` is 198 auto-generated TypeDoc files — never edit manually, regenerate with `npm run docs`.

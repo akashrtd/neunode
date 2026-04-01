@@ -42,10 +42,16 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
+    // ─── Errors ───────────────────────────────────────────────────────────
+
+    error ZeroAddress();
+    error BpsExceedsMax(uint256 bps, uint256 max);
+    error InvalidContributionType(uint8 contributionType);
+
     // ─── Constructor ──────────────────────────────────────────────────────
 
     constructor(address registry_) {
-        require(registry_ != address(0), "zero address registry");
+        if (registry_ == address(0)) revert ZeroAddress();
         registry = IModelRegistry(registry_);
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -71,7 +77,7 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
 
     /// @notice Update protocol royalty cap in basis points
     function setProtocolRoyaltyBps(uint256 newBps) external onlyRole(ADMIN_ROLE) {
-        require(newBps <= 5000, "max 50%");
+        if (newBps > 5000) revert BpsExceedsMax(newBps, 5000);
         uint256 oldBps = protocolRoyaltyBps;
         protocolRoyaltyBps = newBps;
         emit ProtocolRoyaltyBpsUpdated(oldBps, newBps);
@@ -79,7 +85,7 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
 
     /// @notice Update default receiver for ERC-2981
     function setDefaultReceiver(address receiver) external onlyRole(ADMIN_ROLE) {
-        require(receiver != address(0), "zero address");
+        if (receiver == address(0)) revert ZeroAddress();
         defaultReceiver = receiver;
     }
 
@@ -175,7 +181,7 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
         override
         returns (uint256)
     {
-        require(contributionType <= 5, "invalid type");
+        if (contributionType > 5) revert InvalidContributionType(contributionType);
         uint256[6] memory weights = [uint256(100), 80, 70, 60, 50, 30];
         return weights[contributionType];
     }

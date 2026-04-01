@@ -28,6 +28,9 @@ pub enum StorageError {
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("token count mismatch: expected {expected}, got {got}")]
+    TokenCountMismatch { expected: usize, got: usize },
 }
 
 pub type Result<T> = std::result::Result<T, StorageError>;

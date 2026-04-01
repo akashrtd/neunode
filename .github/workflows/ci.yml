@@ -57,5 +57,7 @@ jobs:
         run: cd sdk && npm run build
       - name: Typecheck
         run: cd sdk && npm run typecheck
+      - name: Lint
+        run: cd sdk && npm run lint
       - name: Test (unit)
         run: cd sdk && npm test

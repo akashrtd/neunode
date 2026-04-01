@@ -103,7 +103,7 @@ cd contracts && forge snapshot --check   # Gas snapshot (CI enforced)
 
 ## NOTES
 
-- No SDK CI workflow exists — only Rust and Solidity are in CI.
+- SDK CI runs in the `sdk` job of `.github/workflows/ci.yml` (build, typecheck, lint, test).
 - E2E tests are sequential (single Anvil fork, shared state). One known flaky test: `bounty.e2e.ts > Review System > submitReview`.
 - `contracts/lib/` contains vendored forge-std + openzeppelin-contracts — never modify.
 - `sdk/docs/api/` is auto-generated TypeDoc (198 files) — never edit manually.

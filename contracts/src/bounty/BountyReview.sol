@@ -43,6 +43,18 @@ contract BountyReview is IBountyReview, AccessControl, EIP712 {
 
     mapping(address => uint256) public nonces;
 
+    // ─── Errors ───────────────────────────────────────────────────────────
+
+    error CommitteeAlreadyAssigned(bytes32 bountyId);
+    error ZeroAddressReviewer();
+    error DuplicateReviewer();
+    error CommitteeNotAssigned(bytes32 bountyId);
+    error CommitteeAlreadyResolved(bytes32 bountyId);
+    error AlreadyReviewed(bytes32 bountyId, address reviewer);
+    error NotReviewer(bytes32 bountyId, address caller);
+    error InvalidSignature(address expected, address actual);
+    error IndexOutOfBounds(uint256 index, uint256 length);
+
     // ─── Events ───────────────────────────────────────────────────────────
 
     event ReviewSubmitted(
@@ -64,16 +76,12 @@ contract BountyReview is IBountyReview, AccessControl, EIP712 {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        require(!committees[bountyId].assigned, "committee already assigned");
-        require(
-            reviewers[0] != address(0) && reviewers[1] != address(0) && reviewers[2] != address(0),
-            "zero address reviewer"
-        );
-        require(
-            reviewers[0] != reviewers[1] && reviewers[1] != reviewers[2]
-                && reviewers[0] != reviewers[2],
-            "duplicate reviewer"
-        );
+        if (committees[bountyId].assigned) revert CommitteeAlreadyAssigned(bountyId);
+        if (reviewers[0] == address(0) || reviewers[1] == address(0) || reviewers[2] == address(0)) revert ZeroAddressReviewer();
+        if (
+            reviewers[0] == reviewers[1] || reviewers[1] == reviewers[2]
+                || reviewers[0] == reviewers[2]
+        ) revert DuplicateReviewer();
 
         committees[bountyId] = ReviewCommittee({
             reviewers: reviewers, acceptCount: 0, rejectCount: 0, resolved: false, assigned: true
@@ -90,9 +98,9 @@ contract BountyReview is IBountyReview, AccessControl, EIP712 {
         bytes calldata signature
     ) external {
         ReviewCommittee storage committee = committees[bountyId];
-        require(committee.assigned, "no committee assigned");
-        require(!committee.resolved, "already resolved");
-        require(!hasReviewed[bountyId][msg.sender], "already reviewed");
+        if (!committee.assigned) revert CommitteeNotAssigned(bountyId);
+        if (committee.resolved) revert CommitteeAlreadyResolved(bountyId);
+        if (hasReviewed[bountyId][msg.sender]) revert AlreadyReviewed(bountyId, msg.sender);
 
         // Verify reviewer is on the committee
         bool isReviewer = false;
@@ -102,7 +110,7 @@ contract BountyReview is IBountyReview, AccessControl, EIP712 {
                 break;
             }
         }
-        require(isReviewer, "not a reviewer");
+        if (!isReviewer) revert NotReviewer(bountyId, msg.sender);
 
         // Verify EIP-712 signature
         bytes32 structHash = keccak256(
@@ -112,7 +120,7 @@ contract BountyReview is IBountyReview, AccessControl, EIP712 {
         );
         bytes32 hash = _hashTypedDataV4(structHash);
         address signer = hash.recover(signature);
-        require(signer == msg.sender, "invalid signature");
+        if (signer != msg.sender) revert InvalidSignature(msg.sender, signer);
 
         nonces[msg.sender]++;
         hasReviewed[bountyId][msg.sender] = true;
@@ -158,7 +166,9 @@ contract BountyReview is IBountyReview, AccessControl, EIP712 {
         view
         returns (address reviewer, uint8 score, string memory feedback)
     {
-        require(index < reviews[bountyId].length, "index out of bounds");
+        if (index >= reviews[bountyId].length) {
+            revert IndexOutOfBounds(index, reviews[bountyId].length);
+        }
         Review storage r = reviews[bountyId][index];
         return (r.reviewer, r.score, r.feedback);
     }

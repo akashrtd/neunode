@@ -1,110 +1,101 @@
-export { createIdentityResource } from "./identity.js";
 export type {
-  IdentityResource,
-  IdentityCreateParams,
-  IdentityCreateResult,
-  IdentityShowResult,
-  IdentityListResult,
-  IdentityExportParams,
-  IdentityExportResult,
-} from "./identity.js";
-
-export { createConfigResource } from "./config.js";
+	BountyCancelResult,
+	BountyClaimParams,
+	BountyClaimResult,
+	BountyCreateParams,
+	BountyCreateResult,
+	BountyListParams,
+	BountyResource,
+	BountyReviewParams,
+	BountyReviewResult,
+	BountyShowResult,
+	BountySubmitParams,
+	BountySubmitResult,
+} from "./bounty.js";
+export { createBountyResource } from "./bounty.js";
 export type { ConfigResource, ConfigSetParams } from "./config.js";
-
+export { createConfigResource } from "./config.js";
+export type {
+	FeedListItem,
+	FeedListParams,
+	FeedPostParams,
+	FeedPostResult,
+	FeedResource,
+	FeedShowResult,
+	FeedSubscribeResult,
+} from "./feed.js";
 export { createFeedResource } from "./feed.js";
 export type {
-  FeedResource,
-  FeedPostParams,
-  FeedPostResult,
-  FeedListParams,
-  FeedListItem,
-  FeedShowResult,
-  FeedSubscribeResult,
-} from "./feed.js";
-
-export { createMeshResource } from "./mesh.js";
+	IdentityCreateParams,
+	IdentityCreateResult,
+	IdentityExportParams,
+	IdentityExportResult,
+	IdentityListResult,
+	IdentityResource,
+	IdentityShowResult,
+} from "./identity.js";
+export { createIdentityResource } from "./identity.js";
 export type {
-  MeshResource,
-  MeshStatusResult,
-  MeshPeersResult,
-  MeshConnectResult,
-  MeshDisconnectResult,
-} from "./mesh.js";
-
-export { createModelResource } from "./model.js";
-export type {
-  ModelResource,
-  ModelListResult,
-  ModelShowResult,
-  ModelPushParams,
-  ModelPushResult,
-  ModelRmResult,
-} from "./model.js";
-
-export { createTrainResource } from "./train.js";
-export type {
-  TrainResource,
-  TrainStartParams,
-  TrainStartResult,
-  TrainStatusResult,
-  TrainStopResult,
-  TrainListResult,
-  WorkerRegisterParams,
-  WorkerRegisterResult,
-  WorkerListParams,
-  WorkerListResult,
-  CoordinatorStatusParams,
-  CoordinatorStatusResult,
-} from "./train.js";
-
-export { createBountyResource } from "./bounty.js";
-export type {
-  BountyResource,
-  BountyCreateParams,
-  BountyCreateResult,
-  BountyClaimParams,
-  BountyClaimResult,
-  BountySubmitParams,
-  BountySubmitResult,
-  BountyReviewParams,
-  BountyReviewResult,
-  BountyListParams,
-  BountyShowResult,
-  BountyCancelResult,
-} from "./bounty.js";
-
-export { createTokenResource } from "./token.js";
-export type {
-  TokenResource,
-  TokenBalanceResult,
-  TokenAllBalancesResult,
-  TokenTransferParams,
-  TokenTransferResult,
-  TokenStakeParams,
-  TokenStakeResult,
-  TokenUnstakeResult,
-  TokenStakeStatusResult,
-  TokenDecayInfoResult,
-} from "./token.js";
-
-export { createReputationResource } from "./reputation.js";
-export type {
-  ReputationResource,
-  ReputationShowResult,
-  ReputationAttestParams,
-  ReputationAttestResult,
-  ReputationLeaderboardResult,
-  ReputationFactorsResult,
-} from "./reputation.js";
-
+	InferenceListModelsResult,
+	InferencePricingResult,
+	InferenceProvidersResult,
+	InferenceRequestParams,
+	InferenceRequestResult,
+	InferenceResource,
+	InferenceRouteResult,
+} from "./inference.js";
 export { createInferenceResource } from "./inference.js";
 export type {
-  InferenceResource,
-  InferenceRequestParams,
-  InferenceRequestResult,
-  InferenceListModelsResult,
-  InferenceProvidersResult,
-  InferenceRouteResult,
-  InferencePricingResult,
-} from "./inference.js";
+	MeshConnectResult,
+	MeshDisconnectResult,
+	MeshPeersResult,
+	MeshResource,
+	MeshStatusResult,
+} from "./mesh.js";
+export { createMeshResource } from "./mesh.js";
+export type {
+	ModelListResult,
+	ModelPushParams,
+	ModelPushResult,
+	ModelResource,
+	ModelRmResult,
+	ModelShowResult,
+} from "./model.js";
+export { createModelResource } from "./model.js";
+export type {
+	ReputationAttestParams,
+	ReputationAttestResult,
+	ReputationFactorsResult,
+	ReputationLeaderboardResult,
+	ReputationResource,
+	ReputationShowResult,
+} from "./reputation.js";
+export { createReputationResource } from "./reputation.js";
+export type {
+	TokenAllBalancesResult,
+	TokenBalanceResult,
+	TokenDecayInfoResult,
+	TokenResource,
+	TokenStakeParams,
+	TokenStakeResult,
+	TokenStakeStatusResult,
+	TokenTransferParams,
+	TokenTransferResult,
+	TokenUnstakeResult,
+} from "./token.js";
+export { createTokenResource } from "./token.js";
+export type {
+	CoordinatorStatusParams,
+	CoordinatorStatusResult,
+	TrainListResult,
+	TrainResource,
+	TrainStartParams,
+	TrainStartResult,
+	TrainStatusResult,
+	TrainStopResult,
+	WorkerListParams,
+	WorkerListResult,
+	WorkerRegisterParams,
+	WorkerRegisterResult,
+} from "./train.js";
+export { createTrainResource } from "./train.js";
