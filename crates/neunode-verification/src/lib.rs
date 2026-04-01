@@ -5,6 +5,8 @@ pub mod repops;
 pub mod spot_check;
 pub mod tee;
 pub mod types;
+#[cfg(feature = "zk")]
+pub mod zk;
 
 pub use bisection::{BisectionResult, BisectionSolver};
 pub use error::{Result, VerificationError};
@@ -15,3 +17,5 @@ pub use tee::{TeeAttestation, TeeQuote, TeeVerifier};
 pub use types::{
     ArtifactHash, VerificationLayer, VerificationRequest, VerificationResult, VerificationTier,
 };
+#[cfg(feature = "zk")]
+pub use zk::{ZkProofResult, ZkProofSystem, ZkVerifier};
