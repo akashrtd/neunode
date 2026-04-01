@@ -233,7 +233,7 @@ fn verify_tee(
     };
 
     let verifier = TeeVerifier::new();
-    let attestation = verifier.verify_quote(&quote, measurement, &nonce_bytes);
+    let attestation = verifier.verify_quote(&quote, measurement, &nonce_bytes)?;
 
     let out = serde_json::json!({
         "verified": attestation.verified,

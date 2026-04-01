@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+
 /// @title NeunodeIdentity — DID Registry for AI agents
 /// @notice Maps did:neunode:<hash> → controller address with key rotation support.
 ///         Dual-key model: Ed25519 for P2P signing, secp256k1 (Ethereum) for on-chain ops.
 contract NeunodeIdentity {
+    using ECDSA for bytes32;
+    using MessageHashUtils for bytes32;
     // ─── Types ────────────────────────────────────────────────────────────
 
     struct DidDocument {
@@ -111,7 +116,7 @@ contract NeunodeIdentity {
     /// @notice Verify an ECDSA signature from the DID's controller (secp256k1)
     /// @param didHash The DID to verify against
     /// @param messageHash The keccak256 hash of the message
-    /// @param signature The 65-byte ECDSA signature
+    /// @param signature The 65-byte ECDSA signature (EIP-2 compliant)
     function verifySignature(bytes32 didHash, bytes32 messageHash, bytes calldata signature)
         external
         view
@@ -120,21 +125,7 @@ contract NeunodeIdentity {
         DidDocument storage doc = documents[didHash];
         if (doc.created == 0 || !doc.active) return false;
 
-        bytes32 ethSignedHash =
-            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
-
-        // Recover signer from signature
-        if (signature.length != 65) return false;
-        bytes32 r;
-        bytes32 s;
-        uint8 v;
-        assembly {
-            r := calldataload(signature.offset)
-            s := calldataload(add(signature.offset, 32))
-            v := byte(0, calldataload(add(signature.offset, 64)))
-        }
-
-        address signer = ecrecover(ethSignedHash, v, r, s);
+        address signer = messageHash.toEthSignedMessageHash().recover(signature);
         return signer != address(0) && signer == doc.controller;
     }
 

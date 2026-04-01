@@ -93,8 +93,8 @@ fn sigchain_multi_event_hash_chain_and_verification() {
     assert_eq!(chain.len(), 3);
 
     // Hash chain links
-    assert_eq!(e1.prev_hash, e0.compute_hash(), "e1 prev_hash should equal e0 hash");
-    assert_eq!(e2.prev_hash, e1.compute_hash(), "e2 prev_hash should equal e1 hash");
+    assert_eq!(e1.prev_hash, e0.compute_hash().unwrap(), "e1 prev_hash should equal e0 hash");
+    assert_eq!(e2.prev_hash, e1.compute_hash().unwrap(), "e2 prev_hash should equal e1 hash");
 
     // All events signed
     assert!(e0.verify_signature(&vk_bytes));

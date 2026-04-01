@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 use ed25519_dalek::Verifier;
-use neunode_core::{AgentLifecycle, Did, PeerId, CID};
+use neunode_core::{AgentLifecycle, Did, NeunodeError, PeerId, CID};
 use neunode_crypto::hash::{multihash_sha256, sha256, DOMAIN_AGENT_CARD};
 use serde::{Deserialize, Serialize};
 
@@ -87,7 +87,7 @@ impl AgentCardBuilder {
         self
     }
 
-    pub fn build(self, keyring: &Keyring) -> AgentCard {
+    pub fn build(self, keyring: &Keyring) -> std::result::Result<AgentCard, NeunodeError> {
         AgentCard::new(&self.name, keyring, self.capabilities, self.metadata)
     }
 }
@@ -99,24 +99,24 @@ impl AgentCard {
         keyring: &Keyring,
         capabilities: Vec<String>,
         metadata: HashMap<String, String>,
-    ) -> Self {
+    ) -> std::result::Result<Self, NeunodeError> {
         let now = Utc::now().timestamp();
-        let did = keyring.to_did();
+        let did = keyring.to_did()?;
         let did_key = keyring.to_did_key();
         let peer_id = did_to_peer_id(&did_key).unwrap_or_else(|_| PeerId("unknown".into()));
 
-        Self {
+        Ok(Self {
             did,
             name: name.to_string(),
             version: 1,
             capabilities,
             lifecycle: AgentLifecycle::Created,
             peer_id,
-            public_key_bundle: keyring.export_public(),
+            public_key_bundle: keyring.export_public()?,
             metadata,
             created_at: now,
             updated_at: now,
-        }
+        })
     }
 
     fn canonical_hash(&self) -> [u8; 32] {
@@ -194,7 +194,8 @@ mod tests {
     #[test]
     fn create_card_basic() {
         let kr = make_keyring();
-        let card = AgentCard::new("test-agent", &kr, vec!["inference".into()], HashMap::new());
+        let card =
+            AgentCard::new("test-agent", &kr, vec!["inference".into()], HashMap::new()).unwrap();
         assert_eq!(card.name, "test-agent");
         assert_eq!(card.version, 1);
         assert_eq!(card.lifecycle, AgentLifecycle::Created);
@@ -206,7 +207,7 @@ mod tests {
     #[test]
     fn card_sign_verify_roundtrip() {
         let kr = make_keyring();
-        let card = AgentCard::new("sign-test", &kr, vec![], HashMap::new());
+        let card = AgentCard::new("sign-test", &kr, vec![], HashMap::new()).unwrap();
         let signed = card.sign(&kr);
         assert!(signed.verify());
     }
@@ -214,7 +215,7 @@ mod tests {
     #[test]
     fn card_tampered_fails_verification() {
         let kr = make_keyring();
-        let card = AgentCard::new("tamper-test", &kr, vec![], HashMap::new());
+        let card = AgentCard::new("tamper-test", &kr, vec![], HashMap::new()).unwrap();
         let mut signed = card.sign(&kr);
         signed.card.name = "tampered-name".to_string();
         assert!(!signed.verify());
@@ -224,7 +225,7 @@ mod tests {
     fn card_wrong_key_fails_verification() {
         let kr1 = make_keyring();
         let kr2 = make_keyring();
-        let card = AgentCard::new("wrong-key", &kr1, vec![], HashMap::new());
+        let card = AgentCard::new("wrong-key", &kr1, vec![], HashMap::new()).unwrap();
         let signed = card.sign(&kr2);
         assert!(!signed.verify());
     }
@@ -232,7 +233,7 @@ mod tests {
     #[test]
     fn card_cid_is_deterministic() {
         let kr = make_keyring();
-        let card = AgentCard::new("cid-test", &kr, vec![], HashMap::new());
+        let card = AgentCard::new("cid-test", &kr, vec![], HashMap::new()).unwrap();
         let cid1 = card.to_cid();
         let cid2 = card.to_cid();
         assert_eq!(cid1, cid2);
@@ -241,7 +242,7 @@ mod tests {
     #[test]
     fn card_cid_format() {
         let kr = make_keyring();
-        let card = AgentCard::new("cid-fmt", &kr, vec![], HashMap::new());
+        let card = AgentCard::new("cid-fmt", &kr, vec![], HashMap::new()).unwrap();
         let cid = card.to_cid();
         assert!(cid.as_str().starts_with('b'));
         assert!(cid.as_str().len() > 50);
@@ -250,8 +251,8 @@ mod tests {
     #[test]
     fn card_different_content_different_cids() {
         let kr = make_keyring();
-        let c1 = AgentCard::new("agent-a", &kr, vec![], HashMap::new());
-        let c2 = AgentCard::new("agent-b", &kr, vec![], HashMap::new());
+        let c1 = AgentCard::new("agent-a", &kr, vec![], HashMap::new()).unwrap();
+        let c2 = AgentCard::new("agent-b", &kr, vec![], HashMap::new()).unwrap();
         assert_ne!(c1.to_cid(), c2.to_cid());
     }
 
@@ -263,7 +264,8 @@ mod tests {
                 let mut m = HashMap::new();
                 m.insert("framework".to_string(), "pytorch".to_string());
                 m
-            });
+            })
+            .unwrap();
         let json = serde_json::to_string(&card).expect("serialize");
         let back: AgentCard = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(card.did, back.did);
@@ -277,7 +279,7 @@ mod tests {
     #[test]
     fn signed_card_serialization_roundtrip() {
         let kr = make_keyring();
-        let card = AgentCard::new("signed-serde", &kr, vec![], HashMap::new());
+        let card = AgentCard::new("signed-serde", &kr, vec![], HashMap::new()).unwrap();
         let signed = card.sign(&kr);
         let json = serde_json::to_string(&signed).expect("serialize");
         let back: SignedAgentCard = serde_json::from_str(&json).expect("deserialize");
@@ -294,7 +296,8 @@ mod tests {
             .capability("inference")
             .capability("training")
             .metadata("gpu", "H100")
-            .build(&kr);
+            .build(&kr)
+            .unwrap();
         assert_eq!(card.name, "builder-test");
         assert_eq!(card.capabilities, vec!["inference", "training"]);
         assert_eq!(card.metadata.get("gpu").unwrap(), "H100");
@@ -305,14 +308,15 @@ mod tests {
         let kr = make_keyring();
         let card = AgentCardBuilder::new("builder-vec")
             .capabilities(vec!["a".into(), "b".into(), "c".into()])
-            .build(&kr);
+            .build(&kr)
+            .unwrap();
         assert_eq!(card.capabilities.len(), 3);
     }
 
     #[test]
     fn card_timestamps_set() {
         let kr = make_keyring();
-        let card = AgentCard::new("ts-test", &kr, vec![], HashMap::new());
+        let card = AgentCard::new("ts-test", &kr, vec![], HashMap::new()).unwrap();
         assert!(card.created_at > 0);
         assert_eq!(card.created_at, card.updated_at);
     }
@@ -320,8 +324,8 @@ mod tests {
     #[test]
     fn card_public_key_bundle_matches_keyring() {
         let kr = make_keyring();
-        let card = AgentCard::new("pkb-test", &kr, vec![], HashMap::new());
-        let bundle = kr.export_public();
+        let card = AgentCard::new("pkb-test", &kr, vec![], HashMap::new()).unwrap();
+        let bundle = kr.export_public().unwrap();
         assert_eq!(card.public_key_bundle.ed25519, bundle.ed25519);
         assert_eq!(card.public_key_bundle.secp256k1, bundle.secp256k1);
         assert_eq!(card.public_key_bundle.did, bundle.did);

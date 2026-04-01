@@ -291,7 +291,7 @@ fn settlement_fee_calculation() {
     assert_eq!(result.net_payout, TokenAmount(294));
 
     let custom_engine = SettlementEngine::new(PricingConfig {
-        protocol_fee_pct: 5.0,
+        protocol_fee_bps: 500,
         default_model: "test".to_string(),
     });
     let result5 = custom_engine
@@ -300,7 +300,7 @@ fn settlement_fee_calculation() {
     assert_eq!(result5.protocol_fee, TokenAmount(15), "5% of 300 = 15");
 
     let free_engine = SettlementEngine::new(PricingConfig {
-        protocol_fee_pct: 0.0,
+        protocol_fee_bps: 0,
         default_model: "test".to_string(),
     });
     let result0 = free_engine

@@ -12,6 +12,10 @@ pub enum NeunodeError {
     SignatureVerificationFailed,
     #[error("key rotation failed: {0}")]
     KeyRotationFailed(String),
+    #[error("key material corrupted")]
+    KeyCorrupted,
+    #[error("invalid public key: {0}")]
+    InvalidPublicKey(String),
 
     // Feed errors
     #[error("invalid event: {0}")]
@@ -102,6 +106,18 @@ mod tests {
     fn key_rotation_failed_display() {
         let err = NeunodeError::KeyRotationFailed("expired".to_string());
         assert_eq!(err.to_string(), "key rotation failed: expired");
+    }
+
+    #[test]
+    fn key_corrupted_display() {
+        let err = NeunodeError::KeyCorrupted;
+        assert_eq!(err.to_string(), "key material corrupted");
+    }
+
+    #[test]
+    fn invalid_public_key_display() {
+        let err = NeunodeError::InvalidPublicKey("bad ed25519 key".to_string());
+        assert_eq!(err.to_string(), "invalid public key: bad ed25519 key");
     }
 
     #[test]

@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
 import "../src/NeunodeIdentity.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /// @title NeunodeIdentityTest — Tests for DID Registry
 contract NeunodeIdentityTest is Test {
@@ -191,5 +192,71 @@ contract NeunodeIdentityTest is Test {
             block.timestamp
         );
         identity.createDid(alicePubKeyHash);
+    }
+
+    // ─── ECDSA Malleability ────────────────────────────────────────────────
+
+    function testVerifySignatureValid() public {
+        // Fund a known signer so we can create a DID for them
+        uint256 signerPk = 0xA11CE;
+        address signer = vm.addr(signerPk);
+
+        vm.prank(signer);
+        bytes32 didHash = identity.createDid(keccak256("signer_ed25519_key"));
+
+        bytes32 messageHash = keccak256("important_message");
+        bytes32 ethSignedHash =
+            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPk, ethSignedHash);
+        bytes memory sig = abi.encodePacked(r, s, v);
+
+        assertTrue(identity.verifySignature(didHash, messageHash, sig));
+    }
+
+    function testRevertMalleableSignatureHighS() public {
+        // Create DID for a known signer
+        uint256 signerPk = 0xA11CE;
+        address signer = vm.addr(signerPk);
+
+        vm.prank(signer);
+        bytes32 didHash = identity.createDid(keccak256("signer_ed25519_key"));
+
+        bytes32 messageHash = keccak256("important_message");
+        bytes32 ethSignedHash =
+            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPk, ethSignedHash);
+
+        // Flip s to its malleable counterpart (n - s), which is > n/2
+        uint256 secp256k1n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+        bytes32 malleableS = bytes32(secp256k1n - uint256(s));
+        // Adjust v (flip between 27 and 28)
+        uint8 malleableV = v == 27 ? 28 : 27;
+
+        bytes memory malleableSig = abi.encodePacked(r, malleableS, malleableV);
+
+        // OZ ECDSA.recover reverts with ECDSAInvalidSignatureS for non-low-s signatures
+        bytes32 expectedS = malleableS;
+        vm.expectRevert(abi.encodeWithSelector(ECDSA.ECDSAInvalidSignatureS.selector, expectedS));
+        identity.verifySignature(didHash, messageHash, malleableSig);
+    }
+
+    function testVerifySignatureWrongSigner() public {
+        uint256 signerPk = 0xA11CE;
+        address signer = vm.addr(signerPk);
+
+        vm.prank(signer);
+        bytes32 didHash = identity.createDid(keccak256("signer_ed25519_key"));
+
+        bytes32 messageHash = keccak256("important_message");
+        bytes32 ethSignedHash =
+            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
+
+        // Sign with a different key
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(0xB0B, ethSignedHash);
+        bytes memory sig = abi.encodePacked(r, s, v);
+
+        assertFalse(identity.verifySignature(didHash, messageHash, sig));
     }
 }

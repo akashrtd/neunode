@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./bounty/IBountyEscrow.sol";
 import "./bounty/IBountyReview.sol";
 
@@ -12,7 +13,7 @@ import "./bounty/IBountyReview.sol";
 ///         →Paid/Expired/Cancelled. Integrates with NeunodeEscrow for payments.
 ///         Optional escrow integration, 2-of-3 review committee, fee collection,
 ///         5-deadline enforcement.
-contract NeunodeBounty is AccessControl {
+contract NeunodeBounty is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // ─── Types ────────────────────────────────────────────────────────────
@@ -70,6 +71,9 @@ contract NeunodeBounty is AccessControl {
     mapping(bytes32 => bool) public useEscrowFlags;
     mapping(bytes32 => uint256) public providerBonds;
 
+    // Commit-reveal anti-front-running
+    mapping(address => mapping(bytes32 => bytes32)) private _claimCommitments;
+
     FeeConfig public feeConfig;
 
     IBountyEscrow public escrow;
@@ -106,6 +110,8 @@ contract NeunodeBounty is AccessControl {
         uint256 providerPayout
     );
     event DisputeResolved(bytes32 indexed bountyId, bool accepted);
+    event ClaimCommitted(address indexed claimer, bytes32 indexed bountyId);
+    event ClaimRevealed(address indexed claimer, bytes32 indexed bountyId);
 
     // ─── Errors ───────────────────────────────────────────────────────────
 
@@ -123,6 +129,9 @@ contract NeunodeBounty is AccessControl {
     error ReviewNotAccepted(bytes32 id);
     error InsufficientBond();
     error TotalFeesExceed100();
+    error AlreadyCommitted(bytes32 bountyId);
+    error NotCommitted(bytes32 bountyId);
+    error InvalidReveal(bytes32 bountyId);
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
@@ -276,13 +285,48 @@ contract NeunodeBounty is AccessControl {
     // ─── Claim Bounty ─────────────────────────────────────────────────────
 
     /// @notice Provider claims the bounty (backward-compatible)
+    /// @dev DEPRECATED — use commitClaim + revealClaim for front-running protection
     function claimBounty(bytes32 id) external {
         _claimBounty(id, 0);
     }
 
     /// @notice Provider claims the bounty with escrow bond
+    /// @dev DEPRECATED — use commitClaim + revealClaim for front-running protection
     function claimBountyWithBond(bytes32 id, uint256 bondAmount) external {
         _claimBounty(id, bondAmount);
+    }
+
+    /// @notice Commit to claiming a bounty (first phase of commit-reveal)
+    /// @param bountyId The bounty to claim
+    /// @param commitment keccak256(abi.encodePacked(msg.sender, bountyId, nonce))
+    function commitClaim(bytes32 bountyId, bytes32 commitment) external {
+        if (_claimCommitments[msg.sender][bountyId] != bytes32(0)) {
+            revert AlreadyCommitted(bountyId);
+        }
+        _claimCommitments[msg.sender][bountyId] = commitment;
+        emit ClaimCommitted(msg.sender, bountyId);
+    }
+
+    /// @notice Reveal commitment and claim bounty (second phase of commit-reveal)
+    /// @param bountyId The bounty to claim
+    /// @param bondAmount Provider bond amount (0 for no bond)
+    /// @param nonce The nonce used to generate the commitment
+    function revealClaim(bytes32 bountyId, uint256 bondAmount, bytes32 nonce)
+        external
+        nonReentrant
+    {
+        if (_claimCommitments[msg.sender][bountyId] == bytes32(0)) {
+            revert NotCommitted(bountyId);
+        }
+        bytes32 expected = keccak256(abi.encodePacked(msg.sender, bountyId, nonce));
+        if (_claimCommitments[msg.sender][bountyId] != expected) {
+            revert InvalidReveal(bountyId);
+        }
+        _claimCommitments[msg.sender][bountyId] = bytes32(0);
+
+        _claimBounty(bountyId, bondAmount);
+
+        emit ClaimRevealed(msg.sender, bountyId);
     }
 
     function _claimBounty(bytes32 id, uint256 bondAmount) internal {
@@ -350,7 +394,7 @@ contract NeunodeBounty is AccessControl {
     // ─── Reject Submission ────────────────────────────────────────────────
 
     /// @notice Requester rejects submission
-    function rejectSubmission(bytes32 id) external {
+    function rejectSubmission(bytes32 id) external nonReentrant {
         Bounty storage bounty = bounties[id];
         if (bounty.created == 0) revert BountyNotFound(id);
         if (bounty.state != BountyState.Submitted && bounty.state != BountyState.UnderReview) {
@@ -401,7 +445,11 @@ contract NeunodeBounty is AccessControl {
     }
 
     /// @notice Resolve a disputed bounty (ADMIN only)
-    function resolveDispute(bytes32 id, bool accept) external onlyRole(BOUNTY_MANAGER_ROLE) {
+    function resolveDispute(bytes32 id, bool accept)
+        external
+        onlyRole(BOUNTY_MANAGER_ROLE)
+        nonReentrant
+    {
         Bounty storage bounty = bounties[id];
         if (bounty.created == 0) revert BountyNotFound(id);
         if (bounty.state != BountyState.Disputed) {
@@ -432,7 +480,7 @@ contract NeunodeBounty is AccessControl {
     // ─── Cancel ───────────────────────────────────────────────────────────
 
     /// @notice Requester cancels an open bounty
-    function cancelBounty(bytes32 id) external {
+    function cancelBounty(bytes32 id) external nonReentrant {
         Bounty storage bounty = bounties[id];
         if (bounty.created == 0) revert BountyNotFound(id);
         if (bounty.state != BountyState.Open) {
@@ -452,7 +500,7 @@ contract NeunodeBounty is AccessControl {
     // ─── Expiry ───────────────────────────────────────────────────────────
 
     /// @notice Check and process bounty expiry
-    function checkExpiry(bytes32 id) external {
+    function checkExpiry(bytes32 id) external nonReentrant {
         Bounty storage bounty = bounties[id];
         if (bounty.created == 0) revert BountyNotFound(id);
 
@@ -573,26 +621,32 @@ contract NeunodeBounty is AccessControl {
     }
 
     function _payWithFees(Bounty storage bounty, bytes32 id) internal {
-        uint256 totalFeesBps =
-            feeConfig.protocolBps + feeConfig.reviewerBps + feeConfig.verificationBps;
-        uint256 totalFee = (bounty.reward * totalFeesBps) / 10_000;
-        uint256 providerPayout = bounty.reward - totalFee;
-
+        // Calculate individual fees first to avoid rounding drift.
+        // providerPayout = reward - sum(individual fees) guarantees no dust.
         uint256 protocolFee;
         uint256 reviewerFee;
         uint256 verificationFee;
 
-        // Distribute fees
         if (feeConfig.protocolBps > 0) {
             protocolFee = (bounty.reward * feeConfig.protocolBps) / 10_000;
-            IERC20(bounty.rewardToken).safeTransfer(feeConfig.protocolFeeRecipient, protocolFee);
         }
         if (feeConfig.reviewerBps > 0) {
             reviewerFee = (bounty.reward * feeConfig.reviewerBps) / 10_000;
-            IERC20(bounty.rewardToken).safeTransfer(feeConfig.reviewerFeeRecipient, reviewerFee);
         }
         if (feeConfig.verificationBps > 0) {
             verificationFee = (bounty.reward * feeConfig.verificationBps) / 10_000;
+        }
+
+        uint256 providerPayout = bounty.reward - protocolFee - reviewerFee - verificationFee;
+
+        // Distribute fees
+        if (protocolFee > 0) {
+            IERC20(bounty.rewardToken).safeTransfer(feeConfig.protocolFeeRecipient, protocolFee);
+        }
+        if (reviewerFee > 0) {
+            IERC20(bounty.rewardToken).safeTransfer(feeConfig.reviewerFeeRecipient, reviewerFee);
+        }
+        if (verificationFee > 0) {
             IERC20(bounty.rewardToken)
                 .safeTransfer(feeConfig.verificationFeeRecipient, verificationFee);
         }

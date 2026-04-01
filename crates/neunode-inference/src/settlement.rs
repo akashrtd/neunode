@@ -9,13 +9,13 @@ use ts_rs::TS;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[ts(export)]
 pub struct PricingConfig {
-    pub protocol_fee_pct: f64,
+    pub protocol_fee_bps: u64,
     pub default_model: String,
 }
 
 impl Default for PricingConfig {
     fn default() -> Self {
-        Self { protocol_fee_pct: 2.0, default_model: "neunode/default".to_string() }
+        Self { protocol_fee_bps: 200, default_model: "neunode/default".to_string() }
     }
 }
 
@@ -87,10 +87,11 @@ impl SettlementEngine {
             model_info.output_price_per_million,
         );
 
-        let fee_amount =
-            ((gross_cost.0 as f64) * self.config.protocol_fee_pct / 100.0).ceil() as u64;
+        let fee_amount = (gross_cost.0 * self.config.protocol_fee_bps).div_ceil(10_000);
         let protocol_fee = TokenAmount(fee_amount);
-        let net_payout = gross_cost.checked_sub(protocol_fee).unwrap_or(TokenAmount::ZERO);
+        let net_payout = gross_cost
+            .checked_sub(protocol_fee)
+            .ok_or(InferenceError::FeeExceedsGross { fee: protocol_fee, gross: gross_cost })?;
 
         let request_json = serde_json::to_string(request)
             .map_err(|e| InferenceError::SettlementFailed(e.to_string()))?;
@@ -209,7 +210,7 @@ mod tests {
     #[test]
     fn pricing_config_default() {
         let config = PricingConfig::default();
-        assert_eq!(config.protocol_fee_pct, 2.0);
+        assert_eq!(config.protocol_fee_bps, 200);
         assert_eq!(config.default_model, "neunode/default");
     }
 
@@ -291,7 +292,7 @@ mod tests {
     #[test]
     fn settle_fee_calculation() {
         let engine =
-            SettlementEngine::new(PricingConfig { protocol_fee_pct: 5.0, ..Default::default() });
+            SettlementEngine::new(PricingConfig { protocol_fee_bps: 500, ..Default::default() });
         let model = test_model_info("test-model", 1000, 1000);
         let request = test_request();
         let response = test_response(1_000_000, 1_000_000);
@@ -308,7 +309,7 @@ mod tests {
     #[test]
     fn settle_zero_fee() {
         let engine = SettlementEngine::new(PricingConfig {
-            protocol_fee_pct: 0.0,
+            protocol_fee_bps: 0,
             default_model: "test".to_string(),
         });
         let model = test_model_info("test-model", 100, 200);

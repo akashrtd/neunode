@@ -37,7 +37,7 @@ impl SigChain {
 
         event.sign(signing_key_bytes)?;
 
-        self.last_hash = event.compute_hash();
+        self.last_hash = event.compute_hash()?;
         self.last_sequence = sequence;
         self.events.push(event.clone());
 
@@ -71,7 +71,7 @@ impl SigChain {
                 });
             }
 
-            let expected_hash = prev.compute_hash();
+            let expected_hash = prev.compute_hash()?;
             if curr.prev_hash != expected_hash {
                 return Err(FeedError::HashChainBroken { seq: curr.sequence });
             }
@@ -86,7 +86,7 @@ impl SigChain {
 
         // Verify cached metadata
         if let Some(last) = self.events.last() {
-            if self.last_hash != last.compute_hash() {
+            if self.last_hash != last.compute_hash()? {
                 return Err(FeedError::HashChainBroken { seq: last.sequence });
             }
             if self.last_sequence != last.sequence {
@@ -179,7 +179,7 @@ mod tests {
         let e0 = chain.append(Kind::AgentMetadata, "first".to_string(), &sk_bytes).expect("ok");
         let e1 = chain.append(Kind::BountyPost, "second".to_string(), &sk_bytes).expect("ok");
 
-        assert_eq!(e1.prev_hash, e0.compute_hash());
+        assert_eq!(e1.prev_hash, e0.compute_hash().unwrap());
     }
 
     #[test]
@@ -363,7 +363,7 @@ mod tests {
         let mut chain = SigChain::new(test_did(), vk_bytes);
 
         let e0 = chain.append(Kind::AgentMetadata, "first".to_string(), &sk_bytes).expect("ok");
-        let hash0 = e0.compute_hash();
+        let hash0 = e0.compute_hash().unwrap();
 
         let e1 = chain.append(Kind::BountyPost, "second".to_string(), &sk_bytes).expect("ok");
 

@@ -158,13 +158,14 @@ impl AttestationGraph {
             return score;
         }
 
-        let direct = self.incoming.get(did);
-        if direct.is_none() || direct.unwrap().is_empty() {
+        let Some(direct_attestations) = self.incoming.get(did) else {
+            visited.insert(did.clone(), 0.0);
+            return 0.0;
+        };
+        if direct_attestations.is_empty() {
             visited.insert(did.clone(), 0.0);
             return 0.0;
         }
-
-        let direct_attestations = direct.unwrap();
 
         let mut total_weighted_score = 0.0;
         let mut total_weight = 0.0;

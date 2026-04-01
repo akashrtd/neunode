@@ -10,6 +10,13 @@ import "../interfaces/INeunodeToken.sol";
 /// @notice Abstract base with mint/burn, AccessControl roles, staking,
 ///         activity tracking, token decay, and seed tokens. Owner is the protocol.
 abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
+    // ─── Custom Errors ────────────────────────────────────────────────────
+
+    error UnauthorizedActivityUpdate(address caller, address account);
+    error InsufficientBalance(address account, uint256 required);
+    error InsufficientStake(address account, uint256 required);
+    error CannotUnstakeSeed();
+    error DecayTooSoon(address account);
     uint8 private immutable _tokenDecimals;
 
     // ─── Roles ────────────────────────────────────────────────────────────
@@ -88,7 +95,7 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
 
     /// @notice Stake tokens (transferred from caller to this contract)
     function stake(uint256 amount) external {
-        require(balanceOf(msg.sender) >= amount, "insufficient balance");
+        if (balanceOf(msg.sender) < amount) revert InsufficientBalance(msg.sender, amount);
         _transfer(msg.sender, address(this), amount);
         _stakedBalances[msg.sender] += amount;
         emit Staked(msg.sender, amount);
@@ -96,12 +103,11 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
 
     /// @notice Unstake tokens (returned from contract to caller)
     function unstake(uint256 amount) external {
-        require(_stakedBalances[msg.sender] >= amount, "insufficient staked");
-        require(
-            _seedBalances[msg.sender] == 0
-                || _stakedBalances[msg.sender] - amount >= _seedBalances[msg.sender],
-            "cannot unstake seed"
-        );
+        if (_stakedBalances[msg.sender] < amount) revert InsufficientStake(msg.sender, amount);
+        if (
+            _seedBalances[msg.sender] != 0
+                && _stakedBalances[msg.sender] - amount < _seedBalances[msg.sender]
+        ) revert CannotUnstakeSeed();
         _stakedBalances[msg.sender] -= amount;
         _transfer(address(this), msg.sender, amount);
         emit Unstaked(msg.sender, amount);
@@ -114,8 +120,9 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
 
     // ─── Activity Tracking ────────────────────────────────────────────────
 
-    /// @notice Update activity timestamp for an account
+    /// @notice Update activity timestamp — caller may only update their own
     function updateActivity(address account) public {
+        if (msg.sender != account) revert UnauthorizedActivityUpdate(msg.sender, account);
         _lastActivity[account] = block.timestamp;
         emit ActivityUpdated(account, block.timestamp);
     }
@@ -157,11 +164,20 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
         return (bal * rate) / 10000;
     }
 
-    /// @notice Execute decay on an account. Anyone can call (keeper pattern).
+    /// @notice Execute decay on an account. Only the account holder can trigger.
     function executeDecay(address account) external {
-        require(block.timestamp >= _lastDecayTimestamp[account] + 1 days, "too soon");
+        if (msg.sender != account) revert UnauthorizedActivityUpdate(msg.sender, account);
+        _applyDecay(account);
+    }
+
+    /// @dev Internal decay logic — called from executeDecay
+    function _applyDecay(address account) internal {
+        if (block.timestamp < _lastDecayTimestamp[account] + 1 days) revert DecayTooSoon(account);
         uint256 decayAmount = computeDecay(account);
-        if (decayAmount == 0) return;
+        if (decayAmount == 0) {
+            _lastDecayTimestamp[account] = block.timestamp;
+            return;
+        }
 
         uint256 treasuryPortion = (decayAmount * 40) / 100;
         uint256 stakingPortion = (decayAmount * 30) / 100;
@@ -204,8 +220,14 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
     // ─── Transfer Override (auto-track activity) ─────────────────────────
 
     function _update(address from, address to, uint256 amount) internal override {
-        if (from != address(0)) updateActivity(from);
-        if (to != address(0)) updateActivity(to);
+        if (from != address(0)) _updateActivityInternal(from);
+        if (to != address(0)) _updateActivityInternal(to);
         super._update(from, to, amount);
+    }
+
+    /// @dev Internal helper to update activity without access restriction
+    function _updateActivityInternal(address account) internal {
+        _lastActivity[account] = block.timestamp;
+        emit ActivityUpdated(account, block.timestamp);
     }
 }

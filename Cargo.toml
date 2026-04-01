@@ -75,6 +75,9 @@ tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 proptest = "1.4"
 tokio-test = "0.4"
 
+# Encryption
+aes-gcm = "0.10"
+
 # Misc
 thiserror = "2.0"
 anyhow = "1.0"

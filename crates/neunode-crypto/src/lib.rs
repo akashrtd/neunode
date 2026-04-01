@@ -1,3 +1,4 @@
+pub mod aead;
 pub mod ed25519;
 pub mod eip712;
 pub mod hash;

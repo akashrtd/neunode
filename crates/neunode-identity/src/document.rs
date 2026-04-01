@@ -51,14 +51,14 @@ pub struct DidDocument {
 
 impl DidDocument {
     /// Build a DID Document from a dual-key keyring.
-    pub fn from_keyring(keyring: &Keyring) -> Self {
-        let did = keyring.to_did();
+    pub fn from_keyring(keyring: &Keyring) -> Result<Self> {
+        let did = keyring.to_did()?;
         let did_str = did.as_str().to_string();
 
         let ed25519_pub = keyring.ed25519_public_key().to_bytes();
-        let ed25519_multibase = format!("z{}", multibase_base58btc_ed25519(&ed25519_pub));
+        let ed25519_multibase = format!("z{}", multibase_base58btc_ed25519(&ed25519_pub)?);
 
-        let secp_pub = keyring.secp256k1_public_key();
+        let secp_pub = keyring.secp256k1_public_key()?;
         let secp_multibase = format!("z{}", multibase_base58btc_secp256k1(&secp_pub));
 
         let ed_vm_id = format!("{did_str}#keys-1");
@@ -78,7 +78,7 @@ impl DidDocument {
             public_key_multibase: secp_multibase,
         };
 
-        Self {
+        Ok(Self {
             context: vec![
                 "https://www.w3.org/ns/did/v1".to_string(),
                 "https://w3id.org/security/suites/ed25519-2020/v1".to_string(),
@@ -91,7 +91,7 @@ impl DidDocument {
             assertion_method: vec![secp_vm_id],
             key_agreement: vec![],
             service: vec![],
-        }
+        })
     }
 
     /// Serialize to JSON string.
@@ -116,10 +116,10 @@ impl DidDocument {
     }
 }
 
-fn multibase_base58btc_ed25519(pubkey: &[u8; 32]) -> String {
+fn multibase_base58btc_ed25519(pubkey: &[u8; 32]) -> Result<String> {
     let vk = neunode_crypto::ed25519::verifying_key_from_bytes(pubkey)
-        .expect("valid ed25519 public key");
-    crate::did::generate_did_key(&vk).as_str().trim_start_matches("did:key:").to_string()
+        .map_err(|e| NeunodeError::InvalidPublicKey(e.to_string()))?;
+    Ok(crate::did::generate_did_key(&vk).as_str().trim_start_matches("did:key:").to_string())
 }
 
 fn multibase_base58btc_secp256k1(pubkey_uncompressed: &[u8]) -> String {
@@ -169,7 +169,7 @@ mod tests {
 
     fn make_doc() -> DidDocument {
         let kr = Keyring::generate();
-        DidDocument::from_keyring(&kr)
+        DidDocument::from_keyring(&kr).unwrap()
     }
 
     #[test]
@@ -189,8 +189,8 @@ mod tests {
     #[test]
     fn from_keyring_ids_reference_did() {
         let kr = Keyring::generate();
-        let doc = DidDocument::from_keyring(&kr);
-        let did = kr.to_did();
+        let doc = DidDocument::from_keyring(&kr).unwrap();
+        let did = kr.to_did().unwrap();
         let did_str = did.as_str();
         assert_eq!(doc.id, did_str);
         assert!(doc.verification_method[0].id.starts_with(did_str));
@@ -248,8 +248,8 @@ mod tests {
     #[test]
     fn verify_method_lookup_found() {
         let kr = Keyring::generate();
-        let doc = DidDocument::from_keyring(&kr);
-        let ed_id = format!("{}#keys-1", kr.to_did().as_str());
+        let doc = DidDocument::from_keyring(&kr).unwrap();
+        let ed_id = format!("{}#keys-1", kr.to_did().unwrap().as_str());
         let vm = doc.verify_method(&ed_id);
         assert!(vm.is_some());
         assert_eq!(vm.unwrap().vm_type, ED25519_VM_TYPE);
@@ -258,8 +258,8 @@ mod tests {
     #[test]
     fn verify_method_lookup_secp256k1() {
         let kr = Keyring::generate();
-        let doc = DidDocument::from_keyring(&kr);
-        let secp_id = format!("{}#keys-2", kr.to_did().as_str());
+        let doc = DidDocument::from_keyring(&kr).unwrap();
+        let secp_id = format!("{}#keys-2", kr.to_did().unwrap().as_str());
         let vm = doc.verify_method(&secp_id);
         assert!(vm.is_some());
         assert_eq!(vm.unwrap().vm_type, SECP256K1_VM_TYPE);
@@ -274,23 +274,23 @@ mod tests {
     #[test]
     fn did_accessor() {
         let kr = Keyring::generate();
-        let doc = DidDocument::from_keyring(&kr);
-        assert_eq!(doc.did(), kr.to_did());
+        let doc = DidDocument::from_keyring(&kr).unwrap();
+        assert_eq!(doc.did(), kr.to_did().unwrap());
     }
 
     #[test]
     fn authentication_references_ed25519() {
         let kr = Keyring::generate();
-        let doc = DidDocument::from_keyring(&kr);
-        let ed_id = format!("{}#keys-1", kr.to_did().as_str());
+        let doc = DidDocument::from_keyring(&kr).unwrap();
+        let ed_id = format!("{}#keys-1", kr.to_did().unwrap().as_str());
         assert_eq!(doc.authentication, vec![ed_id]);
     }
 
     #[test]
     fn assertion_method_references_secp256k1() {
         let kr = Keyring::generate();
-        let doc = DidDocument::from_keyring(&kr);
-        let secp_id = format!("{}#keys-2", kr.to_did().as_str());
+        let doc = DidDocument::from_keyring(&kr).unwrap();
+        let secp_id = format!("{}#keys-2", kr.to_did().unwrap().as_str());
         assert_eq!(doc.assertion_method, vec![secp_id]);
     }
 }

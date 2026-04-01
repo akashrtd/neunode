@@ -123,14 +123,24 @@ fn identity_dir_for_did(did: &str) -> PathBuf {
         .join(sanitized)
 }
 
-/// Load a keyring from disk by reading `keys.json` in the identity directory.
+/// Load a keyring from disk by reading `keys.json.enc` in the identity directory.
 fn load_keyring(did: &str) -> Result<Keyring> {
     let dir = identity_dir_for_did(did);
-    let keys_path = dir.join("keys.json");
-    let contents = std::fs::read_to_string(&keys_path)
-        .with_context(|| format!("failed to read {}", keys_path.display()))?;
+    let enc_path = dir.join("keys.json.enc");
+    let contents = if enc_path.exists() {
+        let encrypted = std::fs::read(&enc_path)
+            .with_context(|| format!("failed to read {}", enc_path.display()))?;
+        let machine_key = neunode_crypto::aead::derive_machine_key();
+        let decrypted = neunode_crypto::aead::decrypt(&machine_key, &encrypted)
+            .with_context(|| "failed to decrypt keys.json.enc")?;
+        String::from_utf8(decrypted).with_context(|| "keys.json.enc contains invalid UTF-8")?
+    } else {
+        let legacy_path = dir.join("keys.json");
+        std::fs::read_to_string(&legacy_path)
+            .with_context(|| format!("no keys.json.enc or keys.json found in {}", dir.display()))?
+    };
     let json: serde_json::Value = serde_json::from_str(&contents)
-        .with_context(|| format!("failed to parse {}", keys_path.display()))?;
+        .with_context(|| format!("failed to parse key data for {did}"))?;
 
     let ed_hex = json["ed25519_private"]
         .as_str()

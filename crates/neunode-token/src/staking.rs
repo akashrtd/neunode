@@ -120,29 +120,31 @@ impl StakingManager {
         Ok(total_unbonded)
     }
 
-    pub fn total_staked(&self, did: &Did) -> TokenAmount {
+    pub fn total_staked(&self, did: &Did) -> Result<TokenAmount> {
         self.stakes
             .get(did)
             .map(|entries| {
-                entries.iter().fold(TokenAmount::ZERO, |acc, e| {
-                    acc.checked_add(e.amount).unwrap_or(TokenAmount(u64::MAX))
+                entries.iter().try_fold(TokenAmount::ZERO, |acc, e| {
+                    acc.checked_add(e.amount).ok_or(TokenError::Overflow)
                 })
             })
-            .unwrap_or(TokenAmount::ZERO)
+            .transpose()
+            .map(|opt| opt.unwrap_or(TokenAmount::ZERO))
     }
 
-    pub fn total_staked_by_type(&self, did: &Did, token_type: TokenType) -> TokenAmount {
+    pub fn total_staked_by_type(&self, did: &Did, token_type: TokenType) -> Result<TokenAmount> {
         self.stakes
             .get(did)
             .map(|entries| {
                 entries
                     .iter()
                     .filter(|e| e.token_type == token_type)
-                    .fold(TokenAmount::ZERO, |acc, e| {
-                        acc.checked_add(e.amount).unwrap_or(TokenAmount(u64::MAX))
+                    .try_fold(TokenAmount::ZERO, |acc, e| {
+                        acc.checked_add(e.amount).ok_or(TokenError::Overflow)
                     })
             })
-            .unwrap_or(TokenAmount::ZERO)
+            .transpose()
+            .map(|opt| opt.unwrap_or(TokenAmount::ZERO))
     }
 
     pub fn is_unbonding_complete(&self, did: &Did, entry_index: usize, now: Timestamp) -> bool {
@@ -183,7 +185,7 @@ mod tests {
         mgr.stake(&test_did(), TokenType::Compute, TokenAmount(200), &mut balances).unwrap();
 
         assert_eq!(balances.get_balance(TokenType::Compute), TokenAmount(300));
-        assert_eq!(mgr.total_staked(&test_did()), TokenAmount(200));
+        assert_eq!(mgr.total_staked(&test_did()).unwrap(), TokenAmount(200));
     }
 
     #[test]
@@ -209,7 +211,7 @@ mod tests {
         balances.deposit(TokenType::Compute, TokenAmount(500)).unwrap();
 
         mgr.stake(&test_did(), TokenType::Compute, TokenAmount(MIN_STAKE), &mut balances).unwrap();
-        assert_eq!(mgr.total_staked(&test_did()), TokenAmount(MIN_STAKE));
+        assert_eq!(mgr.total_staked(&test_did()).unwrap(), TokenAmount(MIN_STAKE));
     }
 
     #[test]
@@ -231,7 +233,7 @@ mod tests {
         mgr.stake(&test_did(), TokenType::Compute, TokenAmount(200), &mut balances).unwrap();
         mgr.stake(&test_did(), TokenType::Compute, TokenAmount(300), &mut balances).unwrap();
 
-        assert_eq!(mgr.total_staked(&test_did()), TokenAmount(500));
+        assert_eq!(mgr.total_staked(&test_did()).unwrap(), TokenAmount(500));
         assert_eq!(mgr.get_stakes(&test_did()).len(), 2);
     }
 
@@ -246,9 +248,18 @@ mod tests {
         mgr.stake(&test_did(), TokenType::Compute, TokenAmount(200), &mut bal_a).unwrap();
         mgr.stake(&test_did_other(), TokenType::Train, TokenAmount(300), &mut bal_b).unwrap();
 
-        assert_eq!(mgr.total_staked_by_type(&test_did(), TokenType::Compute), TokenAmount(200));
-        assert_eq!(mgr.total_staked_by_type(&test_did(), TokenType::Train), TokenAmount::ZERO);
-        assert_eq!(mgr.total_staked_by_type(&test_did_other(), TokenType::Train), TokenAmount(300));
+        assert_eq!(
+            mgr.total_staked_by_type(&test_did(), TokenType::Compute).unwrap(),
+            TokenAmount(200)
+        );
+        assert_eq!(
+            mgr.total_staked_by_type(&test_did(), TokenType::Train).unwrap(),
+            TokenAmount::ZERO
+        );
+        assert_eq!(
+            mgr.total_staked_by_type(&test_did_other(), TokenType::Train).unwrap(),
+            TokenAmount(300)
+        );
     }
 
     #[test]
@@ -289,7 +300,7 @@ mod tests {
         // Original entry should be reduced, new unbonding entry added
         let stakes = mgr.get_stakes(&test_did());
         assert_eq!(stakes.len(), 2);
-        assert_eq!(mgr.total_staked(&test_did()), TokenAmount(300));
+        assert_eq!(mgr.total_staked(&test_did()).unwrap(), TokenAmount(300));
     }
 
     #[test]
@@ -305,7 +316,7 @@ mod tests {
 
         let returned = mgr.complete_unbonding(&test_did(), TokenType::Compute, unbond_at).unwrap();
         assert_eq!(returned, TokenAmount(200));
-        assert_eq!(mgr.total_staked(&test_did()), TokenAmount::ZERO);
+        assert_eq!(mgr.total_staked(&test_did()).unwrap(), TokenAmount::ZERO);
     }
 
     #[test]
@@ -323,7 +334,7 @@ mod tests {
         let result = mgr.complete_unbonding(&test_did(), TokenType::Compute, unbond_at - 1);
         assert!(matches!(result, Err(TokenError::NotStaked)));
         // Stake should still be there
-        assert_eq!(mgr.total_staked(&test_did()), TokenAmount(200));
+        assert_eq!(mgr.total_staked(&test_did()).unwrap(), TokenAmount(200));
     }
 
     #[test]
@@ -374,13 +385,16 @@ mod tests {
     #[test]
     fn total_staked_empty() {
         let mgr = StakingManager::new();
-        assert_eq!(mgr.total_staked(&test_did()), TokenAmount::ZERO);
+        assert_eq!(mgr.total_staked(&test_did()).unwrap(), TokenAmount::ZERO);
     }
 
     #[test]
     fn total_staked_by_type_empty() {
         let mgr = StakingManager::new();
-        assert_eq!(mgr.total_staked_by_type(&test_did(), TokenType::Compute), TokenAmount::ZERO);
+        assert_eq!(
+            mgr.total_staked_by_type(&test_did(), TokenType::Compute).unwrap(),
+            TokenAmount::ZERO
+        );
     }
 
     #[test]
@@ -391,7 +405,7 @@ mod tests {
 
         mgr.stake(&test_did(), TokenType::Compute, TokenAmount(300), &mut balances).unwrap();
         assert_eq!(balances.get_balance(TokenType::Compute), TokenAmount(700));
-        assert_eq!(mgr.total_staked(&test_did()), TokenAmount(300));
+        assert_eq!(mgr.total_staked(&test_did()).unwrap(), TokenAmount(300));
 
         let unbond_at =
             mgr.begin_unbonding(&test_did(), TokenType::Compute, TokenAmount(300)).unwrap();
@@ -401,6 +415,6 @@ mod tests {
 
         balances.deposit(TokenType::Compute, returned).unwrap();
         assert_eq!(balances.get_balance(TokenType::Compute), TokenAmount(1000));
-        assert_eq!(mgr.total_staked(&test_did()), TokenAmount::ZERO);
+        assert_eq!(mgr.total_staked(&test_did()).unwrap(), TokenAmount::ZERO);
     }
 }

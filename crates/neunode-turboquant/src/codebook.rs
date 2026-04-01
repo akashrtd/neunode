@@ -185,7 +185,7 @@ impl Codebook {
                     .enumerate()
                     .map(|(i, &c)| (i, (s - c) * (s - c)))
                     .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-                    .expect("k > 0");
+                    .ok_or(TurboQuantError::CodebookEmpty)?;
                 sums[idx] += s;
                 counts[idx] += 1;
                 mse += dist_sq;

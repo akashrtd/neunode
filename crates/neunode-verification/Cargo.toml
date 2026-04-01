@@ -5,11 +5,12 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-default = ["gauntlet", "spot-check", "repops"]
+default = ["gauntlet", "spot-check", "repops", "tee-sim"]
 gauntlet = []
 spot-check = []
 repops = []
 tee = []
+tee-sim = []
 zk = []
 
 [dependencies]

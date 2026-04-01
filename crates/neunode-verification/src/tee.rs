@@ -1,5 +1,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::error::Result;
+#[cfg(not(feature = "tee-sim"))]
+use crate::error::VerificationError;
+
 /// Type of trusted execution environment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, ts_rs::TS)]
 #[ts(export)]
@@ -47,22 +51,41 @@ impl TeeVerifier {
         Self
     }
 
+    /// Verifies a TEE attestation quote.
+    ///
+    /// With the `tee-sim` feature (included in defaults), this performs a simulated
+    /// verification checking measurement hash and nonce match. Without `tee-sim`,
+    /// this returns an error — production TEE verification is not yet implemented.
+    #[cfg(feature = "tee-sim")]
     pub fn verify_quote(
         &self,
         quote: &TeeQuote,
         expected_measurement: &str,
         challenge_nonce: &[u8],
-    ) -> TeeAttestation {
+    ) -> Result<TeeAttestation> {
         let measurement_ok = quote.measurement_hash == expected_measurement;
         let nonce_ok = quote.nonce == challenge_nonce;
         let verified = measurement_ok && nonce_ok;
 
-        TeeAttestation {
+        Ok(TeeAttestation {
             quote: quote.clone(),
             verified,
             verification_timestamp_ms: now_ms(),
             verifier_id: "tee_verifier".to_string(),
-        }
+        })
+    }
+
+    /// Production stub — returns an error since real TEE verification is not yet implemented.
+    #[cfg(not(feature = "tee-sim"))]
+    pub fn verify_quote(
+        &self,
+        _quote: &TeeQuote,
+        _expected_measurement: &str,
+        _challenge_nonce: &[u8],
+    ) -> Result<TeeAttestation> {
+        Err(VerificationError::TeeAttestationFailed(
+            "production TEE verification not yet implemented".to_string(),
+        ))
     }
 
     pub fn is_quote_fresh(&self, quote: &TeeQuote, max_age_secs: u64) -> bool {
@@ -97,7 +120,7 @@ mod tests {
     fn verify_quote_match() {
         let verifier = TeeVerifier::new();
         let quote = sample_quote(now_ms());
-        let attestation = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]);
+        let attestation = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]).unwrap();
         assert!(attestation.verified);
         assert_eq!(attestation.verifier_id, "tee_verifier");
     }
@@ -106,7 +129,7 @@ mod tests {
     fn verify_quote_mismatch_measurement() {
         let verifier = TeeVerifier::new();
         let quote = sample_quote(now_ms());
-        let attestation = verifier.verify_quote(&quote, "wrong_hash", &[0xAA, 0xBB]);
+        let attestation = verifier.verify_quote(&quote, "wrong_hash", &[0xAA, 0xBB]).unwrap();
         assert!(!attestation.verified);
     }
 
@@ -114,7 +137,7 @@ mod tests {
     fn verify_quote_mismatch_nonce() {
         let verifier = TeeVerifier::new();
         let quote = sample_quote(now_ms());
-        let attestation = verifier.verify_quote(&quote, "abc123", &[0xFF, 0xFF]);
+        let attestation = verifier.verify_quote(&quote, "abc123", &[0xFF, 0xFF]).unwrap();
         assert!(!attestation.verified);
     }
 
@@ -171,7 +194,7 @@ mod tests {
     fn attestation_serde_roundtrip() {
         let verifier = TeeVerifier::new();
         let quote = sample_quote(1700000000000);
-        let attestation = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]);
+        let attestation = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]).unwrap();
         let json = serde_json::to_string(&attestation).unwrap();
         let back: TeeAttestation = serde_json::from_str(&json).unwrap();
         assert_eq!(back.verified, attestation.verified);
@@ -185,7 +208,7 @@ mod tests {
             [TeeType::IntelTdx, TeeType::AmdSev, TeeType::NvidiaCcn, TeeType::AppleSecureEnclave]
         {
             let quote = TeeQuote { tee_type: tt, ..sample_quote(now_ms()) };
-            let att = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]);
+            let att = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]).unwrap();
             assert!(att.verified);
         }
     }
@@ -194,7 +217,7 @@ mod tests {
     fn raw_quote_preserved() {
         let verifier = TeeVerifier::new();
         let quote = sample_quote(now_ms());
-        let att = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]);
+        let att = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]).unwrap();
         assert_eq!(att.quote.raw_quote, vec![0xDE, 0xAD, 0xBE, 0xEF]);
     }
 
@@ -202,7 +225,7 @@ mod tests {
     fn signer_public_key_preserved() {
         let verifier = TeeVerifier::new();
         let quote = sample_quote(now_ms());
-        let att = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]);
+        let att = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]).unwrap();
         assert_eq!(att.quote.signer_public_key, vec![1, 2, 3, 4]);
     }
 
@@ -211,9 +234,8 @@ mod tests {
         let verifier = TeeVerifier::new();
         let mut quote = sample_quote(now_ms());
         quote.nonce = vec![0x11, 0x22];
-        let att = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]);
+        let att = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]).unwrap();
         assert!(!att.verified);
-        // But measurement is correct, so only nonce failed.
         assert_eq!(att.quote.measurement_hash, "abc123");
     }
 

@@ -77,27 +77,28 @@ impl FeedEvent {
             signature: None,
         };
 
-        event.id = event.compute_id();
+        event.id = event.compute_id()?;
         Ok(event)
     }
 
-    pub fn compute_id(&self) -> EventId {
-        let bytes = self.canonical_bytes();
+    pub fn compute_id(&self) -> Result<EventId> {
+        let bytes = self.canonical_bytes()?;
         let hash = neunode_crypto::hash::sha256(&bytes);
-        EventId(format!("f{}", to_hex(&hash)))
+        Ok(EventId(format!("f{}", to_hex(&hash))))
     }
 
-    pub fn compute_hash(&self) -> Hash256 {
-        let full = serde_json::to_string(self).expect("feed event serialization should not fail");
+    pub fn compute_hash(&self) -> Result<Hash256> {
+        let full = serde_json::to_string(self)
+            .map_err(|e| FeedError::SerializationError(e.to_string()))?;
         let hash = neunode_crypto::hash::sha256(full.as_bytes());
-        Hash256(to_hex(&hash))
+        Ok(Hash256(to_hex(&hash)))
     }
 
     pub fn sign(&mut self, signing_key_bytes: &[u8; 32]) -> Result<()> {
         let signing_key = neunode_crypto::ed25519::signing_key_from_bytes(signing_key_bytes)
             .map_err(|e| FeedError::InvalidSignature(e.to_string()))?;
 
-        let canonical = self.canonical_bytes();
+        let canonical = self.canonical_bytes()?;
         let dalek_sig = neunode_crypto::ed25519::sign_domain(
             &signing_key,
             neunode_crypto::hash::DOMAIN_FEED_EVENT,
@@ -125,7 +126,10 @@ impl FeedEvent {
             Err(_) => return false,
         };
 
-        let canonical = self.canonical_bytes();
+        let canonical = match self.canonical_bytes() {
+            Ok(bytes) => bytes,
+            Err(_) => return false,
+        };
         neunode_crypto::ed25519::verify_domain(
             &verifying_key,
             neunode_crypto::hash::DOMAIN_FEED_EVENT,
@@ -170,7 +174,7 @@ impl FeedEvent {
         Ok(())
     }
 
-    fn canonical_bytes(&self) -> Vec<u8> {
+    fn canonical_bytes(&self) -> Result<Vec<u8>> {
         let body = CanonicalBody {
             author: self.author.0.clone(),
             content: self.content.clone(),
@@ -181,7 +185,7 @@ impl FeedEvent {
             tags: self.tags.clone(),
             timestamp: self.timestamp,
         };
-        serde_json::to_vec(&body).expect("canonical serialization of feed event should not fail")
+        serde_json::to_vec(&body).map_err(|e| FeedError::SerializationError(e.to_string()))
     }
 }
 
@@ -291,34 +295,34 @@ mod tests {
         let mut e2 = make_event("test content");
         e2.timestamp = e1.timestamp;
         e2.id = EventId(String::new());
-        assert_eq!(e1.compute_id(), e2.compute_id());
+        assert_eq!(e1.compute_id().unwrap(), e2.compute_id().unwrap());
     }
 
     #[test]
     fn compute_id_excludes_id_and_signature() {
         let mut event = make_event("test");
-        let id_before = event.compute_id();
+        let id_before = event.compute_id().unwrap();
         event.id = EventId("different_id".to_string());
-        assert_eq!(event.compute_id(), id_before);
+        assert_eq!(event.compute_id().unwrap(), id_before);
 
         let (sk_bytes, _) = test_keypair();
         event.sign(&sk_bytes).expect("sign should succeed");
-        assert_eq!(event.compute_id(), id_before);
+        assert_eq!(event.compute_id().unwrap(), id_before);
     }
 
     #[test]
     fn different_content_different_id() {
         let e1 = make_event("content A");
         let e2 = make_event("content B");
-        assert_ne!(e1.compute_id(), e2.compute_id());
+        assert_ne!(e1.compute_id().unwrap(), e2.compute_id().unwrap());
     }
 
     #[test]
     fn compute_hash_deterministic() {
         let e1 = make_event("test content");
         let _e2 = make_event("test content");
-        let hash1 = e1.compute_hash();
-        assert_eq!(e1.compute_hash(), hash1);
+        let hash1 = e1.compute_hash().unwrap();
+        assert_eq!(e1.compute_hash().unwrap(), hash1);
     }
 
     #[test]
@@ -365,9 +369,9 @@ mod tests {
     fn sign_changes_hash() {
         let (sk_bytes, _) = test_keypair();
         let mut event = make_event("test");
-        let hash_before = event.compute_hash();
+        let hash_before = event.compute_hash().unwrap();
         event.sign(&sk_bytes).expect("sign should succeed");
-        let hash_after = event.compute_hash();
+        let hash_after = event.compute_hash().unwrap();
         assert_ne!(hash_before, hash_after);
     }
 
@@ -502,7 +506,7 @@ mod tests {
     #[test]
     fn hash_format_is_hex() {
         let event = make_event("test");
-        let hash = event.compute_hash();
+        let hash = event.compute_hash().unwrap();
         assert_eq!(hash.0.len(), 64); // 32 bytes = 64 hex chars
         assert!(hash.0.chars().all(|c| c.is_ascii_hexdigit()));
     }
@@ -572,7 +576,7 @@ mod tests {
         let mut e2 = make_event("content");
         e2.timestamp = e1.timestamp;
         e2.tags = vec![EventTag { key: "test".to_string(), value: "value".to_string() }];
-        assert_ne!(e1.compute_id(), e2.compute_id());
+        assert_ne!(e1.compute_id().unwrap(), e2.compute_id().unwrap());
     }
 
     #[test]

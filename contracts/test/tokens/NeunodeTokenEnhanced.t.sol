@@ -132,7 +132,9 @@ contract NeunodeTokenEnhancedTest is Test {
     function testRevertStakeInsufficientBalance() public {
         _mintTo(alice, 100e18);
         vm.prank(alice);
-        vm.expectRevert("insufficient balance");
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeToken.InsufficientBalance.selector, alice, 200e18)
+        );
         token.stake(200e18);
     }
 
@@ -142,7 +144,9 @@ contract NeunodeTokenEnhancedTest is Test {
         token.stake(500e18);
 
         vm.prank(alice);
-        vm.expectRevert("insufficient staked");
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeToken.InsufficientStake.selector, alice, 600e18)
+        );
         token.unstake(600e18);
     }
 
@@ -213,6 +217,36 @@ contract NeunodeTokenEnhancedTest is Test {
         assertEq(token.getActivityLevel(alice), 4); // Dead (never active)
     }
 
+    // ─── Activity Access Control ──────────────────────────────────────────
+
+    function testRevertUpdateActivityOther() public {
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeToken.UnauthorizedActivityUpdate.selector, alice, bob)
+        );
+        token.updateActivity(bob);
+    }
+
+    function testUpdateActivitySelf() public {
+        vm.prank(alice);
+        token.updateActivity(alice);
+        assertEq(token.lastActivity(alice), block.timestamp);
+    }
+
+    function testRevertExecuteDecayOther() public {
+        _mintTo(alice, 10000e18);
+        vm.prank(alice);
+        token.transfer(bob, 1e18);
+
+        vm.warp(block.timestamp + 3 days);
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeToken.UnauthorizedActivityUpdate.selector, bob, alice)
+        );
+        token.executeDecay(alice);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     //   DECAY (7 tests)
     // ═══════════════════════════════════════════════════════════════════════
@@ -281,6 +315,7 @@ contract NeunodeTokenEnhancedTest is Test {
         uint256 decayAmount = token.computeDecay(alice);
         assertGt(decayAmount, 0);
 
+        vm.prank(alice);
         token.executeDecay(alice);
 
         // Distribution: 40% treasury, 30% staking, 20% burn, 10% dev
@@ -301,11 +336,13 @@ contract NeunodeTokenEnhancedTest is Test {
         token.transfer(bob, 1e18);
 
         vm.warp(block.timestamp + 3 days);
+        vm.prank(alice);
         token.executeDecay(alice); // first decay OK
 
         // Try again immediately — should fail
         vm.warp(block.timestamp + 12 hours);
-        vm.expectRevert("too soon");
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(NeunodeToken.DecayTooSoon.selector, alice));
         token.executeDecay(alice);
     }
 
@@ -331,7 +368,7 @@ contract NeunodeTokenEnhancedTest is Test {
         // Total staked: 800 (500 seed + 300 normal)
         // Trying to unstake 600 would go below seed lock of 500
         vm.prank(alice);
-        vm.expectRevert("cannot unstake seed");
+        vm.expectRevert(abi.encodeWithSelector(NeunodeToken.CannotUnstakeSeed.selector));
         token.unstake(600e18);
     }
 
@@ -417,3 +454,4 @@ contract NeunodeTokenEnhancedTest is Test {
 /// @dev Imports for error selectors
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/access/IAccessControl.sol";
+import "../../src/tokens/NeunodeToken.sol";

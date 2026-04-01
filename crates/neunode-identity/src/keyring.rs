@@ -46,20 +46,20 @@ impl Keyring {
     }
 
     /// secp256k1 verifying (public) key, as uncompressed SEC1 bytes (65 bytes).
-    pub fn secp256k1_public_key(&self) -> Vec<u8> {
+    pub fn secp256k1_public_key(&self) -> Result<Vec<u8>> {
         let sk = secp256k1::signing_key_from_bytes(&self.secp256k1_signing_bytes)
-            .expect("secp256k1 key validated at construction");
+            .map_err(|_| NeunodeError::KeyCorrupted)?;
         let vk = sk.verifying_key();
-        vk.to_encoded_point(false).as_bytes().to_vec()
+        Ok(vk.to_encoded_point(false).as_bytes().to_vec())
     }
 
     /// Ethereum address derived from the secp256k1 key (0x-prefixed, lowercase).
-    pub fn ethereum_address(&self) -> String {
+    pub fn ethereum_address(&self) -> Result<String> {
         let sk = secp256k1::signing_key_from_bytes(&self.secp256k1_signing_bytes)
-            .expect("secp256k1 key validated at construction");
+            .map_err(|_| NeunodeError::KeyCorrupted)?;
         let vk = sk.verifying_key();
         let addr = secp256k1::verifying_key_to_address(vk);
-        format!("0x{}", bytes_to_hex(&addr))
+        Ok(format!("0x{}", bytes_to_hex(&addr)))
     }
 
     /// Sign a message with Ed25519.
@@ -68,15 +68,15 @@ impl Keyring {
     }
 
     /// Sign a message with secp256k1 (raw ECDSA, SHA-256 challenge).
-    pub fn sign_secp256k1(&self, message: &[u8]) -> neunode_crypto::secp256k1::Signature {
+    pub fn sign_secp256k1(&self, message: &[u8]) -> Result<neunode_crypto::secp256k1::Signature> {
         let sk = secp256k1::signing_key_from_bytes(&self.secp256k1_signing_bytes)
-            .expect("secp256k1 key validated at construction");
-        secp256k1::sign_message(&sk, message)
+            .map_err(|_| NeunodeError::KeyCorrupted)?;
+        Ok(secp256k1::sign_message(&sk, message))
     }
 
     /// Return the `did:neunode` derived from the secp256k1 Ethereum address.
-    pub fn to_did(&self) -> Did {
-        generate_did_neunode(&self.ethereum_address())
+    pub fn to_did(&self) -> Result<Did> {
+        Ok(generate_did_neunode(&self.ethereum_address()?))
     }
 
     /// Also derive the bootstrap `did:key` from the Ed25519 key.
@@ -85,12 +85,12 @@ impl Keyring {
     }
 
     /// Export public keys and DID (no private material).
-    pub fn export_public(&self) -> PublicKeyBundle {
-        PublicKeyBundle {
+    pub fn export_public(&self) -> Result<PublicKeyBundle> {
+        Ok(PublicKeyBundle {
             ed25519: self.ed25519_public_key().to_bytes().to_vec(),
-            secp256k1: self.secp256k1_public_key(),
-            did: self.to_did(),
-        }
+            secp256k1: self.secp256k1_public_key()?,
+            did: self.to_did()?,
+        })
     }
 
     /// Export both private keys as raw bytes.
@@ -117,9 +117,9 @@ mod tests {
     fn generate_creates_valid_keyring() {
         let kr = Keyring::generate();
         assert_eq!(kr.ed25519_public_key().to_bytes().len(), 32);
-        assert_eq!(kr.secp256k1_public_key().len(), 65);
-        assert!(kr.ethereum_address().starts_with("0x"));
-        assert!(kr.to_did().is_neunode());
+        assert_eq!(kr.secp256k1_public_key().unwrap().len(), 65);
+        assert!(kr.ethereum_address().unwrap().starts_with("0x"));
+        assert!(kr.to_did().unwrap().is_neunode());
     }
 
     #[test]
@@ -141,7 +141,7 @@ mod tests {
     fn secp256k1_sign_verify_roundtrip() {
         let kr = Keyring::generate();
         let msg = b"hello ethereum";
-        let sig = kr.sign_secp256k1(msg);
+        let sig = kr.sign_secp256k1(msg).unwrap();
         let sk = secp256k1::signing_key_from_bytes(&kr.secp256k1_signing_bytes).unwrap();
         let vk = *sk.verifying_key();
         assert!(secp256k1::verify_signature(&vk, msg, &sig));
@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn secp256k1_wrong_message_fails() {
         let kr = Keyring::generate();
-        let sig = kr.sign_secp256k1(b"message A");
+        let sig = kr.sign_secp256k1(b"message A").unwrap();
         let sk = secp256k1::signing_key_from_bytes(&kr.secp256k1_signing_bytes).unwrap();
         let vk = *sk.verifying_key();
         assert!(!secp256k1::verify_signature(&vk, b"message B", &sig));
@@ -159,7 +159,7 @@ mod tests {
     #[test]
     fn ethereum_address_format() {
         let kr = Keyring::generate();
-        let addr = kr.ethereum_address();
+        let addr = kr.ethereum_address().unwrap();
         assert!(addr.starts_with("0x"));
         assert_eq!(addr.len(), 42);
         assert!(addr[2..].chars().all(|c| c.is_ascii_hexdigit()));
@@ -168,17 +168,17 @@ mod tests {
     #[test]
     fn ethereum_address_deterministic() {
         let kr = Keyring::generate();
-        let a1 = kr.ethereum_address();
-        let a2 = kr.ethereum_address();
+        let a1 = kr.ethereum_address().unwrap();
+        let a2 = kr.ethereum_address().unwrap();
         assert_eq!(a1, a2);
     }
 
     #[test]
     fn to_did_returns_neunode() {
         let kr = Keyring::generate();
-        let did = kr.to_did();
+        let did = kr.to_did().unwrap();
         assert!(did.is_neunode());
-        assert!(did.as_str().contains(&kr.ethereum_address()));
+        assert!(did.as_str().contains(&kr.ethereum_address().unwrap()));
     }
 
     #[test]
@@ -192,16 +192,16 @@ mod tests {
     #[test]
     fn export_public_no_private_keys() {
         let kr = Keyring::generate();
-        let bundle = kr.export_public();
+        let bundle = kr.export_public().unwrap();
         assert_eq!(bundle.ed25519.len(), 32);
         assert_eq!(bundle.secp256k1.len(), 65);
-        assert_eq!(bundle.did, kr.to_did());
+        assert_eq!(bundle.did, kr.to_did().unwrap());
     }
 
     #[test]
     fn export_public_serializable() {
         let kr = Keyring::generate();
-        let bundle = kr.export_public();
+        let bundle = kr.export_public().unwrap();
         let json = serde_json::to_string(&bundle).expect("serialize");
         let back: PublicKeyBundle = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(bundle, back);
@@ -219,7 +219,7 @@ mod tests {
         let kr2 = Keyring::from_bytes(&ed_arr, &secp_arr).expect("from_bytes");
 
         assert_eq!(kr.ed25519_public_key().to_bytes(), kr2.ed25519_public_key().to_bytes());
-        assert_eq!(kr.ethereum_address(), kr2.ethereum_address());
+        assert_eq!(kr.ethereum_address().unwrap(), kr2.ethereum_address().unwrap());
     }
 
     #[test]
@@ -233,14 +233,14 @@ mod tests {
     fn different_keyrings_produce_different_dids() {
         let kr1 = Keyring::generate();
         let kr2 = Keyring::generate();
-        assert_ne!(kr1.to_did(), kr2.to_did());
+        assert_ne!(kr1.to_did().unwrap(), kr2.to_did().unwrap());
         assert_ne!(kr1.to_did_key(), kr2.to_did_key());
     }
 
     #[test]
     fn secp256k1_public_key_is_uncompressed() {
         let kr = Keyring::generate();
-        let pk_bytes = kr.secp256k1_public_key();
+        let pk_bytes = kr.secp256k1_public_key().unwrap();
         assert_eq!(pk_bytes.len(), 65);
         assert_eq!(pk_bytes[0], 0x04); // uncompressed SEC1 prefix
     }

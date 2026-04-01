@@ -1,11 +1,14 @@
 use std::collections::HashMap;
 
-use neunode_core::constants::bounty::{PROTOCOL_FEE_PCT, REVIEWER_FEE_PCT};
 use neunode_core::types::{BountyId, Did, Timestamp, TokenAmount, TokenType};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{BountyError, Result};
 use ts_rs::TS;
+
+const PROTOCOL_FEE_BPS: u64 = 300;
+const REVIEWER_FEE_BPS: u64 = 400;
+const BPS_DENOMINATOR: u64 = 10_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -90,15 +93,14 @@ pub struct FeeBreakdown {
 
 impl FeeBreakdown {
     pub fn from_gross(gross: TokenAmount) -> Self {
-        let protocol_units = (gross.0 as f64 * PROTOCOL_FEE_PCT / 100.0).ceil() as u64;
-        let reviewer_units = (gross.0 as f64 * REVIEWER_FEE_PCT / 100.0).ceil() as u64;
+        let protocol_units = (gross.0 * PROTOCOL_FEE_BPS).div_ceil(BPS_DENOMINATOR);
+        let reviewer_units = (gross.0 * REVIEWER_FEE_BPS).div_ceil(BPS_DENOMINATOR);
         let total_fees = protocol_units.saturating_add(reviewer_units);
         let capped_fees = total_fees.min(gross.0);
         let net = gross.0.saturating_sub(capped_fees);
 
         let (protocol_fee, reviewer_fee) = if total_fees > gross.0 && total_fees > 0 {
-            let ratio = gross.0 as f64 / total_fees as f64;
-            let pf = (protocol_units as f64 * ratio).floor() as u64;
+            let pf = gross.0 * protocol_units / total_fees;
             let rf = gross.0.saturating_sub(pf);
             (TokenAmount(pf), TokenAmount(rf))
         } else {

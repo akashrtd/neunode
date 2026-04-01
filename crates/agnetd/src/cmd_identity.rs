@@ -34,12 +34,12 @@ fn create_identity(
     }
 
     let keyring = neunode_identity::keyring::Keyring::generate();
-    let did = keyring.to_did();
+    let did = keyring.to_did().map_err(|e| anyhow::anyhow!("{e}"))?;
     let did_key = keyring.to_did_key();
     let peer_id = neunode_identity::did::did_to_peer_id(&did_key)
         .map(|p| p.to_string())
         .unwrap_or_else(|_| "unknown".to_string());
-    let eth_addr = keyring.ethereum_address();
+    let eth_addr = keyring.ethereum_address().map_err(|e| anyhow::anyhow!("{e}"))?;
 
     let mut capabilities = Vec::new();
     if method == "neunode" {
@@ -47,9 +47,10 @@ fn create_identity(
         capabilities.push("training".to_string());
     }
     let card =
-        neunode_identity::agent_card::AgentCard::new(name, &keyring, capabilities, HashMap::new());
+        neunode_identity::agent_card::AgentCard::new(name, &keyring, capabilities, HashMap::new())?;
     let signed_card = card.sign(&keyring);
-    let doc = neunode_identity::document::DidDocument::from_keyring(&keyring);
+    let doc = neunode_identity::document::DidDocument::from_keyring(&keyring)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
 
     let dir = match output_dir {
         Some(d) => PathBuf::from(d),
@@ -68,8 +69,20 @@ fn create_identity(
         "ed25519_private": bytes_to_hex(&ed_bytes),
         "secp256k1_private": bytes_to_hex(&secp_bytes),
     });
-    fs::write(dir.join("keys.json"), serde_json::to_string_pretty(&key_data)?)
-        .with_context(|| "failed to write keys.json")?;
+    let key_json = serde_json::to_string_pretty(&key_data)?;
+    let machine_key = neunode_crypto::aead::derive_machine_key();
+    let encrypted = neunode_crypto::aead::encrypt(&machine_key, key_json.as_bytes())
+        .with_context(|| "failed to encrypt key data")?;
+    let keys_path = dir.join("keys.json.enc");
+    fs::write(&keys_path, &encrypted).with_context(|| "failed to write keys.json.enc")?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o600);
+        fs::set_permissions(&keys_path, perms)
+            .with_context(|| "failed to set permissions on keys.json.enc")?;
+    }
 
     fs::write(dir.join("did_document.json"), doc.to_json()?)
         .with_context(|| "failed to write did_document.json")?;
@@ -77,7 +90,7 @@ fn create_identity(
     fs::write(dir.join("agent_card.json"), serde_json::to_string_pretty(&signed_card)?)
         .with_context(|| "failed to write agent_card.json")?;
 
-    let bundle = keyring.export_public();
+    let bundle = keyring.export_public().map_err(|e| anyhow::anyhow!("{e}"))?;
     fs::write(dir.join("public_keys.json"), serde_json::to_string_pretty(&bundle)?)
         .with_context(|| "failed to write public_keys.json")?;
 

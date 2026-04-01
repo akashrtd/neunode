@@ -20,6 +20,12 @@ pub enum TurboQuantError {
 
     #[error("buffer too small: need {needed} bytes, have {available}")]
     BufferTooSmall { needed: usize, available: usize },
+
+    #[error("rotation matrix not initialized")]
+    RotationNotInitialized,
+
+    #[error("codebook has no levels")]
+    CodebookEmpty,
 }
 
 /// Result type alias for TurboQuant operations.
@@ -66,6 +72,18 @@ mod tests {
     fn error_display_buffer_too_small() {
         let err = TurboQuantError::BufferTooSmall { needed: 4096, available: 1024 };
         assert_eq!(format!("{err}"), "buffer too small: need 4096 bytes, have 1024");
+    }
+
+    #[test]
+    fn error_display_rotation_not_initialized() {
+        let err = TurboQuantError::RotationNotInitialized;
+        assert_eq!(format!("{err}"), "rotation matrix not initialized");
+    }
+
+    #[test]
+    fn error_display_codebook_empty() {
+        let err = TurboQuantError::CodebookEmpty;
+        assert_eq!(format!("{err}"), "codebook has no levels");
     }
 
     #[test]

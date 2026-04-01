@@ -354,6 +354,69 @@ contract BountyIntegrationTest is Test {
         bounty.setFeeConfig(500, 400, 200, admin, admin, admin);
     }
 
+    /// @notice Verify no rounding drift with separate fee recipients:
+    ///         providerPayout + sum(fees) == reward exactly
+    function testFeeRoundingNoDriftOddAmounts() public {
+        // Use distinct recipients so individual balance checks are unambiguous
+        address protoRecipient = makeAddr("protoFee");
+        address revRecipient = makeAddr("revFee");
+        address verRecipient = makeAddr("verFee");
+        bounty.setFeeConfig(200, 300, 100, protoRecipient, revRecipient, verRecipient);
+
+        // Odd amounts that expose rounding: 10001 wei, 1 wei, 999 wei
+        uint256[3] memory rewards = [uint256(10001), uint256(1), uint256(999)];
+
+        for (uint256 i = 0; i < rewards.length; i++) {
+            bytes32 bountyId = keccak256(abi.encode("rounding_test", i));
+            uint256 reward = rewards[i];
+
+            token.mint(requester, reward);
+
+            vm.prank(requester);
+            bounty.createBounty(
+                bountyId,
+                reward,
+                address(token),
+                block.timestamp + 3 days,
+                block.timestamp + 10 days
+            );
+
+            vm.prank(provider);
+            bounty.claimBounty(bountyId);
+
+            vm.prank(provider);
+            bounty.submitWork(bountyId, keccak256("work"));
+
+            vm.prank(requester);
+            bounty.acceptSubmission(bountyId);
+
+            uint256 providerBalBefore = token.balanceOf(provider);
+            uint256 protoBalBefore = token.balanceOf(protoRecipient);
+            uint256 revBalBefore = token.balanceOf(revRecipient);
+            uint256 verBalBefore = token.balanceOf(verRecipient);
+            uint256 contractBalBefore = token.balanceOf(address(bounty));
+
+            bounty.payBountyWithFees(bountyId);
+
+            uint256 protocolFee = (reward * 200) / 10_000;
+            uint256 reviewerFee = (reward * 300) / 10_000;
+            uint256 verificationFee = (reward * 100) / 10_000;
+            uint256 providerPayout = reward - protocolFee - reviewerFee - verificationFee;
+
+            // CORE INVARIANT: no dust, no drift
+            assertEq(providerPayout + protocolFee + reviewerFee + verificationFee, reward);
+
+            // Verify individual transfers
+            assertEq(token.balanceOf(provider) - providerBalBefore, providerPayout);
+            assertEq(token.balanceOf(protoRecipient) - protoBalBefore, protocolFee);
+            assertEq(token.balanceOf(revRecipient) - revBalBefore, reviewerFee);
+            assertEq(token.balanceOf(verRecipient) - verBalBefore, verificationFee);
+
+            // Contract must have released the full reward
+            assertEq(contractBalBefore - token.balanceOf(address(bounty)), reward);
+        }
+    }
+
     function testSetFeeConfig() public {
         address feeRecipient1 = makeAddr("fee1");
         address feeRecipient2 = makeAddr("fee2");

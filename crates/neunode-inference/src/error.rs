@@ -33,6 +33,9 @@ pub enum InferenceError {
 
     #[error("settlement failed: {0}")]
     SettlementFailed(String),
+
+    #[error("protocol fee exceeds gross cost: fee={fee}, gross={gross}")]
+    FeeExceedsGross { fee: TokenAmount, gross: TokenAmount },
 }
 
 /// Result type alias for inference operations.
@@ -103,6 +106,13 @@ mod tests {
     fn error_display_settlement_failed() {
         let err = InferenceError::SettlementFailed("balance too low".to_string());
         assert_eq!(format!("{err}"), "settlement failed: balance too low");
+    }
+
+    #[test]
+    fn error_display_fee_exceeds_gross() {
+        let err = InferenceError::FeeExceedsGross { fee: TokenAmount(100), gross: TokenAmount(50) };
+        assert!(err.to_string().contains("100"));
+        assert!(err.to_string().contains("50"));
     }
 
     #[test]

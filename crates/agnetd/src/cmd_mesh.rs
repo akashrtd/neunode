@@ -224,7 +224,9 @@ fn handle_stdin_post(args: &[&str], writer: &OutputWriter, state: &AppState) {
                     Hash256(prev_prev_hash_str),
                     prev_content,
                 ) {
-                    Ok(prev_event) => prev_event.compute_hash(),
+                    Ok(prev_event) => {
+                        prev_event.compute_hash().unwrap_or_else(|_| Hash256("0".to_string()))
+                    }
                     Err(_) => Hash256("0".to_string()),
                 }
             }

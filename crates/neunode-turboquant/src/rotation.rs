@@ -107,7 +107,7 @@ impl RotationMatrix {
                 Ok(data)
             }
             RotationStrategy::Qr => {
-                let mat = self.qr_matrix.as_ref().expect("QR matrix must be initialized");
+                let mat = self.qr_matrix.as_ref().ok_or(TurboQuantError::RotationNotInitialized)?;
                 Ok(mat_vec_multiply(mat, input, self.dim))
             }
         }
@@ -140,7 +140,7 @@ impl RotationMatrix {
                 Ok(data)
             }
             RotationStrategy::Qr => {
-                let mat = self.qr_matrix.as_ref().expect("QR matrix must be initialized");
+                let mat = self.qr_matrix.as_ref().ok_or(TurboQuantError::RotationNotInitialized)?;
                 Ok(mat_t_vec_multiply(mat, input, self.dim))
             }
         }

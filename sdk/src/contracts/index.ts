@@ -20,7 +20,7 @@ export {
 } from './abi/diamond.js';
 
 // Addresses
-export { chainAddresses } from './addresses.js';
+export { chainAddresses, getContractAddresses } from './addresses.js';
 export type { ContractAddresses, ChainId } from './addresses.js';
 
 // Contract helpers

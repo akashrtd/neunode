@@ -39,3 +39,15 @@ export const chainAddresses: Record<number, ContractAddresses> = {
 };
 
 export type ChainId = keyof typeof chainAddresses;
+
+/** Get contract addresses for a chain, throwing if the chain is not configured. */
+export function getContractAddresses(chainId: number): ContractAddresses {
+  const addresses = chainAddresses[chainId];
+  if (!addresses) {
+    const available = Object.keys(chainAddresses).join(", ");
+    throw new Error(
+      `No contract addresses configured for chain ${chainId}. Available chains: ${available}`,
+    );
+  }
+  return addresses;
+}

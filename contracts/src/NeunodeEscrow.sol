@@ -4,13 +4,14 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./bounty/IBountyEscrow.sol";
 
 /// @title NeunodeEscrow — Bilateral escrow for bounty payments
 /// @notice iExec-style escrow: requester deposits payment, provider bonds 15%,
 ///         release on accept, refund on reject, dispute resolution placeholder.
 ///         Now integrates with bounty lifecycle via IBountyEscrow interface.
-contract NeunodeEscrow is IBountyEscrow, AccessControl {
+contract NeunodeEscrow is IBountyEscrow, AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // ─── Types ────────────────────────────────────────────────────────────
@@ -78,7 +79,6 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
     error InvalidAmount();
     error InvalidToken();
     error DeadlinePassed(uint256 deadline);
-    error TransferFailed();
     error Unauthorized();
 
     // ─── Constructor ──────────────────────────────────────────────────────
@@ -111,8 +111,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
         if (escrows[bountyId].created != 0) revert EscrowNotFound(bountyId);
 
         // Transfer payment from requester to this contract
-        bool success = IERC20(token).transferFrom(requester_, address(this), amount);
-        if (!success) revert TransferFailed();
+        IERC20(token).safeTransferFrom(requester_, address(this), amount);
 
         escrows[bountyId] = Escrow({
             bountyId: bountyId,
@@ -143,8 +142,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
         uint256 minBond = (escrow.amount * PROVIDER_BOND_BPS) / 10_000;
         if (bondAmount < minBond) revert InvalidAmount();
 
-        bool success = IERC20(escrow.token).transferFrom(provider_, address(this), bondAmount);
-        if (!success) revert TransferFailed();
+        IERC20(escrow.token).safeTransferFrom(provider_, address(this), bondAmount);
 
         escrow.provider = provider_;
         escrow.providerBond = bondAmount;
@@ -163,7 +161,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
         address protocolFeeRecipient,
         address reviewerFeeRecipient,
         address verificationFeeRecipient
-    ) external override onlyRole(BOUNTY_CONTRACT_ROLE) {
+    ) external override onlyRole(BOUNTY_CONTRACT_ROLE) nonReentrant {
         Escrow storage escrow = escrows[bountyId];
         if (escrow.created == 0) revert EscrowNotFound(bountyId);
         if (escrow.state != EscrowState.Funded) revert EscrowNotFunded(bountyId);
@@ -202,7 +200,12 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
     }
 
     /// @notice Refund requester (called by bounty contract)
-    function refundRequester(bytes32 bountyId) external override onlyRole(BOUNTY_CONTRACT_ROLE) {
+    function refundRequester(bytes32 bountyId)
+        external
+        override
+        onlyRole(BOUNTY_CONTRACT_ROLE)
+        nonReentrant
+    {
         Escrow storage escrow = escrows[bountyId];
         if (escrow.created == 0) revert EscrowNotFound(bountyId);
         if (escrow.state != EscrowState.Funded) revert EscrowNotFunded(bountyId);
@@ -235,8 +238,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
         if (escrows[bountyId].created != 0) revert EscrowNotFound(bountyId); // reentrancy guard
 
         // Transfer payment from requester to this contract
-        bool success = IERC20(token).transferFrom(msg.sender, address(this), amount);
-        if (!success) revert TransferFailed();
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         escrows[bountyId] = Escrow({
             bountyId: bountyId,
@@ -264,8 +266,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
         if (providerBond < minBond) revert InvalidAmount();
 
         // Transfer bond from provider
-        bool success = IERC20(escrow.token).transferFrom(msg.sender, address(this), providerBond);
-        if (!success) revert TransferFailed();
+        IERC20(escrow.token).safeTransferFrom(msg.sender, address(this), providerBond);
 
         escrow.provider = msg.sender;
         escrow.providerBond = providerBond;
@@ -275,7 +276,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
     }
 
     /// @notice Release payment to provider (requester accepts work)
-    function release(bytes32 bountyId) external {
+    function release(bytes32 bountyId) external nonReentrant {
         Escrow storage escrow = escrows[bountyId];
         if (escrow.created == 0) revert EscrowNotFound(bountyId);
         if (escrow.state != EscrowState.Funded) revert EscrowNotFunded(bountyId);
@@ -290,7 +291,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
     }
 
     /// @notice Refund payment to requester (work rejected)
-    function refund(bytes32 bountyId) external {
+    function refund(bytes32 bountyId) external nonReentrant {
         Escrow storage escrow = escrows[bountyId];
         if (escrow.created == 0) revert EscrowNotFound(bountyId);
         if (escrow.state != EscrowState.Funded) revert EscrowNotFunded(bountyId);
@@ -309,7 +310,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl {
     }
 
     /// @notice Either party can dispute
-    function dispute(bytes32 bountyId) external {
+    function dispute(bytes32 bountyId) external nonReentrant {
         Escrow storage escrow = escrows[bountyId];
         if (escrow.created == 0) revert EscrowNotFound(bountyId);
         if (escrow.state != EscrowState.Funded) revert EscrowNotFunded(bountyId);

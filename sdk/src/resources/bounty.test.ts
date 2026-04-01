@@ -107,19 +107,22 @@ describe("createBountyResource", () => {
 
   describe("list", () => {
     it("should call execute with bounty list (no params)", async () => {
-      execute.mockResolvedValue(undefined);
+      execute.mockResolvedValue([]);
       const resource = createBountyResource(mockClient);
-      await resource.list();
+      const result = await resource.list();
       expect(execute).toHaveBeenCalledWith(["bounty", "list"]);
+      expect(result).toEqual([]);
     });
 
     it("should pass optional filter params", async () => {
-      execute.mockResolvedValue(undefined);
+      const mockItems = [{ ID: "bnty_1", State: "Open", Creator: "did:neunode:abc", Claimant: "", Reward: "1000", Deadline: "", Created: "", Escrow: "" }];
+      execute.mockResolvedValue(mockItems);
       const resource = createBountyResource(mockClient);
-      await resource.list({ state: "Open", creator: "did:neunode:abc", limit: 10 });
+      const result = await resource.list({ state: "Open", creator: "did:neunode:abc", limit: 10 });
       expect(execute).toHaveBeenCalledWith([
         "bounty", "list", "--state", "Open", "--creator", "did:neunode:abc", "--limit", "10",
       ]);
+      expect(result).toEqual(mockItems);
     });
   });
 

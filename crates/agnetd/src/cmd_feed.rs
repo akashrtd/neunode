@@ -55,7 +55,7 @@ fn feed_post(
                     ),
                     prev.payload.iter().map(|&b| b as char).collect::<String>(),
                 )?;
-                prev_event.compute_hash()
+                prev_event.compute_hash()?
             }
             None => Hash256("0".to_string()),
         }

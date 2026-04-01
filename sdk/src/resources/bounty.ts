@@ -62,6 +62,17 @@ export interface BountyListParams {
   limit?: number;
 }
 
+export interface BountyListItem {
+  ID: string;
+  State: string;
+  Creator: string;
+  Claimant: string;
+  Reward: string;
+  Deadline: string;
+  Created: string;
+  Escrow: string;
+}
+
 export interface BountyShowResult {
   ID: string;
   State: string;
@@ -90,7 +101,7 @@ export interface BountyResource {
   /** Review a submitted bounty and assign a score. */
   review(params: BountyReviewParams): Promise<BountyReviewResult>;
   /** List bounties, optionally filtered by state or creator. */
-  list(params?: BountyListParams): Promise<void>;
+  list(params?: BountyListParams): Promise<BountyListItem[]>;
   /** Show details for a specific bounty. */
   show(id: string): Promise<BountyShowResult>;
   /** Cancel an open bounty and refund escrow. */
@@ -132,12 +143,12 @@ export function createBountyResource(client: NeunodeClient): BountyResource {
       ]);
     },
 
-    async list(params?: BountyListParams): Promise<void> {
+    async list(params?: BountyListParams): Promise<BountyListItem[]> {
       const args = ["bounty", "list"];
       if (params?.state) args.push("--state", params.state);
       if (params?.creator) args.push("--creator", params.creator);
       if (params?.limit) args.push("--limit", String(params.limit));
-      await cli.execute(args);
+      return cli.execute<BountyListItem[]>(args);
     },
 
     async show(id: string): Promise<BountyShowResult> {

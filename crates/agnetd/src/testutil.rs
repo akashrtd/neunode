@@ -26,7 +26,7 @@ pub fn test_state() -> AppState {
     let db = neunode_storage::db::NeunodeDb::open(&dir).unwrap();
 
     let kr = Keyring::generate();
-    let did = kr.to_did();
+    let did = kr.to_did().unwrap();
 
     AppState {
         db: Arc::new(db),
