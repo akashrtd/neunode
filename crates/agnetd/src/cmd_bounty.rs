@@ -43,6 +43,7 @@ pub fn execute(cmd: &BountyCommands, args: &GlobalArgs, state: &mut AppState) ->
         BountyCommands::Cancel { id, reason } => {
             cancel_bounty(id, reason.as_deref().unwrap_or(""), &writer, state)
         }
+        BountyCommands::Pay { id } => pay_bounty(id, &writer, state),
     }
 }
 
@@ -204,6 +205,18 @@ fn create_bounty(
     let store = state.bounty_store();
     store.put(&store_data)?;
 
+    let token_store = state.token_store();
+    let token_byte = token_type_to_u8(&token_type);
+    let creator_did = sm.data().creator.0.clone();
+    if let Err(e) = token_store.transfer(
+        &creator_did,
+        &format!("escrow:{}", bounty_id),
+        token_byte,
+        reward as u128,
+    ) {
+        tracing::warn!("escrow transfer failed (creator may have insufficient balance): {}", e);
+    }
+
     let out = serde_json::json!({
         "id": bounty_id,
         "title": title,
@@ -249,6 +262,18 @@ fn claim_bounty(
 
     let updated = lib_to_storage(sm.data(), bounty.escrow_deposited);
     store.put(&updated)?;
+
+    let token_store = state.token_store();
+    let claimant_did_str = claimant.0.clone();
+    let token_byte = bounty.reward_token_type;
+    if let Err(e) = token_store.transfer(
+        &claimant_did_str,
+        &format!("escrow:{}", bounty_id),
+        token_byte,
+        stake as u128,
+    ) {
+        tracing::warn!("stake escrow failed: {}", e);
+    }
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
@@ -448,6 +473,21 @@ fn cancel_bounty(
     let updated = lib_to_storage(sm.data(), bounty.escrow_deposited);
     store.put(&updated)?;
 
+    let token_store = state.token_store();
+    let creator_did = bounty.requester_did.clone();
+    let token_byte = bounty.reward_token_type;
+    let escrow_amount = bounty.escrow_deposited;
+    if escrow_amount > 0 {
+        if let Err(e) = token_store.transfer(
+            &format!("escrow:{}", bounty_id),
+            &creator_did,
+            token_byte,
+            escrow_amount as u128,
+        ) {
+            tracing::warn!("escrow refund failed: {}", e);
+        }
+    }
+
     let out = serde_json::json!({
         "bounty_id": bounty_id,
         "state": "Cancelled",
@@ -456,6 +496,53 @@ fn cancel_bounty(
 
     writer.write_json(&out);
     writer.write_status(&format!("Bounty cancelled: {bounty_id}"));
+    Ok(())
+}
+
+fn pay_bounty(bounty_id: &str, writer: &OutputWriter, state: &AppState) -> Result<()> {
+    if bounty_id.is_empty() {
+        anyhow::bail!("bounty id cannot be empty");
+    }
+
+    let store = state.bounty_store();
+    let bounty =
+        store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
+
+    let lib_data = storage_to_lib(&bounty)?;
+    let mut sm = BountyStateMachine::new(lib_data);
+    let now = current_timestamp();
+
+    sm.try_transition(BountyEvent::Pay, now)?;
+
+    let claimant_did =
+        sm.data().claimant.as_ref().ok_or_else(|| anyhow::anyhow!("bounty has no claimant"))?;
+    let reward_amount = bounty.reward_amount;
+    let token_byte = bounty.reward_token_type;
+
+    let token_store = state.token_store();
+    token_store.transfer(
+        &format!("escrow:{}", bounty_id),
+        &claimant_did.0,
+        token_byte,
+        reward_amount as u128,
+    )?;
+
+    let updated = lib_to_storage(sm.data(), bounty.escrow_deposited);
+    store.put(&updated)?;
+
+    let out = serde_json::json!({
+        "bounty_id": bounty_id,
+        "claimant": claimant_did.to_string(),
+        "amount_paid": reward_amount,
+        "token_type": bounty.reward_token_type,
+        "state": "Paid",
+    });
+
+    writer.write_json(&out);
+    writer.write_status(&format!(
+        "Bounty paid: {bounty_id} → {} tokens to {}",
+        reward_amount, claimant_did
+    ));
     Ok(())
 }
 
@@ -744,5 +831,141 @@ mod tests {
 
         let updated = state.bounty_store().get(&bounty_id).unwrap().unwrap();
         assert_eq!(updated.state, "Cancelled");
+    }
+
+    // --- pay_bounty tests ---
+
+    fn seed_token_balance(state: &AppState, token_byte: u8, balance: u128) {
+        let did = state.active_did.as_ref().unwrap();
+        let store = state.token_store();
+        store
+            .set_balance(
+                &did.0,
+                token_byte,
+                &neunode_storage::token_store::TokenBalance {
+                    balance,
+                    staked: 0,
+                    last_decay_epoch: 0,
+                },
+            )
+            .unwrap();
+    }
+
+    fn full_bounty_lifecycle_to_accepted(state: &AppState) -> String {
+        let writer = test_writer();
+        create_bounty("Payable", "Desc", 1000, "compute", None, None, &writer, state).unwrap();
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
+
+        let writer2 = test_writer();
+        claim_bounty(&bounty_id, 200, &writer2, state).unwrap();
+
+        let writer3 = test_writer();
+        submit_bounty(&bounty_id, "ipfs://QmPaid", "{}", &writer3, state).unwrap();
+
+        let writer4 = test_writer();
+        review_bounty(&bounty_id, 85, "Good work", &writer4, state).unwrap();
+
+        bounty_id
+    }
+
+    #[test]
+    fn pay_bounty_full_flow() {
+        let state = test_state();
+        seed_token_balance(&state, 0x01, 10_000);
+
+        let bounty_id = full_bounty_lifecycle_to_accepted(&state);
+
+        let writer = test_writer();
+        pay_bounty(&bounty_id, &writer, &state).unwrap();
+
+        let updated = state.bounty_store().get(&bounty_id).unwrap().unwrap();
+        assert_eq!(updated.state, "Paid");
+    }
+
+    #[test]
+    fn pay_bounty_transfers_tokens_to_claimant() {
+        let state = test_state();
+        seed_token_balance(&state, 0x01, 10_000);
+
+        let bounty_id = full_bounty_lifecycle_to_accepted(&state);
+
+        let bounty = state.bounty_store().get(&bounty_id).unwrap().unwrap();
+        let claimant_did = bounty.provider_did.unwrap();
+
+        let writer = test_writer();
+        pay_bounty(&bounty_id, &writer, &state).unwrap();
+
+        let escrow_bal =
+            state.token_store().get_balance(&format!("escrow:{}", bounty_id), 0x01).unwrap();
+        assert_eq!(escrow_bal.balance, 200, "escrow should have stake remaining");
+
+        let claimant_bal = state.token_store().get_balance(&claimant_did, 0x01).unwrap();
+        // Same DID for creator+claimant in tests: 10000 - 1000(escrow) - 200(stake) + 1000(pay) = 9800
+        assert_eq!(claimant_bal.balance, 9800, "claimant should have received reward from escrow");
+    }
+
+    #[test]
+    fn pay_bounty_empty_id_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(pay_bounty("", &writer, &state).is_err());
+    }
+
+    #[test]
+    fn pay_bounty_not_found_fails() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(pay_bounty("nonexistent", &writer, &state).is_err());
+    }
+
+    #[test]
+    fn pay_bounty_not_accepted_fails() {
+        let state = test_state();
+        seed_token_balance(&state, 0x01, 10_000);
+        let writer = test_writer();
+        create_bounty("NotAccepted", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
+
+        let writer2 = test_writer();
+        let result = pay_bounty(&bounty_id, &writer2, &state);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("invalid state transition"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn create_bounty_escrows_tokens() {
+        let state = test_state();
+        seed_token_balance(&state, 0x01, 5000);
+        let writer = test_writer();
+        create_bounty("EscrowTest", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
+
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
+        let escrow_bal =
+            state.token_store().get_balance(&format!("escrow:{}", bounty_id), 0x01).unwrap();
+        assert_eq!(escrow_bal.balance, 1000);
+
+        let did = state.active_did.as_ref().unwrap();
+        let creator_bal = state.token_store().get_balance(&did.0, 0x01).unwrap();
+        assert_eq!(creator_bal.balance, 4000);
+    }
+
+    #[test]
+    fn cancel_bounty_refunds_escrow() {
+        let state = test_state();
+        seed_token_balance(&state, 0x01, 5000);
+        let writer = test_writer();
+        create_bounty("RefundTest", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
+
+        let did = state.active_did.as_ref().unwrap();
+        let after_create = state.token_store().get_balance(&did.0, 0x01).unwrap();
+        assert_eq!(after_create.balance, 4000);
+
+        let writer2 = test_writer();
+        cancel_bounty(&bounty_id, "changed mind", &writer2, &state).unwrap();
+
+        let after_cancel = state.token_store().get_balance(&did.0, 0x01).unwrap();
+        assert_eq!(after_cancel.balance, 5000, "creator should be refunded");
     }
 }

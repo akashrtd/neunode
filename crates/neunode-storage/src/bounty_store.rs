@@ -71,12 +71,16 @@ impl<'a> BountyStore<'a> {
 
     pub fn list_all(&self) -> Result<Vec<BountyData>> {
         let entries = self.db.prefix_scan(cf::CF_BOUNTIES, &[])?;
-        entries
-            .iter()
-            .map(|(_, v)| {
-                bincode::deserialize(v).map_err(|e| StorageError::Serialization(e.to_string()))
-            })
-            .collect()
+        let mut results = Vec::with_capacity(entries.len());
+        for (key, value) in &entries {
+            match bincode::deserialize(value) {
+                Ok(bounty) => results.push(bounty),
+                Err(e) => {
+                    tracing::warn!("skipping corrupt bounty entry (key {:?}): {}", key, e);
+                }
+            }
+        }
+        Ok(results)
     }
 }
 
@@ -195,6 +199,24 @@ mod tests {
         let fetched = store.get("bnty_ow").unwrap().unwrap();
         assert_eq!(fetched.state, "Submitted");
         assert_eq!(fetched.provider_did, Some("did:neunode:provider".to_string()));
+    }
+
+    #[test]
+    fn test_list_all_skips_corrupt() {
+        let db = temp_db();
+        let store = BountyStore::new(&db);
+
+        // Insert a valid bounty
+        store.put(&make_bounty("bnty_valid", "Open")).unwrap();
+
+        // Insert a raw corrupt entry directly into the CF
+        let corrupt_key = bincode::serialize("bnty_corrupt").unwrap();
+        let corrupt_value = b"this is not valid bincode data".as_slice();
+        db.put_raw(cf::CF_BOUNTIES, &corrupt_key, corrupt_value).unwrap();
+
+        let all = store.list_all().unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].id, "bnty_valid");
     }
 
     #[test]

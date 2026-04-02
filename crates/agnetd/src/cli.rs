@@ -438,6 +438,12 @@ pub enum BountyCommands {
         #[arg(short, long)]
         reason: Option<String>,
     },
+    /// Pay out an accepted bounty
+    Pay {
+        /// Bounty ID
+        #[arg(short, long)]
+        id: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]

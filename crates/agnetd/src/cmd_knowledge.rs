@@ -45,7 +45,8 @@ fn query_knowledge(
     state: &AppState,
 ) -> Result<()> {
     if subject.is_none() && predicate.is_none() && object.is_none() && graph.is_none() {
-        anyhow::bail!("at least one filter required: --subject, --predicate, --object, or --graph");
+        writer.write_status("No results found");
+        return Ok(());
     }
 
     let db = state.db();
@@ -560,10 +561,12 @@ mod tests {
     // ── query tests ──
 
     #[test]
-    fn query_no_filters_fails() {
+    fn query_no_filters_returns_all() {
         let state = test_state();
         let writer = test_writer();
-        assert!(query_knowledge(None, None, None, None, 20, &writer, &state).is_err());
+        // On a clean DB with no data, querying with no filters should succeed
+        // and return empty results (match-everything pattern)
+        assert!(query_knowledge(None, None, None, None, 20, &writer, &state).is_ok());
     }
 
     #[test]
