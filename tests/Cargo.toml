@@ -41,3 +41,7 @@ path = "p2p_gossipsub.rs"
 [[test]]
 name = "training_flow"
 path = "training_flow.rs"
+
+[[test]]
+name = "multi_node_e2e"
+path = "multi_node_e2e.rs"
