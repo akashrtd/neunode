@@ -41,23 +41,11 @@ pub fn all_column_families() -> Vec<&'static str> {
 }
 
 pub fn ledger_column_families() -> Vec<&'static str> {
-    vec![
-        CF_IDENTITY,
-        CF_CONFIG,
-        CF_TOKENS,
-        CF_REPUTATION,
-        CF_MODELS,
-        CF_TRAINING,
-        CF_BOUNTIES,
-    ]
+    vec![CF_IDENTITY, CF_CONFIG, CF_TOKENS, CF_REPUTATION, CF_MODELS, CF_TRAINING, CF_BOUNTIES]
 }
 
 pub fn network_column_families() -> Vec<&'static str> {
-    vec![
-        CF_P2P_STATE,
-        CF_MERKLE_NODES,
-        CF_SNAPSHOTS,
-    ]
+    vec![CF_P2P_STATE, CF_MERKLE_NODES, CF_SNAPSHOTS]
 }
 
 pub fn graph_column_families() -> Vec<&'static str> {

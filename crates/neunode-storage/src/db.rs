@@ -35,12 +35,7 @@ impl NeunodeDb {
 
         let cache = Cache::new(max_cache_entries, cache_ttl_secs);
 
-        Ok(Self {
-            ledger_db,
-            network_db,
-            graph_db,
-            cache,
-        })
+        Ok(Self { ledger_db, network_db, graph_db, cache })
     }
 
     fn open_db_for_cfs(path: &Path, required: Vec<&'static str>) -> Result<DB> {
@@ -49,7 +44,8 @@ impl NeunodeDb {
         opts.create_missing_column_families(true);
 
         let required_vec: Vec<String> = required.iter().map(|s| s.to_string()).collect();
-        let existing = DB::list_cf(&Options::default(), path).unwrap_or_else(|_| vec!["default".into()]);
+        let existing =
+            DB::list_cf(&Options::default(), path).unwrap_or_else(|_| vec!["default".into()]);
 
         let mut all_cfs = required_vec;
         for cf in existing {
@@ -68,8 +64,7 @@ impl NeunodeDb {
 
     pub fn cf_handle(&self, cf_name: &str) -> Result<Arc<BoundColumnFamily<'_>>> {
         let db = self.get_db_for_cf(cf_name)?;
-        db.cf_handle(cf_name)
-            .ok_or_else(|| StorageError::ColumnFamilyNotFound(cf_name.to_string()))
+        db.cf_handle(cf_name).ok_or_else(|| StorageError::ColumnFamilyNotFound(cf_name.to_string()))
     }
 
     fn get_db_for_cf(&self, cf_name: &str) -> Result<&DB> {

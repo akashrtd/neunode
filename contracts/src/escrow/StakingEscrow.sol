@@ -9,7 +9,6 @@ import "../interfaces/INeunodeToken.sol";
 ///         so that standard composability works. Calculates decay on the staked
 ///         balance and slashes it via the token's slashStake method.
 contract StakingEscrow is AccessControl {
-    
     error DecayTooSoon(address account);
 
     bytes32 public constant DECAY_ADMIN_ROLE = keccak256("DECAY_ADMIN_ROLE");
@@ -34,10 +33,10 @@ contract StakingEscrow is AccessControl {
     function computeDecay(address account) public view returns (uint256) {
         uint8 level = neunodeToken.getActivityLevel(account);
         if (level == 0) return 0; // Active = no decay
-        
+
         uint256 stakedBal = neunodeToken.stakedBalanceOf(account);
         if (stakedBal == 0) return 0;
-        
+
         uint256 rate = decayRatesBps[level];
         return (stakedBal * rate) / 10000;
     }
@@ -45,7 +44,7 @@ contract StakingEscrow is AccessControl {
     /// @notice Apply decay to an account. Anyone can trigger this on inactive nodes.
     function executeDecay(address account) external {
         if (block.timestamp < _lastDecayTimestamp[account] + 1 days) revert DecayTooSoon(account);
-        
+
         uint256 decayAmount = computeDecay(account);
         if (decayAmount == 0) {
             _lastDecayTimestamp[account] = block.timestamp;
@@ -55,7 +54,7 @@ contract StakingEscrow is AccessControl {
         // Apply penalty by slashing their stake
         neunodeToken.slashStake(account, decayAmount);
         _lastDecayTimestamp[account] = block.timestamp;
-        
+
         emit DecayExecuted(account, decayAmount);
     }
 }

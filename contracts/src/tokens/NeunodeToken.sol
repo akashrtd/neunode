@@ -34,8 +34,6 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
 
     mapping(address => uint256) private _lastActivity;
 
-
-
     // ─── Constructor ──────────────────────────────────────────────────────
 
     constructor(string memory name, string memory symbol, uint8 decimals_)
@@ -110,9 +108,12 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
             amount = _stakedBalances[account];
         }
         if (amount == 0) return;
-        
+
         // Seed tokens are protected from slashing
-        if (_seedBalances[account] != 0 && _stakedBalances[account] - amount < _seedBalances[account]) {
+        if (
+            _seedBalances[account] != 0
+                && _stakedBalances[account] - amount < _seedBalances[account]
+        ) {
             amount = _stakedBalances[account] - _seedBalances[account];
         }
 

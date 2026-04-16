@@ -1,5 +1,5 @@
 use neunode_core::constants::bounty::{
-    REVIEWER_WEIGHT_AVAILABILITY, REVIEWER_WEIGHT_CAPABILITY, REVIEWER_MIN_STAKE,
+    REVIEWER_MIN_STAKE, REVIEWER_WEIGHT_AVAILABILITY, REVIEWER_WEIGHT_CAPABILITY,
     REVIEWER_WEIGHT_REPUTATION, REVIEWER_WEIGHT_STAKE,
 };
 use neunode_core::types::{Did, Signature, Timestamp};
@@ -295,7 +295,9 @@ mod tests {
             vec![test_did("a"), test_did("b"), test_did("c"), test_did("d"), test_did("e")];
         let mut scores = std::collections::HashMap::new();
         let mut stakes = std::collections::HashMap::new();
-        for d in &candidates { stakes.insert(d.clone(), 1000.0); }
+        for d in &candidates {
+            stakes.insert(d.clone(), 1000.0);
+        }
         scores.insert(test_did("a"), 90.0);
         scores.insert(test_did("b"), 80.0);
         scores.insert(test_did("c"), 70.0);
@@ -314,7 +316,9 @@ mod tests {
         let candidates = vec![test_did("a"), test_did("b")];
         let mut scores = std::collections::HashMap::new();
         let mut stakes = std::collections::HashMap::new();
-        for d in &candidates { stakes.insert(d.clone(), 1000.0); }
+        for d in &candidates {
+            stakes.insert(d.clone(), 1000.0);
+        }
         scores.insert(test_did("a"), 90.0);
         scores.insert(test_did("b"), 80.0);
 
@@ -327,7 +331,9 @@ mod tests {
         let candidates = vec![test_did("a"), test_did("b")];
         let scores = std::collections::HashMap::new();
         let mut stakes = std::collections::HashMap::new();
-        for d in &candidates { stakes.insert(d.clone(), 1000.0); }
+        for d in &candidates {
+            stakes.insert(d.clone(), 1000.0);
+        }
         let selected = select_reviewers(&candidates, &scores, &stakes, 3);
         assert!(selected.is_empty());
     }
@@ -337,7 +343,9 @@ mod tests {
         let candidates = vec![test_did("a"), test_did("b"), test_did("c")];
         let mut scores = std::collections::HashMap::new();
         let mut stakes = std::collections::HashMap::new();
-        for d in &candidates { stakes.insert(d.clone(), 1000.0); }
+        for d in &candidates {
+            stakes.insert(d.clone(), 1000.0);
+        }
         scores.insert(test_did("a"), 90.0);
         scores.insert(test_did("c"), 70.0);
 
@@ -351,7 +359,9 @@ mod tests {
         let candidates = vec![test_did("alpha"), test_did("beta")];
         let mut scores = std::collections::HashMap::new();
         let mut stakes = std::collections::HashMap::new();
-        for d in &candidates { stakes.insert(d.clone(), 1000.0); }
+        for d in &candidates {
+            stakes.insert(d.clone(), 1000.0);
+        }
         scores.insert(test_did("alpha"), 80.0);
         scores.insert(test_did("beta"), 80.0);
 
