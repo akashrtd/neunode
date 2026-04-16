@@ -20,4 +20,4 @@ const BINARY_PATH: string | null = findBinary();
 
 const hasBinary: boolean = BINARY_PATH !== null;
 
-export { BINARY_NAME, BINARY_PATH, hasBinary, findBinary };
+export { BINARY_PATH, hasBinary };

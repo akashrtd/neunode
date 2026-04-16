@@ -14,17 +14,17 @@ const execFileAsync = promisify(execFile);
 // Envelope types (matches Rust output.rs wrap_success / write_error)
 // ---------------------------------------------------------------------------
 
-export interface SuccessEnvelope<T> {
+interface SuccessEnvelope<T> {
 	readonly data: T;
 	readonly success: true;
 }
 
-export interface ErrorEnvelope {
+interface ErrorEnvelope {
 	readonly error: string;
 	readonly success: false;
 }
 
-export type CliEnvelope<T> = SuccessEnvelope<T> | ErrorEnvelope;
+type CliEnvelope<T> = SuccessEnvelope<T> | ErrorEnvelope;
 
 // ---------------------------------------------------------------------------
 // Transport config
@@ -227,9 +227,9 @@ function parseSingleEnvelope<T>(stdout: string, stderr: string): T {
 	}
 
 	// Merge all data fields from multiple lines
-	let merged: Record<string, unknown> = {};
+	let merged = {} as Partial<T>;
 	for (const line of lines) {
-		const parsed = tryParseEnvelope<Record<string, unknown>>(line);
+		const parsed = tryParseEnvelope<Partial<T>>(line);
 		if (!parsed) continue;
 
 		if (!parsed.success) {
