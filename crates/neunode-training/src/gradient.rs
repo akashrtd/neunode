@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn encode_f32_basic() {
-        let grads = vec![1.0, -2.5, 3.14];
+        let grads = vec![1.0, -2.5, std::f32::consts::PI];
         let msg = GradientMessage::encode_f32("w1", "job1", 5, &grads).unwrap();
         assert_eq!(msg.worker_id, "w1");
         assert_eq!(msg.job_id, "job1");

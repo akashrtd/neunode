@@ -297,7 +297,7 @@ mod tests {
 
         // Second update: v = 0.9 * [1,2,3] + [1,2,3] = [1.9, 3.8, 5.7]
         let updated2 = buf.update(&grad);
-        let expected = vec![1.9, 3.8, 5.7];
+        let expected = [1.9, 3.8, 5.7];
         for (a, b) in updated2.iter().zip(expected.iter()) {
             assert!((a - b).abs() < 1e-5, "{a} != {b}");
         }
@@ -432,7 +432,7 @@ mod tests {
         let agg = coord.aggregate_and_step().unwrap();
         assert_eq!(agg.num_workers, 2);
         // Averaged: [(0.2+0.4)/2, (0.4+0.6)/2, (0.6+0.8)/2] = [0.3, 0.5, 0.7]
-        let expected_avg = vec![0.3, 0.5, 0.7];
+        let expected_avg = [0.3, 0.5, 0.7];
         for (a, b) in agg.averaged_gradient.iter().zip(expected_avg.iter()) {
             assert!((a - b).abs() < 1e-6, "{a} != {b}");
         }
@@ -449,7 +449,7 @@ mod tests {
         // Params should have changed.
         assert_ne!(initial, updated);
         // θ_new = [1,1,1] - 0.7 * [0.1,0.2,0.3] = [0.93, 0.86, 0.79]
-        let expected = vec![0.93, 0.86, 0.79];
+        let expected = [0.93, 0.86, 0.79];
         for (a, b) in updated.iter().zip(expected.iter()) {
             assert!((a - b).abs() < 1e-5, "{a} != {b}");
         }
@@ -542,12 +542,12 @@ mod tests {
         // params = [-1,-1] - 1.0*[1.9,1.9] = [-2.9, -2.9]
         coord.submit_result(make_result("w1", vec![1.0, 1.0])).unwrap();
         let agg2 = coord.aggregate_and_step().unwrap();
-        let expected_v = vec![1.9, 1.9];
+        let expected_v = [1.9, 1.9];
         for (a, b) in agg2.parameter_update.iter().zip(expected_v.iter()) {
             assert!((a - b).abs() < 1e-5, "{a} != {b}");
         }
         let p2 = coord.parameters().to_vec();
-        let expected_p = vec![-2.9, -2.9];
+        let expected_p = [-2.9, -2.9];
         for (a, b) in p2.iter().zip(expected_p.iter()) {
             assert!((a - b).abs() < 1e-5, "{a} != {b}");
         }

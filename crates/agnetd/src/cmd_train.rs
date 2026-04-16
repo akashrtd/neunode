@@ -532,6 +532,7 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::field_reassign_with_default)]
     use super::*;
     use crate::testutil::{human_writer, json_writer as test_writer, test_state};
 

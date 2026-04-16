@@ -413,14 +413,12 @@ fn event_with_tags_and_refs_creation_validation_and_filter() {
 fn different_kinds_different_topics_and_ids() {
     let did = test_did();
 
-    let kinds = vec![
-        Kind::AgentMetadata,
+    let kinds = [Kind::AgentMetadata,
         Kind::BountyPost,
         Kind::JobSubmit,
         Kind::Attest,
         Kind::ModelAnnounce,
-        Kind::Proposal,
-    ];
+        Kind::Proposal];
 
     // All map to different topics
     let topics: Vec<&str> = kinds.iter().map(|k| topic_for_kind(k)).collect();

@@ -130,6 +130,7 @@ fn load_keyring(did: &str) -> Result<Keyring> {
     let contents = if enc_path.exists() {
         let encrypted = std::fs::read(&enc_path)
             .with_context(|| format!("failed to read {}", enc_path.display()))?;
+        #[allow(deprecated)]
         let machine_key = neunode_crypto::aead::derive_machine_key();
         let decrypted = neunode_crypto::aead::decrypt(&machine_key, &encrypted)
             .with_context(|| "failed to decrypt keys.json.enc")?;

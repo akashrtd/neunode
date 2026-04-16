@@ -128,7 +128,7 @@ mod tests {
         agg.submit(wid("w2"), vec![3.0, 4.0, 5.0]).unwrap();
 
         let result = agg.aggregate().unwrap();
-        let expected = vec![2.0, 3.0, 4.0];
+        let expected = [2.0, 3.0, 4.0];
         for (a, b) in result.iter().zip(expected.iter()) {
             assert!((a - b).abs() < 1e-6, "{a} != {b}");
         }
@@ -155,7 +155,7 @@ mod tests {
 
         let result = agg.aggregate().unwrap();
         // avg: [(0+2+4)/3, (0+4+8)/3] = [2.0, 4.0]
-        let expected = vec![2.0, 4.0];
+        let expected = [2.0, 4.0];
         for (a, b) in result.iter().zip(expected.iter()) {
             assert!((a - b).abs() < 1e-5, "{a} != {b}");
         }
@@ -182,7 +182,7 @@ mod tests {
         agg.submit(wid("w2"), vec![4.0, 6.0]).unwrap();
 
         let result = agg.aggregate().unwrap();
-        let expected = vec![3.0, 5.0];
+        let expected = [3.0, 5.0];
         for (a, b) in result.iter().zip(expected.iter()) {
             assert!((a - b).abs() < 1e-5, "{a} != {b}");
         }

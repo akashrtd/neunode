@@ -529,7 +529,7 @@ mod tests {
 
         let agg = coord.aggregate_and_step().unwrap();
         // Constant weight = simple average: [0.5, 0.5, 0.5]
-        let expected = vec![0.5, 0.5, 0.5];
+        let expected = [0.5, 0.5, 0.5];
         for (a, b) in agg.averaged_gradient.iter().zip(expected.iter()) {
             assert!((a - b).abs() < 1e-5, "{a} != {b}");
         }

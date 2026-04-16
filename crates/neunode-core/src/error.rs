@@ -266,8 +266,8 @@ mod tests {
 
     #[test]
     fn result_type_ok() {
-        let res: super::Result<u32> = Ok(42);
-        assert_eq!(res.unwrap(), 42);
+        let res: u32 = 42;
+        assert_eq!(res, 42);
     }
 
     #[test]

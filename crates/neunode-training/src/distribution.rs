@@ -389,6 +389,7 @@ mod tests {
     use crate::checkpoint::compute_cid;
     use tower::ServiceExt;
 
+    #[allow(dead_code)]
     fn test_config() -> DistributionConfig {
         DistributionConfig { chunk_size: 100, ..Default::default() }
     }

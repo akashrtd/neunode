@@ -420,7 +420,7 @@ mod tests {
         let cb = Codebook::generate(&config).unwrap();
 
         // Test values within the range of the codebook
-        let test_values: Vec<f32> = cb.levels.iter().copied().collect();
+        let test_values: Vec<f32> = cb.levels.to_vec();
         for &v in &test_values {
             let idx = cb.quantize_index(v);
             let recovered = cb.dequantize(idx).unwrap();

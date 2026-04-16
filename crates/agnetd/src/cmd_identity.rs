@@ -70,6 +70,7 @@ fn create_identity(
         "secp256k1_private": bytes_to_hex(&secp_bytes),
     });
     let key_json = serde_json::to_string_pretty(&key_data)?;
+    #[allow(deprecated)]
     let machine_key = neunode_crypto::aead::derive_machine_key();
     let encrypted = neunode_crypto::aead::encrypt(&machine_key, key_json.as_bytes())
         .with_context(|| "failed to encrypt key data")?;

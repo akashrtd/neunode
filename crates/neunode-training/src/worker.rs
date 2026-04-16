@@ -548,7 +548,7 @@ mod tests {
         let mut worker = make_worker(3);
         assert_eq!(worker.executor().parameter_count(), 10);
         // Mutable accessor.
-        worker.executor_mut().set_parameters(&vec![0.5; 10]).unwrap();
+        worker.executor_mut().set_parameters(&[0.5; 10]).unwrap();
         assert_eq!(worker.executor().get_parameters(), vec![0.5; 10]);
     }
 

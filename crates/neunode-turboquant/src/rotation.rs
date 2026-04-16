@@ -664,9 +664,9 @@ mod tests {
 
     #[test]
     fn fwht_dim_1() {
-        let mut data = [3.14f32];
+        let mut data = [std::f32::consts::PI];
         fwht(&mut data);
-        assert!(approx_eq(data[0], 3.14, TOLERANCE));
+        assert!(approx_eq(data[0], std::f32::consts::PI, TOLERANCE));
     }
 
     #[test]

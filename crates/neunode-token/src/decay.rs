@@ -210,7 +210,7 @@ mod tests {
     fn apply_decay_distribution_sums_to_decayed() {
         // With odd numbers, remainder goes to treasury
         let (_, dist) = DecayCalculator::apply_decay(TokenAmount(999), ActivityLevel::Inactive);
-        let decayed = 999u64 - (999u64 as f64 * 0.85) as u64;
+        let decayed = 999u64 - (999_f64 * 0.85) as u64;
         assert_eq!(dist.total(), TokenAmount(decayed));
     }
 
