@@ -297,6 +297,15 @@ describe("NeunodeGovernance", () => {
     });
     await f.publicClient.waitForTransactionReceipt({ hash: grantHash });
 
+    const allowTargetHash = await f.walletClient.writeContract({
+      abi: neunodeGovernanceAbi,
+      address: f.addresses.neunodeGovernance,
+      functionName: "setAllowedTarget",
+      args: [f.addresses.neunodeGovernance, true],
+      account: f.account,
+    });
+    await f.publicClient.waitForTransactionReceipt({ hash: allowTargetHash });
+
     const newVotingDelay = 172800n;
     const calldata = encodeFunctionData({
       abi: neunodeGovernanceAbi,

@@ -15,6 +15,7 @@ interface INeunodeToken {
     function stake(uint256 amount) external;
     function unstake(uint256 amount) external;
     function stakedBalanceOf(address account) external view returns (uint256);
+    function slashStake(address account, uint256 amount) external;
 
     // ─── Activity ─────────────────────────────────────────────────────────
 
@@ -22,10 +23,7 @@ interface INeunodeToken {
     function lastActivity(address account) external view returns (uint256);
     function getActivityLevel(address account) external view returns (uint8);
 
-    // ─── Decay ────────────────────────────────────────────────────────────
-
-    function computeDecay(address account) external view returns (uint256);
-    function executeDecay(address account) external;
+    // Decay logic has been extracted to StakingEscrow.sol
 
     // ─── Seed Tokens ──────────────────────────────────────────────────────
 
@@ -36,14 +34,7 @@ interface INeunodeToken {
 
     event Staked(address indexed account, uint256 amount);
     event Unstaked(address indexed account, uint256 amount);
-    event DecayExecuted(
-        address indexed account,
-        uint256 amount,
-        uint256 treasuryPortion,
-        uint256 stakingPortion,
-        uint256 burnPortion,
-        uint256 devPortion
-    );
+
     event SeedMinted(address indexed to, uint256 amount);
     event SeedActivated(address indexed account);
     event ActivityUpdated(address indexed account, uint256 timestamp);

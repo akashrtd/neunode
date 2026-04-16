@@ -16,7 +16,7 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
     error InsufficientBalance(address account, uint256 required);
     error InsufficientStake(address account, uint256 required);
     error CannotUnstakeSeed();
-    error DecayTooSoon(address account);
+
     uint8 private immutable _tokenDecimals;
 
     // ─── Roles ────────────────────────────────────────────────────────────
@@ -34,21 +34,7 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
 
     mapping(address => uint256) private _lastActivity;
 
-    // ─── Decay Storage ────────────────────────────────────────────────────
 
-    struct DecayConfig {
-        address treasury;
-        address stakingRewards;
-        address devFund;
-    }
-
-    DecayConfig public decayConfig;
-    mapping(address => uint256) private _lastDecayTimestamp;
-
-    // Decay rates in basis points per day per activity level.
-    // Index: 0=Active, 1=Moderate, 2=Low, 3=Inactive, 4=Dead
-    // Active=0, Moderate=5 (~2%/yr), Low=14 (~5%/yr), Inactive=41 (~15%/yr), Dead=137 (~50%/yr)
-    uint256[5] public decayRatesBps = [uint256(0), 5, 14, 41, 137];
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
@@ -118,6 +104,25 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
         return _stakedBalances[account];
     }
 
+    /// @notice Slash staked balance due to inactivity (GOVERNANCE_ROLE only)
+    function slashStake(address account, uint256 amount) external onlyRole(GOVERNANCE_ROLE) {
+        if (_stakedBalances[account] < amount) {
+            amount = _stakedBalances[account];
+        }
+        if (amount == 0) return;
+        
+        // Seed tokens are protected from slashing
+        if (_seedBalances[account] != 0 && _stakedBalances[account] - amount < _seedBalances[account]) {
+            amount = _stakedBalances[account] - _seedBalances[account];
+        }
+
+        if (amount > 0) {
+            _stakedBalances[account] -= amount;
+            _burn(address(this), amount);
+            emit Unstaked(account, amount); // Emitting unstake for simplicity, or we can add StakeSlashed
+        }
+    }
+
     // ─── Activity Tracking ────────────────────────────────────────────────
 
     /// @notice Update activity timestamp — caller may only update their own
@@ -144,56 +149,7 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
         return 4; // Dead
     }
 
-    // ─── Decay ────────────────────────────────────────────────────────────
-
-    /// @notice Set decay distribution addresses (GOVERNANCE_ROLE only)
-    function setDecayConfig(address treasury, address stakingRewards, address devFund)
-        external
-        onlyRole(GOVERNANCE_ROLE)
-    {
-        decayConfig = DecayConfig(treasury, stakingRewards, devFund);
-    }
-
-    /// @notice Compute decay amount for an account (view-only)
-    function computeDecay(address account) public view returns (uint256) {
-        uint8 level = getActivityLevel(account);
-        if (level == 0) return 0; // Active = no decay
-        uint256 bal = balanceOf(account);
-        if (bal == 0) return 0;
-        uint256 rate = decayRatesBps[level];
-        return (bal * rate) / 10000;
-    }
-
-    /// @notice Execute decay on an account. Only the account holder can trigger.
-    function executeDecay(address account) external {
-        if (msg.sender != account) revert UnauthorizedActivityUpdate(msg.sender, account);
-        _applyDecay(account);
-    }
-
-    /// @dev Internal decay logic — called from executeDecay
-    function _applyDecay(address account) internal {
-        if (block.timestamp < _lastDecayTimestamp[account] + 1 days) revert DecayTooSoon(account);
-        uint256 decayAmount = computeDecay(account);
-        if (decayAmount == 0) {
-            _lastDecayTimestamp[account] = block.timestamp;
-            return;
-        }
-
-        uint256 treasuryPortion = (decayAmount * 40) / 100;
-        uint256 stakingPortion = (decayAmount * 30) / 100;
-        uint256 burnPortion = (decayAmount * 20) / 100;
-        uint256 devPortion = decayAmount - treasuryPortion - stakingPortion - burnPortion;
-
-        _transfer(account, decayConfig.treasury, treasuryPortion);
-        _transfer(account, decayConfig.stakingRewards, stakingPortion);
-        _burn(account, burnPortion);
-        _transfer(account, decayConfig.devFund, devPortion);
-
-        _lastDecayTimestamp[account] = block.timestamp;
-        emit DecayExecuted(
-            account, decayAmount, treasuryPortion, stakingPortion, burnPortion, devPortion
-        );
-    }
+    // Decay logic has been extracted to StakingEscrow.sol
 
     // ─── Seed Tokens ──────────────────────────────────────────────────────
 

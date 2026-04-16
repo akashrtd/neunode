@@ -101,7 +101,7 @@ impl AgentCard {
         metadata: HashMap<String, String>,
     ) -> std::result::Result<Self, NeunodeError> {
         let now = Utc::now().timestamp();
-        let did = keyring.to_did()?;
+        let did = keyring.to_did();
         let did_key = keyring.to_did_key();
         let peer_id = did_to_peer_id(&did_key).unwrap_or_else(|_| PeerId("unknown".into()));
 
@@ -112,7 +112,7 @@ impl AgentCard {
             capabilities,
             lifecycle: AgentLifecycle::Created,
             peer_id,
-            public_key_bundle: keyring.export_public()?,
+            public_key_bundle: keyring.export_public(),
             metadata,
             created_at: now,
             updated_at: now,
@@ -325,7 +325,7 @@ mod tests {
     fn card_public_key_bundle_matches_keyring() {
         let kr = make_keyring();
         let card = AgentCard::new("pkb-test", &kr, vec![], HashMap::new()).unwrap();
-        let bundle = kr.export_public().unwrap();
+        let bundle = kr.export_public();
         assert_eq!(card.public_key_bundle.ed25519, bundle.ed25519);
         assert_eq!(card.public_key_bundle.secp256k1, bundle.secp256k1);
         assert_eq!(card.public_key_bundle.did, bundle.did);

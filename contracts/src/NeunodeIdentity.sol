@@ -29,6 +29,7 @@ contract NeunodeIdentity {
 
     event DidCreated(bytes32 indexed didHash, address indexed controller, uint256 timestamp);
     event DidUpdated(bytes32 indexed didHash, address indexed newController, uint256 timestamp);
+    event DidKeyRotated(bytes32 indexed didHash, bytes32 newPubKeyHash, uint256 timestamp);
     event DidDeactivated(bytes32 indexed didHash, uint256 timestamp);
 
     // ─── Errors ───────────────────────────────────────────────────────────
@@ -85,6 +86,20 @@ contract NeunodeIdentity {
         doc.updated = block.timestamp;
 
         emit DidUpdated(didHash, newController, block.timestamp);
+    }
+
+    /// @notice Rotate the Ed25519 public key (P2P session key)
+    function updateEd25519Key(bytes32 didHash, bytes32 newPubKeyHash) external {
+        DidDocument storage doc = documents[didHash];
+        if (doc.created == 0) revert DidNotFound(didHash);
+        if (!doc.active) revert DidNotActive(didHash);
+        if (doc.controller != msg.sender) revert NotController(didHash, msg.sender);
+        if (newPubKeyHash == bytes32(0)) revert InvalidPublicKeyHash();
+
+        doc.ed25519PublicKeyHash = newPubKeyHash;
+        doc.updated = block.timestamp;
+
+        emit DidKeyRotated(didHash, newPubKeyHash, block.timestamp);
     }
 
     /// @notice Permanently deactivate a DID (irreversible)

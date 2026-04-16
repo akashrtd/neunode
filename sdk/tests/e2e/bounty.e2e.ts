@@ -44,9 +44,10 @@ function bountyId(label: string): `0x${string}` {
   return keccak256(encodePacked(["string"], [label]));
 }
 
-function futureTimestamp(offsetSeconds: bigint): bigint {
-  // Anvil default start time is close to Date.now()
-  return BigInt(Math.floor(Date.now() / 1000)) + offsetSeconds;
+async function futureTimestamp(offsetSeconds: bigint): Promise<bigint> {
+  const { publicClient } = getFixture();
+  const block = await publicClient.getBlock({ blockTag: "latest" });
+  return block.timestamp + offsetSeconds;
 }
 
 function makeWalletClient(
@@ -96,7 +97,7 @@ async function mintAndApprove(
 async function createAndClaimBounty(label: string): Promise<`0x${string}`> {
   const { walletClient, publicClient, addresses } = getFixture();
   const id = bountyId(label);
-  const now = futureTimestamp(0n);
+  const now = await futureTimestamp(0n);
   const claimDeadline = now + 86400n;
   const workDeadline = now + 604800n;
 
@@ -135,7 +136,7 @@ describe("Bounty Lifecycle", () => {
   it("creates a bounty with correct state and emits BountyCreated", async () => {
     const { walletClient, publicClient, addresses, account } = getFixture();
     const id = bountyId("create-test");
-    const now = futureTimestamp(0n);
+    const now = await futureTimestamp(0n);
     const claimDeadline = now + 86400n;
     const workDeadline = now + 604800n;
 
@@ -167,7 +168,7 @@ describe("Bounty Lifecycle", () => {
   it("getBountyState returns 0 (Open) after creation", async () => {
     const { walletClient, publicClient, addresses, account } = getFixture();
     const id = bountyId("state-open");
-    const now = futureTimestamp(0n);
+    const now = await futureTimestamp(0n);
 
     await mintAndApprove(account.address, addresses.neunodeBounty, REWARD_AMOUNT);
 
@@ -192,7 +193,7 @@ describe("Bounty Lifecycle", () => {
   it("getBountyFull returns correct details", async () => {
     const { walletClient, publicClient, addresses, account } = getFixture();
     const id = bountyId("full-details");
-    const now = futureTimestamp(0n);
+    const now = await futureTimestamp(0n);
     const claimDeadline = now + 86400n;
     const workDeadline = now + 604800n;
 
@@ -268,7 +269,7 @@ describe("Bounty Lifecycle", () => {
   it("claimBounty sets provider and state=Claimed(1)", async () => {
     const { walletClient, publicClient, addresses, account } = getFixture();
     const id = bountyId("claim-test");
-    const now = futureTimestamp(0n);
+    const now = await futureTimestamp(0n);
 
     await mintAndApprove(account.address, addresses.neunodeBounty, REWARD_AMOUNT);
 
@@ -377,7 +378,7 @@ describe("Bounty Lifecycle", () => {
   it("cancelBounty sets state=Cancelled when Open", async () => {
     const { walletClient, publicClient, addresses, account } = getFixture();
     const id = bountyId("cancel-test");
-    const now = futureTimestamp(0n);
+    const now = await futureTimestamp(0n);
 
     await mintAndApprove(account.address, addresses.neunodeBounty, REWARD_AMOUNT);
 
@@ -437,7 +438,7 @@ describe("Bounty with Escrow", () => {
   it("creates escrow via direct createEscrow and funds it", async () => {
     const { walletClient, publicClient, addresses, account } = getFixture();
     const id = bountyId("escrow-direct");
-    const now = futureTimestamp(0n);
+    const now = await futureTimestamp(0n);
     const workDeadline = now + 604800n;
 
     // Mint tokens to deployer and approve escrow
@@ -527,7 +528,7 @@ describe("Bounty with Escrow", () => {
   it("escrow release sends funds to provider on accept", async () => {
     const { walletClient, publicClient, addresses, account } = getFixture();
     const id = bountyId("escrow-release");
-    const now = futureTimestamp(0n);
+    const now = await futureTimestamp(0n);
     const workDeadline = now + 604800n;
 
     // Setup: mint + approve for escrow
@@ -620,7 +621,7 @@ describe("Bounty with Escrow", () => {
   it("escrow refund returns funds to requester on reject", async () => {
     const { walletClient, publicClient, addresses, account } = getFixture();
     const id = bountyId("escrow-refund");
-    const now = futureTimestamp(0n);
+    const now = await futureTimestamp(0n);
     const workDeadline = now + 604800n;
 
     // Setup: mint + approve for escrow
@@ -882,6 +883,9 @@ describe("Review System", () => {
     });
     await publicClient.waitForTransactionReceipt({ hash: startHash });
 
+    // Force deterministic mine to ensure block state is available
+    await getFixture().testClient.mine({ blocks: 1 });
+
     // Build EIP-712 domain from contract
     const domainData = await publicClient.readContract({
       abi: bountyReviewAbi,
@@ -965,6 +969,8 @@ describe("Review System", () => {
       account: reviewer1Client.account,
     });
     await publicClient.waitForTransactionReceipt({ hash: submitHash1 });
+
+    await getFixture().testClient.mine({ blocks: 1 });
 
     // Verify review was recorded
     const reviewCount = await publicClient.readContract({
@@ -1278,7 +1284,7 @@ describe("Error Cases", () => {
   it("cannot submit work on an unclaimed bounty", async () => {
     const { walletClient, publicClient, addresses, account } = getFixture();
     const id = bountyId("submit-unclaimed");
-    const now = futureTimestamp(0n);
+    const now = await futureTimestamp(0n);
 
     // Create bounty only (do NOT claim)
     await mintAndApprove(account.address, addresses.neunodeBounty, REWARD_AMOUNT);

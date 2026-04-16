@@ -146,6 +146,60 @@ fn encode_data(
     encoded
 }
 
+/// Parse a JSON value as U256, handling decimal strings and u64 numbers.
+/// This avoids the silent truncation that occurs with `as_u64()` for values > 2^64.
+fn json_to_u256(value: &serde_json::Value) -> U256 {
+    // String representation — handles values > u64::MAX (e.g. wei amounts)
+    if let Some(s) = value.as_str() {
+        if let Ok(v) = s.parse::<U256>() {
+            return v;
+        }
+    }
+    // JSON number that fits in u64
+    if let Some(n) = value.as_u64() {
+        return U256::from(n);
+    }
+    U256::ZERO
+}
+
+/// Encode a JSON value as a 32-byte signed int256 (two's complement).
+fn encode_int256(value: &serde_json::Value) -> Vec<u8> {
+    // String representation of a (potentially large) signed integer
+    if let Some(s) = value.as_str() {
+        if let Some(stripped) = s.strip_prefix('-') {
+            // Negative: parse magnitude, compute two's complement
+            if let Ok(mag) = stripped.parse::<U256>() {
+                if mag == U256::ZERO {
+                    return [0u8; 32].to_vec();
+                }
+                let complement = U256::MAX - mag + U256::from(1u64);
+                let mut out = [0u8; 32];
+                out.copy_from_slice(&complement.to_be_bytes::<32>());
+                return out.to_vec();
+            }
+        }
+        // Positive string value: same encoding as uint256
+        let val = json_to_u256(value);
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&val.to_be_bytes::<32>());
+        return out.to_vec();
+    }
+    // i64: sign-extend negative values into the top 24 bytes
+    if let Some(n) = value.as_i64() {
+        let mut out = [0u8; 32];
+        if n < 0 {
+            out[..24].fill(0xFF);
+        }
+        out[24..32].copy_from_slice(&n.to_be_bytes());
+        return out.to_vec();
+    }
+    // Fall back to uint256 encoding for positive JSON numbers
+    let val = json_to_u256(value);
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&val.to_be_bytes::<32>());
+    out.to_vec()
+}
+
 fn encode_value(
     field_type: &str,
     value: Option<&serde_json::Value>,
@@ -156,18 +210,12 @@ fn encode_value(
 
     match field_type {
         "uint256" | "uint" => {
-            let n = value.as_u64().unwrap_or(0);
-            // u64 is only 8 bytes, so we need to left-pad to 32
+            let val = json_to_u256(value);
             let mut out = [0u8; 32];
-            out[24..32].copy_from_slice(&n.to_be_bytes());
+            out.copy_from_slice(&val.to_be_bytes::<32>());
             out.to_vec()
         }
-        "int256" | "int" => {
-            let n = value.as_i64().unwrap_or(0);
-            let mut out = [0u8; 32];
-            out[24..32].copy_from_slice(&n.to_be_bytes());
-            out.to_vec()
-        }
+        "int256" | "int" => encode_int256(value),
         "address" => {
             let s = value.as_str().unwrap_or("0x0000000000000000000000000000000000000000");
             let clean = s.trim_start_matches("0x");
@@ -502,5 +550,133 @@ mod tests {
             encoded,
             "Mail(Person from,Person to,string contents)Person(string name,address wallet)"
         );
+    }
+
+    // --- Phase 0 hotfix tests: uint256 truncation & int256 sign extension ---
+
+    #[test]
+    fn encode_uint256_u64_value() {
+        let val = serde_json::json!(1000);
+        let encoded = encode_value("uint256", Some(&val), &serde_json::json!({}));
+        assert_eq!(encoded.len(), 32);
+        // 1000 = 0x3E8 → 30 zero bytes + [0x03, 0xE8]
+        assert_eq!(&encoded[..30], &[0u8; 30]);
+        assert_eq!(&encoded[30..], &[0x03, 0xE8]);
+    }
+
+    #[test]
+    fn encode_uint256_zero() {
+        let val = serde_json::json!(0);
+        let encoded = encode_value("uint256", Some(&val), &serde_json::json!({}));
+        assert_eq!(encoded, vec![0u8; 32]);
+    }
+
+    #[test]
+    fn encode_uint256_max_u64() {
+        let val = serde_json::json!(u64::MAX);
+        let encoded = encode_value("uint256", Some(&val), &serde_json::json!({}));
+        assert_eq!(encoded.len(), 32);
+        assert_eq!(&encoded[..24], &[0u8; 24]);
+        assert_eq!(&encoded[24..], &u64::MAX.to_be_bytes());
+    }
+
+    #[test]
+    fn encode_uint256_large_string_exceeds_u64() {
+        // 10^20 — exceeds u64::MAX (1.84 * 10^19), must be parsed from string
+        let val = serde_json::json!("100000000000000000000");
+        let encoded = encode_value("uint256", Some(&val), &serde_json::json!({}));
+        assert_eq!(encoded.len(), 32);
+        // Must be non-zero (not silently truncated to 0)
+        assert!(encoded.iter().any(|&b| b != 0));
+        // Must use more than 64 bits (top 24 bytes not all zero)
+        assert!(
+            encoded[..24].iter().any(|&b| b != 0),
+            "10^20 should require more than 64 bits — truncation bug"
+        );
+    }
+
+    #[test]
+    fn encode_uint256_wei_amount() {
+        // 1 ETH = 10^18 wei — common on-chain value that fits in u64 but should
+        // be handled correctly as a string too
+        let val = serde_json::json!("1000000000000000000");
+        let encoded = encode_value("uint256", Some(&val), &serde_json::json!({}));
+        assert_eq!(encoded.len(), 32);
+        assert!(encoded.iter().any(|&b| b != 0));
+    }
+
+    #[test]
+    fn encode_uint256_null_defaults_to_zero() {
+        let encoded = encode_value("uint256", None, &serde_json::json!({}));
+        assert_eq!(encoded, vec![0u8; 32]);
+    }
+
+    #[test]
+    fn encode_int256_negative_one() {
+        let val = serde_json::json!(-1);
+        let encoded = encode_value("int256", Some(&val), &serde_json::json!({}));
+        // -1 in two's complement = all 0xFF
+        assert_eq!(encoded, vec![0xFFu8; 32]);
+    }
+
+    #[test]
+    fn encode_int256_negative_sign_extension() {
+        let val = serde_json::json!(-1000);
+        let encoded = encode_value("int256", Some(&val), &serde_json::json!({}));
+        assert_eq!(encoded.len(), 32);
+        // Top 24 bytes must be 0xFF (sign extension of negative i64)
+        assert!(encoded[..24].iter().all(|&b| b == 0xFF));
+        // Bottom 8 bytes encode -1000 as i64
+        let bottom = i64::from_be_bytes(encoded[24..32].try_into().unwrap());
+        assert_eq!(bottom, -1000);
+    }
+
+    #[test]
+    fn encode_int256_positive_matches_uint256() {
+        let val = serde_json::json!(42);
+        let int_enc = encode_value("int256", Some(&val), &serde_json::json!({}));
+        let uint_enc = encode_value("uint256", Some(&val), &serde_json::json!({}));
+        assert_eq!(int_enc, uint_enc);
+    }
+
+    #[test]
+    fn encode_int256_positive_i64_zero_extended() {
+        let val = serde_json::json!(999);
+        let encoded = encode_value("int256", Some(&val), &serde_json::json!({}));
+        assert_eq!(encoded.len(), 32);
+        // Top 24 bytes must be 0x00 (no sign extension for positive)
+        assert!(encoded[..24].iter().all(|&b| b == 0x00));
+    }
+
+    #[test]
+    fn encode_int256_zero() {
+        let val = serde_json::json!(0);
+        let encoded = encode_value("int256", Some(&val), &serde_json::json!({}));
+        assert_eq!(encoded, vec![0u8; 32]);
+    }
+
+    #[test]
+    fn sign_verify_roundtrip_large_reward() {
+        // Verify EIP-712 signing still works with large uint256 values
+        let (sk, vk) = crate::secp256k1::generate_keypair();
+        let domain = test_domain();
+        let types = serde_json::json!({
+            "Bounty": [
+                {"name": "id", "type": "string"},
+                {"name": "reward", "type": "uint256"},
+                {"name": "deadline", "type": "uint256"}
+            ]
+        });
+        let message = serde_json::json!({
+            "id": "bnty_large",
+            "reward": "100000000000000000000",
+            "deadline": "1700000000"
+        });
+
+        let sig = sign_typed_data(&sk, &domain, &types, &message).unwrap();
+        assert_eq!(sig.len(), 65);
+
+        let valid = verify_typed_data(&vk, &domain, &types, &message, &sig).unwrap();
+        assert!(valid);
     }
 }

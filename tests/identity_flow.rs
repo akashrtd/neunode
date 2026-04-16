@@ -21,7 +21,7 @@ fn full_identity_creation_flow() {
     let keyring = Keyring::generate();
 
     // Derive both DID types
-    let did_neunode = keyring.to_did().unwrap();
+    let did_neunode = keyring.to_did();
     let did_key = keyring.to_did_key();
 
     // Verify DID formats
@@ -56,7 +56,7 @@ fn keyring_generates_dual_keys() {
     assert_eq!(ed_pub.to_bytes().len(), 32, "Ed25519 pubkey should be 32 bytes");
 
     // secp256k1 public key is 65 bytes (uncompressed SEC1)
-    let secp_pub = keyring.secp256k1_public_key().unwrap();
+    let secp_pub = keyring.secp256k1_public_key();
     assert_eq!(secp_pub.len(), 65, "secp256k1 pubkey should be 65 bytes");
     assert_eq!(secp_pub[0], 0x04, "uncompressed SEC1 prefix");
 }
@@ -68,8 +68,8 @@ fn keyring_generates_dual_keys() {
 #[test]
 fn did_derived_from_ethereum_address() {
     let keyring = Keyring::generate();
-    let eth_addr = keyring.ethereum_address().unwrap();
-    let did = keyring.to_did().unwrap();
+    let eth_addr = keyring.ethereum_address();
+    let did = keyring.to_did();
 
     // Ethereum address format: 0x + 40 hex chars
     assert!(eth_addr.starts_with("0x"), "should be 0x-prefixed");
@@ -107,7 +107,7 @@ fn agent_card_sign_verify_and_tamper_detection() {
 fn did_document_verification_methods() {
     let keyring = Keyring::generate();
     let doc = DidDocument::from_keyring(&keyring).unwrap();
-    let did_str = keyring.to_did().unwrap().as_str().to_string();
+    let did_str = keyring.to_did().as_str().to_string();
 
     // Check verification method IDs reference the DID
     let ed_vm_id = format!("{did_str}#keys-1");
@@ -140,7 +140,7 @@ fn peer_id_from_did_key_roundtrip() {
     assert!(peer_id.as_str().len() > 40);
 
     // did:neunode cannot derive peer ID directly
-    let did_neunode = keyring.to_did().unwrap();
+    let did_neunode = keyring.to_did();
     assert!(did_to_peer_id(&did_neunode).is_err(), "did:neunode should fail peer ID derivation");
 }
 
@@ -153,8 +153,8 @@ fn ethereum_address_computation_consistent() {
     let keyring = Keyring::generate();
 
     // Address should be consistent across calls
-    let addr1 = keyring.ethereum_address().unwrap();
-    let addr2 = keyring.ethereum_address().unwrap();
+    let addr1 = keyring.ethereum_address();
+    let addr2 = keyring.ethereum_address();
     assert_eq!(addr1, addr2, "address should be deterministic for same keyring");
 
     // Should be valid hex after 0x prefix
@@ -168,7 +168,7 @@ fn ethereum_address_computation_consistent() {
 #[test]
 fn export_reimport_preserves_identity() {
     let keyring = Keyring::generate();
-    let original_did = keyring.to_did().unwrap();
+    let original_did = keyring.to_did();
     let original_did_key = keyring.to_did_key();
 
     // Export bytes
@@ -180,15 +180,15 @@ fn export_reimport_preserves_identity() {
     let restored = Keyring::from_bytes(&ed_arr, &secp_arr).expect("should reconstruct keyring");
 
     // Verify identity preserved
-    assert_eq!(restored.to_did().unwrap(), original_did, "DID should be preserved after reimport");
+    assert_eq!(restored.to_did(), original_did, "DID should be preserved after reimport");
     assert_eq!(
         restored.to_did_key(),
         original_did_key,
         "did:key should be preserved after reimport"
     );
     assert_eq!(
-        restored.ethereum_address().unwrap(),
-        keyring.ethereum_address().unwrap(),
+        restored.ethereum_address(),
+        keyring.ethereum_address(),
         "Ethereum address should match"
     );
 }
@@ -203,7 +203,7 @@ fn multiple_keyrings_unique_dids() {
     let kr2 = Keyring::generate();
     let kr3 = Keyring::generate();
 
-    let dids: Vec<Did> = vec![kr1.to_did().unwrap(), kr2.to_did().unwrap(), kr3.to_did().unwrap()];
+    let dids: Vec<Did> = vec![kr1.to_did(), kr2.to_did(), kr3.to_did()];
     let did_keys: Vec<Did> = vec![kr1.to_did_key(), kr2.to_did_key(), kr3.to_did_key()];
 
     // All DIDs should be unique
@@ -216,7 +216,7 @@ fn multiple_keyrings_unique_dids() {
     assert_ne!(did_keys[1], did_keys[2]);
 
     // Ethereum addresses should be unique
-    assert_ne!(kr1.ethereum_address().unwrap(), kr2.ethereum_address().unwrap());
+    assert_ne!(kr1.ethereum_address(), kr2.ethereum_address());
 }
 
 // ---------------------------------------------------------------------------

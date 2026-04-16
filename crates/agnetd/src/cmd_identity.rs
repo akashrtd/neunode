@@ -34,12 +34,12 @@ fn create_identity(
     }
 
     let keyring = neunode_identity::keyring::Keyring::generate();
-    let did = keyring.to_did().map_err(|e| anyhow::anyhow!("{e}"))?;
+    let did = keyring.to_did();
     let did_key = keyring.to_did_key();
     let peer_id = neunode_identity::did::did_to_peer_id(&did_key)
         .map(|p| p.to_string())
         .unwrap_or_else(|_| "unknown".to_string());
-    let eth_addr = keyring.ethereum_address().map_err(|e| anyhow::anyhow!("{e}"))?;
+    let eth_addr = keyring.ethereum_address();
 
     let mut capabilities = Vec::new();
     if method == "neunode" {
@@ -90,7 +90,7 @@ fn create_identity(
     fs::write(dir.join("agent_card.json"), serde_json::to_string_pretty(&signed_card)?)
         .with_context(|| "failed to write agent_card.json")?;
 
-    let bundle = keyring.export_public().map_err(|e| anyhow::anyhow!("{e}"))?;
+    let bundle = keyring.export_public();
     fs::write(dir.join("public_keys.json"), serde_json::to_string_pretty(&bundle)?)
         .with_context(|| "failed to write public_keys.json")?;
 

@@ -1,5 +1,5 @@
 use neunode_core::constants::bounty::{
-    REVIEWER_WEIGHT_AVAILABILITY, REVIEWER_WEIGHT_CAPABILITY, REVIEWER_WEIGHT_RANDOM,
+    REVIEWER_WEIGHT_AVAILABILITY, REVIEWER_WEIGHT_CAPABILITY, REVIEWER_MIN_STAKE,
     REVIEWER_WEIGHT_REPUTATION, REVIEWER_WEIGHT_STAKE,
 };
 use neunode_core::types::{Did, Signature, Timestamp};
@@ -100,15 +100,19 @@ impl ReviewCommittee {
 
 /// Select `count` reviewers from candidates weighted by composite score.
 /// `scores` maps each candidate DID to their pre-computed weighted score.
-/// Uses deterministic sorted selection (highest scores first), with
-/// REVIEWER_WEIGHT_RANDOM portion left for protocol-level randomization.
+/// `stakes` maps each candidate DID to their protocol stake, enforcing a Sybil-resistant entry requirement.
+/// Uses deterministic sorted selection (highest scores first).
 pub fn select_reviewers(
     candidates: &[Did],
     scores: &std::collections::HashMap<Did, f64>,
+    stakes: &std::collections::HashMap<Did, f64>,
     count: usize,
 ) -> Vec<Did> {
-    let mut scored: Vec<(Did, f64)> =
-        candidates.iter().filter_map(|did| scores.get(did).map(|&s| (did.clone(), s))).collect();
+    let mut scored: Vec<(Did, f64)> = candidates
+        .iter()
+        .filter(|&did| stakes.get(did).copied().unwrap_or(0.0) >= REVIEWER_MIN_STAKE)
+        .filter_map(|did| scores.get(did).map(|&s| (did.clone(), s)))
+        .collect();
 
     scored.sort_by(|a, b| {
         b.1.partial_cmp(&a.1)
@@ -125,13 +129,11 @@ pub fn compute_reviewer_score(
     reputation: f64,
     stake: f64,
     availability: f64,
-    random: f64,
 ) -> f64 {
     (REVIEWER_WEIGHT_CAPABILITY / 100.0 * capability
         + REVIEWER_WEIGHT_REPUTATION / 100.0 * reputation
         + REVIEWER_WEIGHT_STAKE / 100.0 * stake
-        + REVIEWER_WEIGHT_AVAILABILITY / 100.0 * availability
-        + REVIEWER_WEIGHT_RANDOM / 100.0 * random)
+        + REVIEWER_WEIGHT_AVAILABILITY / 100.0 * availability)
         .clamp(0.0, 100.0)
 }
 
@@ -292,13 +294,15 @@ mod tests {
         let candidates =
             vec![test_did("a"), test_did("b"), test_did("c"), test_did("d"), test_did("e")];
         let mut scores = std::collections::HashMap::new();
+        let mut stakes = std::collections::HashMap::new();
+        for d in &candidates { stakes.insert(d.clone(), 1000.0); }
         scores.insert(test_did("a"), 90.0);
         scores.insert(test_did("b"), 80.0);
         scores.insert(test_did("c"), 70.0);
         scores.insert(test_did("d"), 60.0);
         scores.insert(test_did("e"), 50.0);
 
-        let selected = select_reviewers(&candidates, &scores, 3);
+        let selected = select_reviewers(&candidates, &scores, &stakes, 3);
         assert_eq!(selected.len(), 3);
         assert_eq!(selected[0], test_did("a"));
         assert_eq!(selected[1], test_did("b"));
@@ -309,10 +313,12 @@ mod tests {
     fn select_reviewers_fewer_candidates_than_count() {
         let candidates = vec![test_did("a"), test_did("b")];
         let mut scores = std::collections::HashMap::new();
+        let mut stakes = std::collections::HashMap::new();
+        for d in &candidates { stakes.insert(d.clone(), 1000.0); }
         scores.insert(test_did("a"), 90.0);
         scores.insert(test_did("b"), 80.0);
 
-        let selected = select_reviewers(&candidates, &scores, 5);
+        let selected = select_reviewers(&candidates, &scores, &stakes, 5);
         assert_eq!(selected.len(), 2);
     }
 
@@ -320,7 +326,9 @@ mod tests {
     fn select_reviewers_no_scores() {
         let candidates = vec![test_did("a"), test_did("b")];
         let scores = std::collections::HashMap::new();
-        let selected = select_reviewers(&candidates, &scores, 3);
+        let mut stakes = std::collections::HashMap::new();
+        for d in &candidates { stakes.insert(d.clone(), 1000.0); }
+        let selected = select_reviewers(&candidates, &scores, &stakes, 3);
         assert!(selected.is_empty());
     }
 
@@ -328,10 +336,12 @@ mod tests {
     fn select_reviewers_partial_scores() {
         let candidates = vec![test_did("a"), test_did("b"), test_did("c")];
         let mut scores = std::collections::HashMap::new();
+        let mut stakes = std::collections::HashMap::new();
+        for d in &candidates { stakes.insert(d.clone(), 1000.0); }
         scores.insert(test_did("a"), 90.0);
         scores.insert(test_did("c"), 70.0);
 
-        let selected = select_reviewers(&candidates, &scores, 3);
+        let selected = select_reviewers(&candidates, &scores, &stakes, 3);
         assert_eq!(selected.len(), 2);
         assert_eq!(selected[0], test_did("a"));
     }
@@ -340,10 +350,12 @@ mod tests {
     fn select_reviewers_deterministic_tiebreak() {
         let candidates = vec![test_did("alpha"), test_did("beta")];
         let mut scores = std::collections::HashMap::new();
+        let mut stakes = std::collections::HashMap::new();
+        for d in &candidates { stakes.insert(d.clone(), 1000.0); }
         scores.insert(test_did("alpha"), 80.0);
         scores.insert(test_did("beta"), 80.0);
 
-        let selected = select_reviewers(&candidates, &scores, 2);
+        let selected = select_reviewers(&candidates, &scores, &stakes, 2);
         assert_eq!(selected.len(), 2);
         assert_eq!(selected[0], test_did("alpha"));
         assert_eq!(selected[1], test_did("beta"));
@@ -351,21 +363,21 @@ mod tests {
 
     #[test]
     fn compute_reviewer_score_weights() {
-        let score = compute_reviewer_score(100.0, 100.0, 100.0, 100.0, 100.0);
+        let score = compute_reviewer_score(100.0, 100.0, 100.0, 100.0);
         assert!((score - 100.0).abs() < f64::EPSILON);
     }
 
     #[test]
     fn compute_reviewer_score_zero() {
-        let score = compute_reviewer_score(0.0, 0.0, 0.0, 0.0, 0.0);
+        let score = compute_reviewer_score(0.0, 0.0, 0.0, 0.0);
         assert!((score - 0.0).abs() < f64::EPSILON);
     }
 
     #[test]
     fn compute_reviewer_score_mixed() {
-        let score = compute_reviewer_score(100.0, 50.0, 0.0, 75.0, 25.0);
+        let score = compute_reviewer_score(100.0, 50.0, 0.0, 75.0);
         assert!(score > 0.0 && score < 100.0);
-        let expected = 35.0 * 1.0 + 25.0 * 0.5 + 20.0 * 0.0 + 10.0 * 0.75 + 10.0 * 0.25;
+        let expected = 40.0 * 1.0 + 30.0 * 0.5 + 20.0 * 0.0 + 10.0 * 0.75;
         assert!((score - expected).abs() < f64::EPSILON);
     }
 

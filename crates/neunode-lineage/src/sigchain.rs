@@ -23,6 +23,7 @@ fn canonical_payload(node: &ModelNode) -> String {
         "cid": node.cid,
         "parent_cids": node.parent_cids,
         "contributor_did": node.contributor_did,
+        "contribution_type": node.contribution_type,
         "created_at": node.created_at,
     });
     serde_json::to_string(&payload).unwrap()
@@ -142,6 +143,17 @@ mod tests {
     }
 
     #[test]
+    fn canonical_payload_includes_contribution_type() {
+        let mut node1 = make_test_node("sha256:abc", vec![], "did:agent:1", 100);
+        node1.contribution_type = ContributionType::PreTraining;
+        let mut node2 = make_test_node("sha256:abc", vec![], "did:agent:1", 100);
+        node2.contribution_type = ContributionType::Merge { merge_method: "slerp".to_string() };
+        let p1 = canonical_payload(&node1);
+        let p2 = canonical_payload(&node2);
+        assert_ne!(p1, p2, "different contribution types must produce different payloads");
+    }
+
+    #[test]
     fn signature_bytes_length_64() {
         let (sk, _) = neunode_crypto::ed25519::generate_keypair();
         let node = make_test_node("sha256:abc", vec![], "did:agent:1", 100);
@@ -200,9 +212,16 @@ mod tests {
 
     #[test]
     fn verify_with_contribution_type_change() {
+        // SECURITY: Changing contribution_type AFTER signing MUST invalidate the signature.
+        // Previously, contribution_type was excluded from the canonical payload, allowing
+        // an attacker to change a PreTraining contribution to Merge (or any other type)
+        // without invalidating the signature — directly affecting royalty distribution.
         let (sk, vk) = neunode_crypto::ed25519::generate_keypair();
         let mut node = signed_node(&sk, "sha256:abc", vec![], "did:agent:1", 100);
         node.contribution_type = ContributionType::FineTune { lora_rank: 8, lora_alpha: 16.0 };
-        assert!(verify_model_node(&vk, &node));
+        assert!(
+            !verify_model_node(&vk, &node),
+            "changing contribution_type after signing MUST invalidate the signature"
+        );
     }
 }

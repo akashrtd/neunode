@@ -50,9 +50,13 @@ impl BalanceSheet {
         match to.deposit(token_type, amount) {
             Ok(()) => Ok(()),
             Err(e) => {
-                // Rollback withdrawal on deposit failure
-                let _ = self.deposit(token_type, amount);
-                Err(e)
+                // Rollback withdrawal on deposit failure.
+                // If rollback also fails, this is a critical accounting invariant
+                // violation — tokens would be permanently lost.
+                match self.deposit(token_type, amount) {
+                    Ok(()) => Err(e),
+                    Err(_) => Err(TokenError::InvariantViolation),
+                }
             }
         }
     }

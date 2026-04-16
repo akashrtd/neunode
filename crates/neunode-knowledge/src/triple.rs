@@ -106,25 +106,21 @@ impl Quad {
     /// Each index gets a key-only entry (empty value), following the Oxigraph pattern.
     pub fn insert_indexes(&self, db: &NeunodeDb) -> Result<()> {
         let keys = self.index_keys();
-        let mut batch = WriteBatch::default();
+        let mut ops = Vec::with_capacity(6);
         for (key, cf_name) in &keys {
-            let cf =
-                db.cf_handle(cf_name).map_err(|e| KnowledgeError::StorageError(e.to_string()))?;
-            batch.put_cf(&cf, key, b"");
+            ops.push((*cf_name, &key[..], &b""[..]));
         }
-        db.write_batch(batch).map_err(|e| KnowledgeError::StorageError(e.to_string()))
+        db.batch_put_raw(&ops).map_err(|e| KnowledgeError::StorageError(e.to_string()))
     }
 
     /// Remove this quad from all 6 index CFs using a WriteBatch.
     pub fn delete_indexes(&self, db: &NeunodeDb) -> Result<()> {
         let keys = self.index_keys();
-        let mut batch = WriteBatch::default();
+        let mut ops = Vec::with_capacity(6);
         for (key, cf_name) in &keys {
-            let cf =
-                db.cf_handle(cf_name).map_err(|e| KnowledgeError::StorageError(e.to_string()))?;
-            batch.delete_cf(&cf, key);
+            ops.push((*cf_name, &key[..]));
         }
-        db.write_batch(batch).map_err(|e| KnowledgeError::StorageError(e.to_string()))
+        db.batch_delete_raw(&ops).map_err(|e| KnowledgeError::StorageError(e.to_string()))
     }
 
     /// Build a single-component prefix (16 bytes) for prefix-scan queries.

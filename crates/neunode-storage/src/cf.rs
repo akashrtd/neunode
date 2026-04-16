@@ -34,20 +34,37 @@ pub const CF_KG_GOSP: &str = "gosp";
 
 /// All 20 column family names in canonical order.
 pub fn all_column_families() -> Vec<&'static str> {
+    let mut all = ledger_column_families();
+    all.extend(network_column_families());
+    all.extend(graph_column_families());
+    all
+}
+
+pub fn ledger_column_families() -> Vec<&'static str> {
     vec![
         CF_IDENTITY,
         CF_CONFIG,
-        CF_FEED_EVENTS,
-        CF_FEED_INDEX,
-        CF_FEED_STATE,
         CF_TOKENS,
         CF_REPUTATION,
         CF_MODELS,
         CF_TRAINING,
         CF_BOUNTIES,
+    ]
+}
+
+pub fn network_column_families() -> Vec<&'static str> {
+    vec![
         CF_P2P_STATE,
         CF_MERKLE_NODES,
         CF_SNAPSHOTS,
+    ]
+}
+
+pub fn graph_column_families() -> Vec<&'static str> {
+    vec![
+        CF_FEED_EVENTS,
+        CF_FEED_INDEX,
+        CF_FEED_STATE,
         CF_KG_ID2STR,
         CF_KG_SPOG,
         CF_KG_POSG,
@@ -59,21 +76,20 @@ pub fn all_column_families() -> Vec<&'static str> {
 }
 
 /// Deterministic 16-byte hash of a DID string.
-/// Uses two rounds of std DefaultHasher (SipHash variant) for 16 bytes total.
-/// Not cryptographically secure — used only as a key prefix for locality.
+///
+/// Uses BLAKE3 truncated to 16 bytes. Collision-resistant and suitable as a
+/// key prefix for all per-agent data (feed events, tokens, reputation, etc.).
+///
+/// # Migration Note
+///
+/// This replaces the previous `DefaultHasher` (SipHash 1-3) implementation
+/// which was not collision-resistant. Any existing data written with the old
+/// hash will need re-keying. Since this is a pre-production hotfix, no
+/// migration path is provided.
 pub fn did_hash_16(did: &str) -> [u8; 16] {
-    use std::hash::{Hash, Hasher};
-    let mut h1 = std::collections::hash_map::DefaultHasher::new();
-    did.hash(&mut h1);
-    let v1 = h1.finish();
-
-    let mut h2 = std::collections::hash_map::DefaultHasher::new();
-    format!("{did}\x00salt").hash(&mut h2);
-    let v2 = h2.finish();
-
+    let hash = neunode_crypto::hash::blake3_hash(did.as_bytes());
     let mut out = [0u8; 16];
-    out[..8].copy_from_slice(&v1.to_be_bytes());
-    out[8..].copy_from_slice(&v2.to_be_bytes());
+    out.copy_from_slice(&hash[..16]);
     out
 }
 
@@ -135,6 +151,15 @@ mod tests {
     fn test_did_hash_length() {
         let h = did_hash_16("did:neunode:test");
         assert_eq!(h.len(), 16);
+    }
+
+    #[test]
+    fn test_did_hash_uses_blake3() {
+        // Verify the output matches blake3 truncated to 16 bytes
+        let did = "did:neunode:0xABC";
+        let expected = &neunode_crypto::hash::blake3_hash(did.as_bytes())[..16];
+        let actual = did_hash_16(did);
+        assert_eq!(actual.as_slice(), expected);
     }
 
     #[test]

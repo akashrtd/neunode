@@ -279,6 +279,20 @@ export const neunodeGovernanceAbi = [
 		outputs: [],
 		stateMutability: "nonpayable",
 	},
+	{
+		type: "function" as const,
+		name: "setAllowedTarget",
+		inputs: [{ name: "target", type: "address" }, { name: "allowed", type: "bool" }],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function" as const,
+		name: "getAllowedTarget",
+		inputs: [{ name: "target", type: "address" }],
+		outputs: [{ name: "", type: "bool" }],
+		stateMutability: "view",
+	},
 
 	// View helpers
 	{

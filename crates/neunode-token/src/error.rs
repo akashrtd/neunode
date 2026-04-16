@@ -27,6 +27,9 @@ pub enum TokenError {
 
     #[error("storage error: {0}")]
     StorageError(String),
+
+    #[error("critical accounting invariant violation: rollback failed")]
+    InvariantViolation,
 }
 
 /// Result type alias for token operations.

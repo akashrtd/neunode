@@ -53,11 +53,11 @@ pub mod bounty {
     pub const PROTOCOL_FEE_PCT: f64 = 3.0;
     pub const REVIEWER_FEE_PCT: f64 = 4.0;
     pub const REVIEWER_COUNT: usize = 3;
-    pub const REVIEWER_WEIGHT_CAPABILITY: f64 = 35.0;
-    pub const REVIEWER_WEIGHT_REPUTATION: f64 = 25.0;
+    pub const REVIEWER_WEIGHT_CAPABILITY: f64 = 40.0;
+    pub const REVIEWER_WEIGHT_REPUTATION: f64 = 30.0;
     pub const REVIEWER_WEIGHT_STAKE: f64 = 20.0;
     pub const REVIEWER_WEIGHT_AVAILABILITY: f64 = 10.0;
-    pub const REVIEWER_WEIGHT_RANDOM: f64 = 10.0;
+    pub const REVIEWER_MIN_STAKE: f64 = 1000.0;
 }
 
 pub mod reputation {

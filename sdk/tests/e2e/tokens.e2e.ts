@@ -355,75 +355,7 @@ describe("Staking", () => {
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────────
-// 5. Activity Tracking
-// ────────────────────────────────────────────────────────────────────────────────
-
-describe("Activity tracking", () => {
-  it("updateActivity(account) updates lastActivity timestamp", async () => {
-    const f = getFixture();
-    const account = ANVIL_ACCOUNTS[1] as `0x${string}`;
-
-    // Before: no activity recorded
-    const before = await f.publicClient.readContract({
-      abi: neunodeTokenAbi,
-      address: f.addresses.computeToken,
-      functionName: "lastActivity",
-      args: [account],
-    });
-    expect(before).toBe(0n);
-
-    // Update activity
-    const hash = await f.walletClient.writeContract({
-      abi: neunodeTokenAbi,
-      address: f.addresses.computeToken,
-      functionName: "updateActivity",
-      args: [account],
-      account: f.account,
-    });
-    await f.publicClient.waitForTransactionReceipt({ hash });
-
-    // After: timestamp > 0
-    const after = await f.publicClient.readContract({
-      abi: neunodeTokenAbi,
-      address: f.addresses.computeToken,
-      functionName: "lastActivity",
-      args: [account],
-    });
-    expect(after).toBeGreaterThan(0n);
-  });
-
-  it("getActivityLevel(account) returns correct level", async () => {
-    const f = getFixture();
-
-    // Never-active account → Dead (level 4)
-    const deadLevel = await f.publicClient.readContract({
-      abi: neunodeTokenAbi,
-      address: f.addresses.computeToken,
-      functionName: "getActivityLevel",
-      args: [ANVIL_ACCOUNTS[2] as `0x${string}`],
-    });
-    expect(deadLevel).toBe(4);
-
-    // Update activity → Active (level 0) since block.timestamp is "now"
-    const hash = await f.walletClient.writeContract({
-      abi: neunodeTokenAbi,
-      address: f.addresses.computeToken,
-      functionName: "updateActivity",
-      args: [f.account.address],
-      account: f.account,
-    });
-    await f.publicClient.waitForTransactionReceipt({ hash });
-
-    const activeLevel = await f.publicClient.readContract({
-      abi: neunodeTokenAbi,
-      address: f.addresses.computeToken,
-      functionName: "getActivityLevel",
-      args: [f.account.address],
-    });
-    expect(activeLevel).toBe(0);
-  });
-});
+// Activity tracking logic decoupled from NeunodeToken in Phase 1
 
 // ────────────────────────────────────────────────────────────────────────────────
 // 6. Seed Tokens

@@ -9,7 +9,9 @@ use crate::cf;
 use crate::error::{Result, StorageError};
 
 pub struct NeunodeDb {
-    db: DB,
+    ledger_db: DB,
+    network_db: DB,
+    graph_db: DB,
     cache: Cache,
 }
 
@@ -23,17 +25,33 @@ impl NeunodeDb {
         max_cache_entries: usize,
         cache_ttl_secs: u64,
     ) -> Result<Self> {
+        let ledger_path = path.join("ledger");
+        let network_path = path.join("network");
+        let graph_path = path.join("graph");
+
+        let ledger_db = Self::open_db_for_cfs(&ledger_path, cf::ledger_column_families())?;
+        let network_db = Self::open_db_for_cfs(&network_path, cf::network_column_families())?;
+        let graph_db = Self::open_db_for_cfs(&graph_path, cf::graph_column_families())?;
+
+        let cache = Cache::new(max_cache_entries, cache_ttl_secs);
+
+        Ok(Self {
+            ledger_db,
+            network_db,
+            graph_db,
+            cache,
+        })
+    }
+
+    fn open_db_for_cfs(path: &Path, required: Vec<&'static str>) -> Result<DB> {
         let mut opts = Options::default();
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
 
-        let required: Vec<String> =
-            cf::all_column_families().iter().map(|s| s.to_string()).collect();
+        let required_vec: Vec<String> = required.iter().map(|s| s.to_string()).collect();
+        let existing = DB::list_cf(&Options::default(), path).unwrap_or_else(|_| vec!["default".into()]);
 
-        let existing =
-            DB::list_cf(&Options::default(), path).unwrap_or_else(|_| vec!["default".into()]);
-
-        let mut all_cfs = required;
+        let mut all_cfs = required_vec;
         for cf in existing {
             if !all_cfs.contains(&cf) {
                 all_cfs.push(cf);
@@ -45,16 +63,25 @@ impl NeunodeDb {
             .map(|name| ColumnFamilyDescriptor::new(name.clone(), Options::default()))
             .collect();
 
-        let db = DB::open_cf_descriptors(&opts, path, descriptors)?;
-        let cache = Cache::new(max_cache_entries, cache_ttl_secs);
-
-        Ok(Self { db, cache })
+        DB::open_cf_descriptors(&opts, path, descriptors).map_err(Into::into)
     }
 
     pub fn cf_handle(&self, cf_name: &str) -> Result<Arc<BoundColumnFamily<'_>>> {
-        self.db
-            .cf_handle(cf_name)
+        let db = self.get_db_for_cf(cf_name)?;
+        db.cf_handle(cf_name)
             .ok_or_else(|| StorageError::ColumnFamilyNotFound(cf_name.to_string()))
+    }
+
+    fn get_db_for_cf(&self, cf_name: &str) -> Result<&DB> {
+        if cf::ledger_column_families().contains(&cf_name) {
+            Ok(&self.ledger_db)
+        } else if cf::network_column_families().contains(&cf_name) {
+            Ok(&self.network_db)
+        } else if cf::graph_column_families().contains(&cf_name) {
+            Ok(&self.graph_db)
+        } else {
+            Err(StorageError::ColumnFamilyNotFound(cf_name.to_string()))
+        }
     }
 
     pub fn get_raw(&self, cf_name: &str, key: &[u8]) -> Result<Option<Vec<u8>>> {
@@ -62,7 +89,8 @@ impl NeunodeDb {
             return Ok(Some(cached));
         }
         let cf = self.cf_handle(cf_name)?;
-        match self.db.get_cf(&cf, key)? {
+        let db = self.get_db_for_cf(cf_name)?;
+        match db.get_cf(&cf, key)? {
             Some(bytes) => {
                 self.cache.insert(cf_name, key, bytes.clone());
                 Ok(Some(bytes))
@@ -90,7 +118,8 @@ impl NeunodeDb {
 
     pub fn put_raw(&self, cf_name: &str, key: &[u8], value: &[u8]) -> Result<()> {
         let cf = self.cf_handle(cf_name)?;
-        self.db.put_cf(&cf, key, value)?;
+        let db = self.get_db_for_cf(cf_name)?;
+        db.put_cf(&cf, key, value)?;
         self.cache.insert(cf_name, key, value.to_vec());
         Ok(())
     }
@@ -109,33 +138,71 @@ impl NeunodeDb {
 
     pub fn delete(&self, cf_name: &str, key: &[u8]) -> Result<()> {
         let cf = self.cf_handle(cf_name)?;
-        self.db.delete_cf(&cf, key)?;
+        let db = self.get_db_for_cf(cf_name)?;
+        db.delete_cf(&cf, key)?;
         self.cache.invalidate(cf_name, key);
         Ok(())
     }
 
-    pub fn write_batch(&self, batch: WriteBatch) -> Result<()> {
-        self.db.write(batch)?;
-        self.cache.invalidate_all();
-        Ok(())
-    }
+    // Removed raw write_batch because it doesn't span multiple partitioned DBs properly automatically.
+    // Callers must use specific atomic routines or batch_put_raw, which routes by CF.
 
     pub fn batch_put_raw(&self, ops: &[(&str, &[u8], &[u8])]) -> Result<()> {
-        let mut batch = WriteBatch::default();
+        let mut ledger_batch = WriteBatch::default();
+        let mut network_batch = WriteBatch::default();
+        let mut graph_batch = WriteBatch::default();
+
         for &(cf_name, key, value) in ops {
             let cf = self.cf_handle(cf_name)?;
-            batch.put_cf(&cf, key, value);
+            if cf::ledger_column_families().contains(&cf_name) {
+                ledger_batch.put_cf(&cf, key, value);
+            } else if cf::network_column_families().contains(&cf_name) {
+                network_batch.put_cf(&cf, key, value);
+            } else {
+                graph_batch.put_cf(&cf, key, value);
+            }
         }
-        self.db.write(batch)?;
+
+        self.ledger_db.write(ledger_batch)?;
+        self.network_db.write(network_batch)?;
+        self.graph_db.write(graph_batch)?;
+
         for &(cf_name, key, value) in ops {
             self.cache.insert(cf_name, key, value.to_vec());
         }
         Ok(())
     }
 
+    pub fn batch_delete_raw(&self, ops: &[(&str, &[u8])]) -> Result<()> {
+        let mut ledger_batch = WriteBatch::default();
+        let mut network_batch = WriteBatch::default();
+        let mut graph_batch = WriteBatch::default();
+
+        for &(cf_name, key) in ops {
+            let cf = self.cf_handle(cf_name)?;
+            if cf::ledger_column_families().contains(&cf_name) {
+                ledger_batch.delete_cf(&cf, key);
+            } else if cf::network_column_families().contains(&cf_name) {
+                network_batch.delete_cf(&cf, key);
+            } else {
+                graph_batch.delete_cf(&cf, key);
+            }
+        }
+
+        self.ledger_db.write(ledger_batch)?;
+        self.network_db.write(network_batch)?;
+        self.graph_db.write(graph_batch)?;
+
+        for &(cf_name, key) in ops {
+            self.cache.invalidate(cf_name, key);
+        }
+        Ok(())
+    }
+
     pub fn prefix_scan(&self, cf_name: &str, prefix: &[u8]) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let cf = self.cf_handle(cf_name)?;
-        let iter = self.db.iterator_cf(&cf, IteratorMode::From(prefix, Direction::Forward));
+        let db = self.get_db_for_cf(cf_name)?;
+        let iter = db.iterator_cf(&cf, IteratorMode::From(prefix, Direction::Forward));
         let mut results = Vec::new();
         for item in iter {
             let (k, v) = item.map_err(StorageError::RocksDb)?;
@@ -155,7 +222,8 @@ impl NeunodeDb {
         end: &[u8],
     ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let cf = self.cf_handle(cf_name)?;
-        let iter = self.db.iterator_cf(&cf, IteratorMode::From(start, Direction::Forward));
+        let db = self.get_db_for_cf(cf_name)?;
+        let iter = db.iterator_cf(&cf, IteratorMode::From(start, Direction::Forward));
         let mut results = Vec::new();
         for item in iter {
             let (k, v) = item.map_err(StorageError::RocksDb)?;
@@ -299,23 +367,6 @@ mod tests {
 
         let results = db.range_scan(cf::CF_CONFIG, b"key_02", b"key_04").unwrap();
         assert_eq!(results.len(), 2);
-    }
-
-    #[test]
-    fn test_write_batch() {
-        let db = temp_db();
-        let cf = db.cf_handle(cf::CF_IDENTITY).unwrap();
-
-        let mut batch = WriteBatch::default();
-        batch.put_cf(&cf, b"batch_k1", b"batch_v1");
-        batch.put_cf(&cf, b"batch_k2", b"batch_v2");
-        batch.put_cf(&cf, b"batch_k3", b"batch_v3");
-
-        db.write_batch(batch).unwrap();
-
-        assert_eq!(db.get_raw(cf::CF_IDENTITY, b"batch_k1").unwrap(), Some(b"batch_v1".to_vec()));
-        assert_eq!(db.get_raw(cf::CF_IDENTITY, b"batch_k2").unwrap(), Some(b"batch_v2".to_vec()));
-        assert_eq!(db.get_raw(cf::CF_IDENTITY, b"batch_k3").unwrap(), Some(b"batch_v3".to_vec()));
     }
 
     #[test]
