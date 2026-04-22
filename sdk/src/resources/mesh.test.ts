@@ -24,6 +24,9 @@ function makeMockClient(): NeunodeClient {
 		token: {} as never,
 		reputation: {} as never,
 		inference: {} as never,
+		knowledge: {} as never,
+		discovery: {} as never,
+		turboquant: {} as never,
 		extend: vi.fn(),
 	};
 }

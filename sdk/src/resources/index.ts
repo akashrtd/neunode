@@ -99,3 +99,44 @@ export type {
 	WorkerRegisterResult,
 } from "./train.js";
 export { createTrainResource } from "./train.js";
+// Phase 2 resources
+export type {
+	DiscoveryComplementParams,
+	DiscoveryComplementResult,
+	DiscoveryGapsResult,
+	DiscoveryResource,
+	DiscoverySearchParams,
+	DiscoveryScoreParams,
+	DiscoveryScoreResult,
+	DiscoverySearchResult,
+	DiscoveryWeightsResult,
+	ScoredAgentResult,
+	ComplementAgentResult,
+} from "./discovery.js";
+export { createDiscoveryResource } from "./discovery.js";
+export type {
+	KnowledgeJoinJobParams,
+	KnowledgeJoinJobResult,
+	KnowledgeListClassesResult,
+	KnowledgeListPredicatesResult,
+	KnowledgeQueryListResult,
+	KnowledgeQueryParams,
+	KnowledgeRegisterAgentParams,
+	KnowledgeRegisterAgentResult,
+	KnowledgeRegisterBountyParams,
+	KnowledgeRegisterBountyResult,
+	KnowledgeRegisterModelParams,
+	KnowledgeRegisterModelResult,
+	KnowledgeResource,
+} from "./knowledge.js";
+export { createKnowledgeResource } from "./knowledge.js";
+export type {
+	TurboquantCodebookParams,
+	TurboquantCodebookResult,
+	TurboquantCompressParams,
+	TurboquantCompressResult,
+	TurboquantDecompressParams,
+	TurboquantDecompressResult,
+	TurboquantResource,
+} from "./turboquant.js";
+export { createTurboquantResource } from "./turboquant.js";

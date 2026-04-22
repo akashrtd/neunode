@@ -14,6 +14,10 @@ neunode-inference = { path = "../crates/neunode-inference" }
 neunode-p2p = { path = "../crates/neunode-p2p" }
 neunode-storage = { path = "../crates/neunode-storage" }
 neunode-training = { path = "../crates/neunode-training" }
+neunode-knowledge = { path = "../crates/neunode-knowledge" }
+neunode-discovery = { path = "../crates/neunode-discovery" }
+neunode-turboquant = { path = "../crates/neunode-turboquant" }
+neunode-lineage = { path = "../crates/neunode-lineage" }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 libp2p = { workspace = true }
@@ -45,3 +49,15 @@ path = "training_flow.rs"
 [[test]]
 name = "multi_node_e2e"
 path = "multi_node_e2e.rs"
+
+[[test]]
+name = "knowledge_flow"
+path = "knowledge_flow.rs"
+
+[[test]]
+name = "discovery_flow"
+path = "discovery_flow.rs"
+
+[[test]]
+name = "turboquant_flow"
+path = "turboquant_flow.rs"

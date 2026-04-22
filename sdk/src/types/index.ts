@@ -136,3 +136,34 @@ export {
 	TrainingProviderStatus,
 	WorkerStatus,
 } from "./training.js";
+// discovery — types only (Phase 2)
+export type {
+	AgentCandidate,
+	AgentScoreResult,
+	CapabilityGap,
+	ComplementResult,
+	DiscoveryRequest,
+	ScoredAgent,
+	ScoringWeights,
+} from "./discovery.js";
+// knowledge — types only (Phase 2)
+export type {
+	KgClass,
+	KgJoinJobResult,
+	KgPredicate,
+	KgQueryPattern,
+	KgQueryResult,
+	KgRegisterAgentResult,
+	KgRegisterBountyResult,
+	KgRegisterModelResult,
+	KgSchemaEntry,
+} from "./knowledge.js";
+export { KgClass as KgClassConst, KgPredicate as KgPredicateConst } from "./knowledge.js";
+// turboquant — types only (Phase 2)
+export type {
+	Codebook,
+	CodebookConfig,
+	CompressionProfile,
+	QuantizedGradients,
+	QuantizationStrategy,
+} from "./turboquant.js";

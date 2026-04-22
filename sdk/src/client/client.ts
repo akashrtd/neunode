@@ -6,6 +6,10 @@ import {
 	type ConfigResource,
 	createConfigResource,
 } from "../resources/config.js";
+import {
+	createDiscoveryResource,
+	type DiscoveryResource,
+} from "../resources/discovery.js";
 import { createFeedResource, type FeedResource } from "../resources/feed.js";
 import {
 	createIdentityResource,
@@ -15,6 +19,10 @@ import {
 	createInferenceResource,
 	type InferenceResource,
 } from "../resources/inference.js";
+import {
+	createKnowledgeResource,
+	type KnowledgeResource,
+} from "../resources/knowledge.js";
 import { createMeshResource, type MeshResource } from "../resources/mesh.js";
 import { createModelResource, type ModelResource } from "../resources/model.js";
 import {
@@ -23,6 +31,10 @@ import {
 } from "../resources/reputation.js";
 import { createTokenResource, type TokenResource } from "../resources/token.js";
 import { createTrainResource, type TrainResource } from "../resources/train.js";
+import {
+	createTurboquantResource,
+	type TurboquantResource,
+} from "../resources/turboquant.js";
 import type { CliTransportConfig } from "../transport/cli-transport.js";
 import { CliTransport } from "../transport/cli-transport.js";
 import type { ViemTransportConfig } from "../transport/viem-transport.js";
@@ -67,6 +79,12 @@ export interface NeunodeClient {
 	readonly reputation: ReputationResource;
 	/** Inference requests, model listing, provider discovery, routing, and pricing. */
 	readonly inference: InferenceResource;
+	/** Knowledge graph: query triples, register entities, inspect ontology. */
+	readonly knowledge: KnowledgeResource;
+	/** Agent discovery: search, complement analysis, capability gaps, scoring. */
+	readonly discovery: DiscoveryResource;
+	/** TurboQuant compression: adaptive strategy selection, codebook generation. */
+	readonly turboquant: TurboquantResource;
 	/** Attach custom properties to the client. Returns the merged object. */
 	extend<T>(extender: (client: NeunodeClient) => T): NeunodeClient & T;
 }
@@ -84,6 +102,9 @@ class NeunodeClientImpl implements NeunodeClient {
 	readonly token: TokenResource;
 	readonly reputation: ReputationResource;
 	readonly inference: InferenceResource;
+	readonly knowledge: KnowledgeResource;
+	readonly discovery: DiscoveryResource;
+	readonly turboquant: TurboquantResource;
 
 	constructor(
 		cliConfig?: CliTransportConfig,
@@ -101,6 +122,9 @@ class NeunodeClientImpl implements NeunodeClient {
 		this.token = createTokenResource(this);
 		this.reputation = createReputationResource(this);
 		this.inference = createInferenceResource(this);
+		this.knowledge = createKnowledgeResource(this);
+		this.discovery = createDiscoveryResource(this);
+		this.turboquant = createTurboquantResource(this);
 	}
 
 	get transportMode(): TransportMode {
