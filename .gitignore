@@ -20,6 +20,7 @@ contracts/broadcast/
 .dolt/
 *.db
 .beads-credential-key
+.beads/issues.jsonl
 
 # Test output artifacts
 sdk/test_output.log
