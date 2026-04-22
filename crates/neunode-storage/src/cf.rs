@@ -63,6 +63,29 @@ pub fn graph_column_families() -> Vec<&'static str> {
     ]
 }
 
+/// Partition tag for routing CFs to the correct RocksDB instance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Partition {
+    Ledger,
+    Network,
+    Graph,
+}
+
+/// Build a routing map from CF name to partition, built once at DB open.
+pub fn build_partition_map() -> std::collections::HashMap<&'static str, Partition> {
+    let mut map = std::collections::HashMap::with_capacity(20);
+    for &cf in &ledger_column_families() {
+        map.insert(cf, Partition::Ledger);
+    }
+    for &cf in &network_column_families() {
+        map.insert(cf, Partition::Network);
+    }
+    for &cf in &graph_column_families() {
+        map.insert(cf, Partition::Graph);
+    }
+    map
+}
+
 /// Deterministic 16-byte hash of a DID string.
 ///
 /// Uses BLAKE3 truncated to 16 bytes. Collision-resistant and suitable as a

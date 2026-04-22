@@ -1,5 +1,3 @@
-
-
 use neunode_storage::cf::*;
 use neunode_storage::db::NeunodeDb;
 

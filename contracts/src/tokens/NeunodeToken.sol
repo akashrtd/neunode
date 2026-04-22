@@ -120,7 +120,7 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
         if (amount > 0) {
             _stakedBalances[account] -= amount;
             _burn(address(this), amount);
-            emit Unstaked(account, amount); // Emitting unstake for simplicity, or we can add StakeSlashed
+            emit StakeSlashed(account, amount);
         }
     }
 

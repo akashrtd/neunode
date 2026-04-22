@@ -30,6 +30,8 @@ contract StakingEscrow is AccessControl {
     }
 
     /// @notice Compute the decay amount (slashing amount) for a given account's staked balance.
+    /// @param account The address whose staked balance to calculate decay for.
+    /// @return The amount of tokens to slash, in the token's smallest unit.
     function computeDecay(address account) public view returns (uint256) {
         uint8 level = neunodeToken.getActivityLevel(account);
         if (level == 0) return 0; // Active = no decay
@@ -42,6 +44,8 @@ contract StakingEscrow is AccessControl {
     }
 
     /// @notice Apply decay to an account. Anyone can trigger this on inactive nodes.
+    /// @param account The address to apply inactivity decay to.
+    /// @dev Reverts if less than 1 day since last decay. Slashes staked balance via the token contract.
     function executeDecay(address account) external {
         if (block.timestamp < _lastDecayTimestamp[account] + 1 days) revert DecayTooSoon(account);
 

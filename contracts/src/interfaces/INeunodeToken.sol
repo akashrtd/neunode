@@ -34,6 +34,7 @@ interface INeunodeToken {
 
     event Staked(address indexed account, uint256 amount);
     event Unstaked(address indexed account, uint256 amount);
+    event StakeSlashed(address indexed account, uint256 amount);
 
     event SeedMinted(address indexed to, uint256 amount);
     event SeedActivated(address indexed account);

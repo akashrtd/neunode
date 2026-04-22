@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::cache::Cache;
-use crate::cf;
+use crate::cf::{self, Partition};
 use crate::error::{Result, StorageError};
 
 pub struct NeunodeDb {
@@ -13,6 +13,7 @@ pub struct NeunodeDb {
     network_db: DB,
     graph_db: DB,
     cache: Cache,
+    partition_map: std::collections::HashMap<&'static str, Partition>,
 }
 
 impl NeunodeDb {
@@ -34,8 +35,9 @@ impl NeunodeDb {
         let graph_db = Self::open_db_for_cfs(&graph_path, cf::graph_column_families())?;
 
         let cache = Cache::new(max_cache_entries, cache_ttl_secs);
+        let partition_map = cf::build_partition_map();
 
-        Ok(Self { ledger_db, network_db, graph_db, cache })
+        Ok(Self { ledger_db, network_db, graph_db, cache, partition_map })
     }
 
     fn open_db_for_cfs(path: &Path, required: Vec<&'static str>) -> Result<DB> {
@@ -68,15 +70,19 @@ impl NeunodeDb {
     }
 
     fn get_db_for_cf(&self, cf_name: &str) -> Result<&DB> {
-        if cf::ledger_column_families().contains(&cf_name) {
-            Ok(&self.ledger_db)
-        } else if cf::network_column_families().contains(&cf_name) {
-            Ok(&self.network_db)
-        } else if cf::graph_column_families().contains(&cf_name) {
-            Ok(&self.graph_db)
-        } else {
-            Err(StorageError::ColumnFamilyNotFound(cf_name.to_string()))
+        match self.partition_map.get(cf_name) {
+            Some(Partition::Ledger) => Ok(&self.ledger_db),
+            Some(Partition::Network) => Ok(&self.network_db),
+            Some(Partition::Graph) => Ok(&self.graph_db),
+            None => Err(StorageError::ColumnFamilyNotFound(cf_name.to_string())),
         }
+    }
+
+    fn partition_for_cf(&self, cf_name: &str) -> Result<Partition> {
+        self.partition_map
+            .get(cf_name)
+            .copied()
+            .ok_or_else(|| StorageError::ColumnFamilyNotFound(cf_name.to_string()))
     }
 
     pub fn get_raw(&self, cf_name: &str, key: &[u8]) -> Result<Option<Vec<u8>>> {
@@ -149,14 +155,24 @@ impl NeunodeDb {
 
         for &(cf_name, key, value) in ops {
             let cf = self.cf_handle(cf_name)?;
-            if cf::ledger_column_families().contains(&cf_name) {
-                ledger_batch.put_cf(&cf, key, value);
-            } else if cf::network_column_families().contains(&cf_name) {
-                network_batch.put_cf(&cf, key, value);
-            } else {
-                graph_batch.put_cf(&cf, key, value);
+            match self.partition_for_cf(cf_name)? {
+                Partition::Ledger => ledger_batch.put_cf(&cf, key, value),
+                Partition::Network => network_batch.put_cf(&cf, key, value),
+                Partition::Graph => graph_batch.put_cf(&cf, key, value),
             }
         }
+
+        // Batch operations are atomic within a single RocksDB instance.
+        // If ops span multiple partitions, writes are applied sequentially
+        // and a failure after the first DB write leaves partial state.
+        debug_assert!(
+            {
+                let partitions: Vec<_> =
+                    ops.iter().map(|&(cf_name, _, _)| self.partition_map.get(cf_name)).collect();
+                partitions.windows(2).all(|w| w[0] == w[1])
+            },
+            "batch_put_raw ops should target a single partition for atomicity"
+        );
 
         self.ledger_db.write(ledger_batch)?;
         self.network_db.write(network_batch)?;
@@ -175,12 +191,10 @@ impl NeunodeDb {
 
         for &(cf_name, key) in ops {
             let cf = self.cf_handle(cf_name)?;
-            if cf::ledger_column_families().contains(&cf_name) {
-                ledger_batch.delete_cf(&cf, key);
-            } else if cf::network_column_families().contains(&cf_name) {
-                network_batch.delete_cf(&cf, key);
-            } else {
-                graph_batch.delete_cf(&cf, key);
+            match self.partition_for_cf(cf_name)? {
+                Partition::Ledger => ledger_batch.delete_cf(&cf, key),
+                Partition::Network => network_batch.delete_cf(&cf, key),
+                Partition::Graph => graph_batch.delete_cf(&cf, key),
             }
         }
 
