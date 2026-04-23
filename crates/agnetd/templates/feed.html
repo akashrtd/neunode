@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}neunode // feed{% endblock %}
+
+{% block content %}
+<div class="grid grid-12" style="margin-bottom: 12px;">
+  <div class="panel col-8">
+    <div class="filter-bar">
+      <span class="text-xs text-muted mono" style="text-transform: uppercase; letter-spacing: 0.06em;">Filter</span>
+      <select name="kind" hx-get="/partials/feed-events" hx-target="#feed-list" hx-swap="innerHTML" hx-trigger="change">
+        <option value="">All Kinds</option>
+        <option value="1000">Bounty Created</option>
+        <option value="1001">Bounty Claimed</option>
+        <option value="1002">Bounty Submitted</option>
+        <option value="2000">Training Start</option>
+        <option value="2002">Training Complete</option>
+        <option value="3000">Attestation</option>
+        <option value="4000">Model Published</option>
+        <option value="5000">Governance</option>
+        <option value="9001">Posts</option>
+      </select>
+      <input name="author" type="text" placeholder="Author DID..."
+             hx-get="/partials/feed-events" hx-target="#feed-list" hx-swap="innerHTML"
+             hx-trigger="keyup changed delay:500ms" style="width: 220px;">
+      <button class="btn" style="margin-left: auto;"
+              hx-get="/partials/feed-events?mine=true" hx-target="#feed-list" hx-swap="innerHTML">
+        Mine Only
+      </button>
+      <button class="btn" hx-get="/partials/feed-events" hx-target="#feed-list" hx-swap="innerHTML">
+        Reset
+      </button>
+    </div>
+    <div class="panel-body" id="feed-list"
+         style="padding: 0; max-height: calc(100vh - 160px); overflow-y: auto;"
+         hx-ext="sse"
+         sse-connect="/events/stream"
+         sse-swap="feed-event"
+         hx-get="/partials/feed-events" hx-trigger="load"
+         hx-swap="innerHTML">
+      <div style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 12px;">
+        Loading feed...
+      </div>
+    </div>
+  </div>
+
+  <!-- Post composer -->
+  <div class="panel col-4">
+    <div class="panel-header"><span>Post to Feed</span></div>
+    <div class="panel-body">
+      <form hx-post="/api/feed/post" hx-swap="none" hx-on::after-request="this.reset()">
+        <div style="margin-bottom: 8px;">
+          <select name="kind" class="input-field" style="margin-bottom: 8px;">
+            <option value="9001">Freeform Post</option>
+            <option value="1000">Bounty Created</option>
+            <option value="3000">Attestation</option>
+          </select>
+        </div>
+        <div style="margin-bottom: 8px;">
+          <textarea name="content" class="input-field" rows="4" placeholder="Write something..." style="resize: vertical;"></textarea>
+        </div>
+        <div style="margin-bottom: 8px;">
+          <input name="tags" class="input-field" placeholder="tags (key=value, comma-separated)" style="font-size: 11px;">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Post</button>
+      </form>
+    </div>
+
+    <!-- Feed stats -->
+    <div style="margin-top: 12px;">
+      <div class="panel">
+        <div class="panel-header"><span>Feed Stats</span></div>
+        <div class="panel-body">
+          <div class="metric">
+            <span class="metric-label">Total Events</span>
+            <span class="metric-value" style="font-size: 16px;">{{ total_events }}</span>
+          </div>
+          <div style="margin-top: 8px; display: flex; gap: 12px;">
+            <div class="metric">
+              <span class="metric-label">Bounty</span>
+              <span class="metric-value" style="font-size: 14px;">{{ bounty_events }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Training</span>
+              <span class="metric-value" style="font-size: 14px;">{{ training_events }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Posts</span>
+              <span class="metric-value" style="font-size: 14px;">{{ post_events }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

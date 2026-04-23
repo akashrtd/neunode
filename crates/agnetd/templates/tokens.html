@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}neunode // tokens{% endblock %}
+
+{% block content %}
+<div class="grid grid-4" style="margin-bottom: 12px;">
+  {% for balance in balances %}
+  <div class="panel">
+    <div class="panel-header">
+      <span>{{ balance.label }}</span>
+      <span class="status-dot {% if balance.balance_u128 > 0 %}active{% else %}inactive{% endif %}"></span>
+    </div>
+    <div class="panel-body">
+      <div class="metric">
+        <span class="metric-label">Balance</span>
+        <span class="metric-value">{{ balance.balance }}</span>
+      </div>
+      <div style="margin-top: 8px;" class="metric">
+        <span class="metric-label">Staked</span>
+        <span class="metric-value" style="font-size: 14px; color: var(--text-secondary);">{{ balance.staked }}</span>
+      </div>
+      <div style="margin-top: 8px;" class="metric">
+        <span class="metric-label">Last Decay</span>
+        <span class="mono text-xs text-muted">Epoch {{ balance.decay_epoch }}</span>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="grid grid-12">
+  <div class="panel col-6"
+       hx-get="/partials/token-balances" hx-trigger="load, every 30s" hx-swap="innerHTML">
+    <div class="panel-header"><span>Balance Breakdown</span></div>
+    <div class="panel-body">
+      <div style="text-align: center; color: var(--text-muted); font-size: 12px;">Loading...</div>
+    </div>
+  </div>
+  <div class="panel col-6">
+    <div class="panel-header"><span>Decay Info</span></div>
+    <div class="panel-body">
+      <div class="metric" style="margin-bottom: 12px;">
+        <span class="metric-label">Activity Level</span>
+        <span class="metric-value" style="font-size: 14px;">{{ activity_level }}</span>
+      </div>
+      <div class="metric" style="margin-bottom: 12px;">
+        <span class="metric-label">Decay Rate</span>
+        <span class="metric-value" style="font-size: 14px;">{{ decay_rate }}</span>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr><th>Activity</th><th>Decay</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Active (daily)</td><td class="text-green">0%</td></tr>
+          <tr><td>Moderate (weekly)</td><td class="text-yellow">2%</td></tr>
+          <tr><td>Low (monthly)</td><td class="text-yellow">5%</td></tr>
+          <tr><td>Inactive (30-90d)</td><td class="text-red">15%</td></tr>
+          <tr><td>Dead (90+ d)</td><td class="text-red">50%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

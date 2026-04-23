@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}neunode // analytics{% endblock %}
+
+{% block head %}
+<style>
+  .chart-container { height: 280px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-2" style="margin-bottom: 12px;">
+  <div class="panel">
+    <div class="panel-header"><span>Network Activity</span></div>
+    <div class="panel-body chart-container" id="chart-activity"></div>
+  </div>
+  <div class="panel">
+    <div class="panel-header"><span>Bounty Completion Rate</span></div>
+    <div class="panel-body chart-container" id="chart-bounties"></div>
+  </div>
+</div>
+
+<div class="grid grid-2" style="margin-bottom: 12px;">
+  <div class="panel">
+    <div class="panel-header"><span>Token Distribution</span></div>
+    <div class="panel-body chart-container" id="chart-tokens"></div>
+  </div>
+  <div class="panel">
+    <div class="panel-header"><span>Event Kinds Distribution</span></div>
+    <div class="panel-body chart-container" id="chart-kinds"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var base = { backgroundColor: '#0A0B0F', textStyle: { color: '#8B8FA3', fontFamily: 'JetBrains Mono, monospace' } };
+  var charts = {
+    'chart-activity': {{ activity_chart_data|safe }},
+    'chart-bounties': {{ bounty_chart_data|safe }},
+    'chart-tokens': {{ token_chart_data|safe }},
+    'chart-kinds': {{ kind_chart_data|safe }}
+  };
+  for (var id in charts) {
+    var el = document.getElementById(id);
+    if (el) {
+      var c = echarts.init(el);
+      charts[id].color = base.color;
+      c.setOption(Object.assign({}, base, charts[id]));
+    }
+  }
+  window.addEventListener('resize', function() {
+    for (var id in charts) {
+      var el = document.getElementById(id);
+      if (el) echarts.getInstanceByDom(el).resize();
+    }
+  });
+})();
+</script>
+{% endblock %}

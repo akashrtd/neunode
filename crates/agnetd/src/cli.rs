@@ -110,6 +110,18 @@ pub enum Commands {
         #[command(subcommand)]
         command: TokenCommands,
     },
+    /// Security: input sanitization, circuit breakers (alias: sec)
+    #[command(alias = "sec")]
+    Security {
+        #[command(subcommand)]
+        command: SecurityCommands,
+    },
+    /// Manage agent lifecycle states (alias: lc)
+    #[command(alias = "lc")]
+    Lifecycle {
+        #[command(subcommand)]
+        command: LifecycleCommands,
+    },
     /// Manage reputation (alias: r)
     #[command(alias = "r")]
     Reputation {
@@ -149,6 +161,13 @@ pub enum Commands {
     /// Real-time dashboard (alias: d)
     #[command(alias = "d")]
     Dashboard,
+    /// Start web dashboard server (alias: s)
+    #[command(alias = "s")]
+    Serve {
+        /// Port to listen on
+        #[arg(long, default_value = "8080")]
+        port: u16,
+    },
     /// Show version info
     Version,
 }
@@ -485,6 +504,53 @@ pub enum TokenCommands {
     StakeStatus,
     /// Show decay info and rates
     DecayInfo,
+    /// Grant seed tokens to a new agent (staked only)
+    Seed {
+        /// Target agent DID (defaults to active identity)
+        #[arg(long)]
+        agent: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SecurityCommands {
+    /// Sanitize untrusted input (feed data, bounty descriptions)
+    Sanitize {
+        /// Input text to sanitize
+        #[arg(short, long)]
+        input: String,
+        /// Input type (feed | bounty | knowledge | chat)
+        #[arg(long, default_value = "feed")]
+        kind: String,
+    },
+    /// Show circuit breaker status
+    BreakerStatus,
+    /// Manually trip a circuit breaker
+    BreakerTrip {
+        /// Breaker name (token_volume | reputation | bounty_drain)
+        name: String,
+    },
+    /// Reset a tripped circuit breaker
+    BreakerReset {
+        /// Breaker name
+        name: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum LifecycleCommands {
+    /// Show current agent lifecycle state
+    Status,
+    /// Activate a CREATED agent (stake + register)
+    Activate,
+    /// Hibernate the active agent (intentional pause)
+    Hibernate,
+    /// Reactivate from hibernation
+    Reactivate,
+    /// List all known agent states
+    List,
+    /// Check for idle/zombie agents and process transitions
+    Reap,
 }
 
 #[derive(Subcommand, Debug)]

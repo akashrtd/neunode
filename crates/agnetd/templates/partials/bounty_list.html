@@ -1,0 +1,34 @@
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Bounty</th>
+      <th>State</th>
+      <th>Reward</th>
+      <th>Created</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for bounty in bounties %}
+    <tr>
+      <td>
+        <a href="/bounties/{{ bounty.id }}" style="color: var(--accent-blue); text-decoration: none;">
+          {{ bounty.title }}
+        </a>
+      </td>
+      <td>
+        <span class="status-dot {{ bounty.state_class }}"></span>
+        <span class="mono text-xs">{{ bounty.state }}</span>
+      </td>
+      <td class="mono text-cyan">{{ bounty.reward }}</td>
+      <td class="text-muted text-xs">{{ bounty.time_ago }}</td>
+    </tr>
+    {% endfor %}
+    {% if bounties.is_empty() %}
+    <tr>
+      <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 12px;">
+        No bounties found.
+      </td>
+    </tr>
+    {% endif %}
+  </tbody>
+</table>

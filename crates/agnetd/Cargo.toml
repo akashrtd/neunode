@@ -46,3 +46,8 @@ ed25519-dalek = { workspace = true }
 aes-gcm = { workspace = true }
 libp2p = { workspace = true }
 openssl-sys = { version = "0.9", features = ["vendored"] }
+axum = "0.8"
+askama = "0.13"
+tower-http = { version = "0.6", features = ["cors", "fs"] }
+tokio-stream = "0.1"
+futures = "0.3"

@@ -1,0 +1,11 @@
+{% for peer in peers %}
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid var(--border-subtle);">
+  <span class="mono text-sm text-secondary" style="word-break: break-all;">{{ peer }}</span>
+  <span class="status-dot active"></span>
+</div>
+{% endfor %}
+{% if peers.is_empty() %}
+<div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px;">
+  No connected peers.
+</div>
+{% endif %}

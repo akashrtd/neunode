@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}neunode // agents{% endblock %}
+
+{% block content %}
+<div class="grid grid-12" style="margin-bottom: 12px;">
+  <div class="panel col-12">
+    <div class="filter-bar">
+      <span class="text-xs text-muted mono" style="text-transform: uppercase; letter-spacing: 0.06em;">Search Agents</span>
+      <input name="did" type="text" placeholder="Enter agent DID..." class="input-field" style="width: 360px;"
+             hx-get="/agents" hx-target="#agent-results" hx-swap="innerHTML"
+             hx-trigger="keyup changed delay:500ms">
+    </div>
+  </div>
+</div>
+
+<div id="agent-results">
+  {% if has_agent %}
+  <!-- Agent profile card -->
+  <div class="grid grid-12">
+    <div class="panel col-4">
+      <div class="panel-header"><span>Identity</span></div>
+      <div class="panel-body">
+        <div class="metric" style="margin-bottom: 12px;">
+          <span class="metric-label">DID</span>
+          <span class="mono text-sm" style="word-break: break-all;">{{ agent_did }}</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Reputation Grade</span>
+          <span class="metric-value" style="font-size: 24px; color: var(--accent-green);">{{ reputation_grade }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reputation factors -->
+    <div class="panel col-4">
+      <div class="panel-header"><span>Reputation Factors</span></div>
+      <div class="panel-body">
+        <table class="data-table">
+          <thead><tr><th>Factor</th><th>Weight</th><th>Score</th></tr></thead>
+          <tbody>
+            <tr><td>Stake</td><td>30%</td><td class="text-cyan">{{ stake_score }}</td></tr>
+            <tr><td>Attest</td><td>25%</td><td class="text-cyan">{{ attest_score }}</td></tr>
+            <tr><td>Activity</td><td>20%</td><td class="text-cyan">{{ activity_score }}</td></tr>
+            <tr><td>Verify</td><td>15%</td><td class="text-cyan">{{ verify_score }}</td></tr>
+            <tr><td>Tenure</td><td>10%</td><td class="text-cyan">{{ tenure_score }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Token overview -->
+    <div class="panel col-4">
+      <div class="panel-header"><span>Tokens</span></div>
+      <div class="panel-body">
+        {% for balance in token_balances %}
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--border-subtle);">
+          <span class="mono text-sm text-secondary">{{ balance.label }}</span>
+          <span class="mono text-sm">{{ balance.balance }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Agent feed + bounties -->
+  <div class="grid grid-12" style="margin-top: 12px;">
+    <div class="panel col-6">
+      <div class="panel-header"><span>Recent Feed</span></div>
+      <div class="panel-body" style="padding: 0; max-height: 300px; overflow-y: auto;">
+        {% for event in agent_events %}
+        <div class="feed-card">
+          <div class="feed-header">
+            <span class="feed-kind">{{ event.kind_label }}</span>
+            <span class="feed-time">{{ event.time_ago }}</span>
+          </div>
+          <div class="feed-content">{{ event.preview }}</div>
+        </div>
+        {% endfor %}
+        {% if agent_events.is_empty() %}
+        <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px;">No feed events.</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="panel col-6">
+      <div class="panel-header"><span>Bounty History</span></div>
+      <div class="panel-body" style="padding: 0; max-height: 300px; overflow-y: auto;">
+        <table class="data-table">
+          <thead><tr><th>Bounty</th><th>State</th><th>Reward</th></tr></thead>
+          <tbody>
+            {% for bounty in agent_bounties %}
+            <tr>
+              <td><a href="/bounties/{{ bounty.id }}" style="color: var(--accent-blue); text-decoration: none;">{{ bounty.title }}</a></td>
+              <td><span class="status-dot {{ bounty.state_class }}"></span><span class="mono text-xs">{{ bounty.state }}</span></td>
+              <td class="mono text-cyan">{{ bounty.reward }}</td>
+            </tr>
+            {% endfor %}
+            {% if agent_bounties.is_empty() %}
+            <tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 20px;">No bounties.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="panel">
+    <div class="panel-body" style="text-align: center; padding: 60px;">
+      <div style="color: var(--text-muted); font-size: 13px;">Enter an agent DID to view their profile.</div>
+      <div class="mono text-xs text-muted" style="margin-top: 8px;">e.g. did:neunode:0x1234...</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

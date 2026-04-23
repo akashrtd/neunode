@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}neunode // bounties{% endblock %}
+
+{% block content %}
+<div class="grid grid-12" style="margin-bottom: 12px;">
+  <div class="panel col-8">
+    <div class="filter-bar">
+      <span class="text-xs text-muted mono" style="text-transform: uppercase; letter-spacing: 0.06em;">Filter</span>
+      <select name="state" hx-get="/partials/bounty-list" hx-target="#bounty-table" hx-swap="innerHTML" hx-trigger="change">
+        <option value="">All States</option>
+        <option value="Open">Open</option>
+        <option value="Claimed">Claimed</option>
+        <option value="Submitted">Submitted</option>
+        <option value="UnderReview">Under Review</option>
+        <option value="Accepted">Accepted</option>
+        <option value="Rejected">Rejected</option>
+        <option value="Paid">Paid</option>
+      </select>
+      <span class="text-xs text-muted mono" style="margin-left: auto;">{{ total_bounties }} total</span>
+    </div>
+    <div class="panel-body" id="bounty-table"
+         hx-get="/partials/bounty-list" hx-trigger="load, every 30s" hx-swap="innerHTML"
+         style="padding: 0; max-height: calc(100vh - 160px); overflow-y: auto;">
+      <div style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 12px;">
+        Loading bounties...
+      </div>
+    </div>
+  </div>
+
+  <!-- Create bounty form -->
+  <div class="panel col-4">
+    <div class="panel-header"><span>Create Bounty</span></div>
+    <div class="panel-body">
+      <form hx-post="/api/bounties/create" hx-swap="none" hx-on::after-request="this.reset()">
+        <div style="margin-bottom: 8px;">
+          <label class="text-xs text-muted" style="display: block; margin-bottom: 4px;">TITLE</label>
+          <input name="title" class="input-field" required placeholder="e.g. Build a Rust WASM compiler">
+        </div>
+        <div style="margin-bottom: 8px;">
+          <label class="text-xs text-muted" style="display: block; margin-bottom: 4px;">DESCRIPTION</label>
+          <textarea name="description" class="input-field" rows="3" required placeholder="Detailed task description..."></textarea>
+        </div>
+        <div class="grid grid-2" style="margin-bottom: 8px;">
+          <div>
+            <label class="text-xs text-muted" style="display: block; margin-bottom: 4px;">REWARD</label>
+            <input name="reward" type="number" class="input-field" required placeholder="1000">
+          </div>
+          <div>
+            <label class="text-xs text-muted" style="display: block; margin-bottom: 4px;">TOKEN</label>
+            <select name="token" class="input-field">
+              <option value="compute">nCompute</option>
+              <option value="training">nTrain</option>
+              <option value="bandwidth">nBandwidth</option>
+              <option value="storage">nStorage</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-2" style="margin-bottom: 8px;">
+          <div>
+            <label class="text-xs text-muted" style="display: block; margin-bottom: 4px;">CLAIM DEADLINE (HRS)</label>
+            <input name="claim_deadline" type="number" class="input-field" value="72">
+          </div>
+          <div>
+            <label class="text-xs text-muted" style="display: block; margin-bottom: 4px;">WORK DEADLINE (HRS)</label>
+            <input name="work_deadline" type="number" class="input-field" value="168">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Create Bounty</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

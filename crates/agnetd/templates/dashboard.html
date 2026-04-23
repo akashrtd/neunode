@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}neunode // dashboard{% endblock %}
+
+{% block content %}
+<!-- Top metrics row -->
+<div class="grid grid-4" style="margin-bottom: 12px;">
+  <div class="panel">
+    <div class="panel-body">
+      <div class="metric">
+        <span class="metric-label">Network Events</span>
+        <span class="metric-value">{{ total_events }}</span>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-body">
+      <div class="metric">
+        <span class="metric-label">Active Bounties</span>
+        <span class="metric-value">{{ active_bounties }}</span>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-body">
+      <div class="metric">
+        <span class="metric-label">Connected Peers</span>
+        <span class="metric-value">{{ peer_count }}</span>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-body">
+      <div class="metric">
+        <span class="metric-label">Total Compute</span>
+        <span class="metric-value">{{ total_compute }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main grid: network graph + feed -->
+<div class="grid grid-12" style="margin-bottom: 12px;">
+  <!-- Network topology (8 cols) -->
+  <div class="panel col-8">
+    <div class="panel-header">
+      <span>Network Topology</span>
+      <span class="text-xs text-muted mono" id="topology-info">{{ connected_peers }} nodes</span>
+    </div>
+    <div class="panel-body" style="height: 320px; padding: 0;">
+      <div id="network-graph" style="width: 100%; height: 320px;"></div>
+    </div>
+  </div>
+
+  <!-- Recent feed (4 cols) -->
+  <div class="panel col-4">
+    <div class="panel-header">
+      <span>Live Feed</span>
+      <span class="htmx-indicator text-xs text-muted">syncing...</span>
+    </div>
+    <div class="panel-body" style="padding: 0; max-height: 320px; overflow-y: auto;"
+         hx-ext="sse"
+         sse-connect="/events/stream"
+         sse-swap="feed-event">
+      {% for event in recent_events %}
+      <div class="feed-card">
+        <div class="feed-header">
+          <span class="feed-author">{{ event.author_short }}</span>
+          <span class="feed-kind">{{ event.kind_label }}</span>
+          <span class="feed-time">{{ event.time_ago }}</span>
+        </div>
+        <div class="feed-content">{{ event.preview }}</div>
+      </div>
+      {% endfor %}
+      {% if recent_events.is_empty() %}
+      <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 12px;">
+        No events yet. Start the mesh to see live activity.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Bottom row: tokens + active bounties + system log -->
+<div class="grid grid-12">
+  <!-- Token balances (3 cols) -->
+  <div class="panel col-3"
+       hx-get="/partials/token-balances" hx-trigger="load, every 30s" hx-swap="innerHTML">
+    <div class="panel-header"><span>Token Balances</span></div>
+    <div class="panel-body">
+      <div style="text-align: center; color: var(--text-muted); font-size: 12px;">Loading...</div>
+    </div>
+  </div>
+
+  <!-- Active bounties (5 cols) -->
+  <div class="panel col-5"
+       hx-get="/partials/bounty-list?limit=5" hx-trigger="load, every 30s" hx-swap="innerHTML">
+    <div class="panel-header"><span>Active Bounties</span></div>
+    <div class="panel-body">
+      <div style="text-align: center; color: var(--text-muted); font-size: 12px;">Loading...</div>
+    </div>
+  </div>
+
+  <!-- System log (4 cols) -->
+  <div class="panel col-4">
+    <div class="panel-header"><span>System Log</span></div>
+    <div class="panel-body" style="padding: 0; max-height: 200px; overflow-y: auto; font-family: var(--font-mono); font-size: 11px;">
+      {% for log in system_logs %}
+      <div style="padding: 3px 10px; border-bottom: 1px solid var(--border-subtle);">
+        <span class="text-muted">{{ log.timestamp }}</span>
+        <span class="{% if log.level == "ERROR" %}text-red{% else if log.level == "WARN" %}text-yellow{% else %}text-secondary{% endif %}"> {{ log.level }}</span>
+        <span class="text-secondary"> {{ log.message }}</span>
+      </div>
+      {% endfor %}
+      {% if system_logs.is_empty() %}
+      <div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 11px;">
+        No log entries.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Network graph script -->
+{% if has_mesh_data %}
+<script>
+  (function() {
+    var chart = echarts.init(document.getElementById('network-graph'), null, {renderer: 'canvas'});
+    var data = {{ graph_data|safe }};
+    chart.setOption({
+      backgroundColor: '#0A0B0F',
+      series: [{
+        type: 'graph',
+        layout: 'force',
+        data: data.nodes,
+        links: data.links,
+        roam: true,
+        draggable: true,
+        force: {
+          repulsion: 120,
+          edgeLength: [60, 150],
+          gravity: 0.03
+        },
+        symbolSize: function(val) { return Math.max(4, val || 6); },
+        itemStyle: {
+          color: '#4A90D9',
+          borderColor: '#1E2130',
+          borderWidth: 1
+        },
+        linkStyle: {
+          color: '#1E2130',
+          width: 0.8
+        },
+        label: {
+          show: false
+        },
+        emphasis: {
+          itemStyle: {
+            color: '#22D3EE',
+            borderColor: '#22D3EE'
+          },
+          linkStyle: {
+            color: '#4A90D9',
+            width: 1.5
+          }
+        },
+        lineStyle: { curveness: 0.1 }
+      }]
+    });
+    window.addEventListener('resize', function() { chart.resize(); });
+  })();
+</script>
+{% else %}
+<script>
+  document.getElementById('network-graph').innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:12px;">' +
+    'Mesh offline. Run <span class="mono" style="color:var(--accent-cyan);margin:0 4px;">agnetd mesh start</span> to connect.' +
+    '</div>';
+</script>
+{% endif %}
+{% endblock %}

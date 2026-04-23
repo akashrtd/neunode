@@ -11,10 +11,13 @@ mod cmd_feed;
 mod cmd_identity;
 mod cmd_inference;
 mod cmd_knowledge;
+mod cmd_lifecycle;
 mod cmd_lineage;
 mod cmd_mesh;
 mod cmd_model;
 mod cmd_reputation;
+mod cmd_security;
+mod cmd_serve;
 mod cmd_token;
 mod cmd_train;
 mod cmd_verify;
@@ -73,6 +76,12 @@ fn main() -> ExitCode {
         Commands::Train { command } => cmd_train::execute(command, &global_args, &mut app_state),
         Commands::Bounty { command } => cmd_bounty::execute(command, &global_args, &mut app_state),
         Commands::Token { command } => cmd_token::execute(command, &global_args, &mut app_state),
+        Commands::Security { command } => {
+            cmd_security::execute(command, &global_args, &mut app_state)
+        }
+        Commands::Lifecycle { command } => {
+            cmd_lifecycle::execute(command, &global_args, &mut app_state)
+        }
         Commands::Reputation { command } => {
             cmd_reputation::execute(command, &global_args, &mut app_state)
         }
@@ -90,6 +99,9 @@ fn main() -> ExitCode {
             cmd_discover::execute(command, &global_args, &mut app_state)
         }
         Commands::Dashboard => rt.block_on(cmd_dashboard::execute(&global_args, &mut app_state)),
+        Commands::Serve { port } => {
+            rt.block_on(cmd_serve::execute(*port, &global_args, &mut app_state))
+        }
         Commands::Version => {
             println!("agnetd v{}", env!("CARGO_PKG_VERSION"));
             Ok(())

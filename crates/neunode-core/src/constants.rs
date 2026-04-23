@@ -40,6 +40,12 @@ pub mod token {
 
     pub const UNBONDING_PERIOD_SECS: u64 = 7 * 24 * 3600;
     pub const MIN_STAKE: u64 = 100;
+
+    // Seed tokens: starter pack for new agents (staked only, not spendable)
+    pub const SEED_COMPUTE: u128 = 100;
+    pub const SEED_TRAINING: u128 = 50;
+    pub const SEED_BANDWIDTH: u128 = 50;
+    pub const SEED_STORAGE: u128 = 50;
 }
 
 pub mod bounty {

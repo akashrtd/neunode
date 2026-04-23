@@ -1,0 +1,15 @@
+{% if events.is_empty() %}
+<div style="text-align: center; padding: 40px; color: var(--text-muted); font-size: 12px;">
+  No events found.
+</div>
+{% endif %}
+{% for event in events %}
+<div class="feed-card">
+  <div class="feed-header">
+    <span class="feed-author">{{ event.author_short }}</span>
+    <span class="feed-kind">{{ event.kind_label }}</span>
+    <span class="feed-time">{{ event.time_ago }}</span>
+  </div>
+  <div class="feed-content">{{ event.preview }}</div>
+</div>
+{% endfor %}

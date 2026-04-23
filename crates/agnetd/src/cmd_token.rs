@@ -20,6 +20,7 @@ pub fn execute(cmd: &TokenCommands, args: &GlobalArgs, state: &mut AppState) -> 
         TokenCommands::Unstake { amount } => unstake_tokens(*amount, &writer, state),
         TokenCommands::StakeStatus => show_stake_status(&writer, state),
         TokenCommands::DecayInfo => show_decay_info(&writer),
+        TokenCommands::Seed { agent } => seed_tokens(agent.as_deref(), &writer, state),
     }
 }
 
@@ -242,7 +243,7 @@ fn show_decay_info(writer: &OutputWriter) -> Result<()> {
             let rate = DecayCalculator::effective_decay_rate(*level);
             vec![
                 name.to_string(),
-                format!("{:.0}%", rate),
+                format!("{rate:.0}%"),
                 "40%".to_string(),
                 "30%".to_string(),
                 "20%".to_string(),
@@ -251,6 +252,52 @@ fn show_decay_info(writer: &OutputWriter) -> Result<()> {
         })
         .collect();
     writer.write_table(&headers, &rows);
+    Ok(())
+}
+
+fn seed_tokens(agent: Option<&str>, writer: &OutputWriter, state: &AppState) -> Result<()> {
+    let did = match agent {
+        Some(d) => d.to_string(),
+        None => state.require_did()?.0.clone(),
+    };
+
+    use neunode_core::constants::token;
+    let seeds = [
+        ("nCompute", TOKEN_COMPUTE, token::SEED_COMPUTE),
+        ("nTrain", TOKEN_TRAINING, token::SEED_TRAINING),
+        ("nBandwidth", TOKEN_BANDWIDTH, token::SEED_BANDWIDTH),
+        ("nStorage", TOKEN_STORAGE, token::SEED_STORAGE),
+    ];
+
+    let store = state.token_store();
+    let mut total_seed: u128 = 0;
+    let mut granted = Vec::new();
+
+    for (name, token_byte, amount) in &seeds {
+        let mut bal = store.get_balance(&did, *token_byte)?;
+        // Only grant if not already seeded (staked == 0 and balance == 0)
+        if bal.balance == 0 && bal.staked == 0 && *amount > 0 {
+            bal.staked = *amount;
+            store.set_balance(&did, *token_byte, &bal)?;
+            total_seed += amount;
+            granted.push(format!("{name}: {amount} (staked)"));
+        }
+    }
+
+    if granted.is_empty() {
+        writer.write_status(&format!("{did} already has tokens — seed skipped"));
+    } else {
+        let headers = ["Token", "Amount", "Type"];
+        let rows: Vec<Vec<String>> = seeds
+            .iter()
+            .filter(|(_, _, amt)| *amt > 0)
+            .map(|(name, _, amt)| vec![name.to_string(), amt.to_string(), "staked".to_string()])
+            .collect();
+        writer.write_table(&headers, &rows);
+        writer.write_status(&format!(
+            "Seeded {total_seed} tokens to {did} (staked only, not spendable)"
+        ));
+    }
     Ok(())
 }
 

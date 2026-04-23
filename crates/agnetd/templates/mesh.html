@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}neunode // mesh{% endblock %}
+
+{% block content %}
+<div class="grid grid-4" style="margin-bottom: 12px;">
+  <div class="panel">
+    <div class="panel-body">
+      <div class="metric">
+        <span class="metric-label">Status</span>
+        <span class="metric-value" style="font-size: 16px;">
+          <span class="status-dot {% if online %}online{% else %}offline{% endif %}"></span>
+          {% if online %}Online{% else %}Offline{% endif %}
+        </span>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-body">
+      <div class="metric">
+        <span class="metric-label">Local Peer ID</span>
+        <span class="metric-value mono" style="font-size: 11px;">{{ local_peer_id }}</span>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-body">
+      <div class="metric">
+        <span class="metric-label">Connected Peers</span>
+        <span class="metric-value">{{ peer_count }}</span>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-body">
+      <div class="metric">
+        <span class="metric-label">Subscribed Topics</span>
+        <span class="metric-value">{{ topic_count }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-12">
+  <!-- Peer list -->
+  <div class="panel col-6">
+    <div class="panel-header"><span>Connected Peers</span></div>
+    <div class="panel-body" style="padding: 0; max-height: 400px; overflow-y: auto;"
+         hx-get="/partials/mesh-peers" hx-trigger="load, every 10s" hx-swap="innerHTML">
+      <div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px;">
+        Loading peers...
+      </div>
+    </div>
+  </div>
+
+  <!-- Listeners + Topics -->
+  <div class="panel col-6">
+    <div class="panel-header"><span>Network Info</span></div>
+    <div class="panel-body">
+      <div style="margin-bottom: 16px;">
+        <span class="text-xs text-muted" style="text-transform: uppercase; letter-spacing: 0.06em;">Listeners</span>
+        {% for listener in listeners %}
+        <div class="mono text-sm text-secondary" style="padding: 4px 0; border-bottom: 1px solid var(--border-subtle);">
+          {{ listener }}
+        </div>
+        {% endfor %}
+        {% if listeners.is_empty() %}
+        <div class="text-xs text-muted" style="padding: 4px 0;">No listeners</div>
+        {% endif %}
+      </div>
+      <div>
+        <span class="text-xs text-muted" style="text-transform: uppercase; letter-spacing: 0.06em;">Topics</span>
+        {% for topic in topics %}
+        <div class="mono text-sm text-secondary" style="padding: 4px 0; border-bottom: 1px solid var(--border-subtle);">
+          {{ topic }}
+        </div>
+        {% endfor %}
+        {% if topics.is_empty() %}
+        <div class="text-xs text-muted" style="padding: 4px 0;">No subscriptions</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

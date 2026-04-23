@@ -1,0 +1,11 @@
+{% for balance in balances %}
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; {% if loop.last %}{% else %}border-bottom: 1px solid var(--border-subtle);{% endif %}">
+  <span class="mono text-sm" style="color: var(--text-secondary);">{{ balance.label }}</span>
+  <span class="mono text-sm" style="color: var(--text-primary);">{{ balance.balance }}</span>
+</div>
+{% endfor %}
+{% if balances.is_empty() %}
+<div style="text-align: center; color: var(--text-muted); font-size: 11px; padding: 8px 0;">
+  No token data.
+</div>
+{% endif %}
