@@ -54,6 +54,16 @@ export {
 	KindCategory,
 	TokenType,
 } from "./core.js";
+// discovery — types only (Phase 2)
+export type {
+	AgentCandidate,
+	AgentScoreResult,
+	CapabilityGap,
+	ComplementResult,
+	DiscoveryRequest,
+	ScoredAgent,
+	ScoringWeights,
+} from "./discovery.js";
 export type { NeunodeError, NeunodeErrorDetails } from "./errors.js";
 // errors — runtime const + types
 export { ExitCode } from "./errors.js";
@@ -94,6 +104,22 @@ export {
 	ProviderStatus,
 	RoutingStrategy,
 } from "./inference.js";
+// knowledge — types only (Phase 2)
+export type {
+	KgClass,
+	KgJoinJobResult,
+	KgPredicate,
+	KgQueryPattern,
+	KgQueryResult,
+	KgRegisterAgentResult,
+	KgRegisterBountyResult,
+	KgRegisterModelResult,
+	KgSchemaEntry,
+} from "./knowledge.js";
+export {
+	KgClass as KgClassConst,
+	KgPredicate as KgPredicateConst,
+} from "./knowledge.js";
 export type {
 	LoRAConfig,
 	ModelLineage,
@@ -136,34 +162,11 @@ export {
 	TrainingProviderStatus,
 	WorkerStatus,
 } from "./training.js";
-// discovery — types only (Phase 2)
-export type {
-	AgentCandidate,
-	AgentScoreResult,
-	CapabilityGap,
-	ComplementResult,
-	DiscoveryRequest,
-	ScoredAgent,
-	ScoringWeights,
-} from "./discovery.js";
-// knowledge — types only (Phase 2)
-export type {
-	KgClass,
-	KgJoinJobResult,
-	KgPredicate,
-	KgQueryPattern,
-	KgQueryResult,
-	KgRegisterAgentResult,
-	KgRegisterBountyResult,
-	KgRegisterModelResult,
-	KgSchemaEntry,
-} from "./knowledge.js";
-export { KgClass as KgClassConst, KgPredicate as KgPredicateConst } from "./knowledge.js";
 // turboquant — types only (Phase 2)
 export type {
 	Codebook,
 	CodebookConfig,
 	CompressionProfile,
-	QuantizedGradients,
 	QuantizationStrategy,
+	QuantizedGradients,
 } from "./turboquant.js";

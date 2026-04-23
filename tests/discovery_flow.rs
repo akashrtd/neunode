@@ -77,37 +77,26 @@ fn make_request(
 }
 
 /// Register agents in the KG and return a candidate list for discovery.
-fn setup_agents_and_candidates(
-    db: &NeunodeDb,
-    dict: &StringDictionary,
-) -> Vec<AgentCandidate> {
+fn setup_agents_and_candidates(db: &NeunodeDb, dict: &StringDictionary) -> Vec<AgentCandidate> {
     // Agent 1: inference specialist, high reputation, online
-    let batch1 = register_agent(
-        dict,
-        "did:neunode:0xAlice",
-        &["inference:llm", "training:lora"],
-    )
-    .expect("register agent 1");
+    let batch1 = register_agent(dict, "did:neunode:0xAlice", &["inference:llm", "training:lora"])
+        .expect("register agent 1");
     batch1.apply(db).expect("apply agent 1");
 
     // Agent 2: training specialist, medium reputation, online, cheap
-    let batch2 =
-        register_agent(dict, "did:neunode:0xBob", &["training:lora", "data:labeling"])
-            .expect("register agent 2");
+    let batch2 = register_agent(dict, "did:neunode:0xBob", &["training:lora", "data:labeling"])
+        .expect("register agent 2");
     batch2.apply(db).expect("apply agent 2");
 
     // Agent 3: offline, high reputation, expensive
-    let batch3 = register_agent(
-        dict,
-        "did:neunode:0xCharlie",
-        &["inference:llm", "training:pretrain"],
-    )
-    .expect("register agent 3");
+    let batch3 =
+        register_agent(dict, "did:neunode:0xCharlie", &["inference:llm", "training:pretrain"])
+            .expect("register agent 3");
     batch3.apply(db).expect("apply agent 3");
 
     // Agent 4: low reputation, online
-    let batch4 = register_agent(dict, "did:neunode:0xDave", &["inference:llm"])
-        .expect("register agent 4");
+    let batch4 =
+        register_agent(dict, "did:neunode:0xDave", &["inference:llm"]).expect("register agent 4");
     batch4.apply(db).expect("apply agent 4");
 
     vec![
@@ -138,15 +127,7 @@ fn setup_agents_and_candidates(
             25.0,
             false,
         ),
-        make_candidate(
-            "did:neunode:0xDave",
-            &["inference:llm"],
-            1.2,
-            100,
-            0.60,
-            3.0,
-            true,
-        ),
+        make_candidate("did:neunode:0xDave", &["inference:llm"], 1.2, 100, 0.60, 3.0, true),
     ]
 }
 
@@ -166,21 +147,14 @@ fn kg_registration_and_query() {
     // Verify that Alice's agent type quad exists in the KG
     let engine = QueryEngine::new(&db, &dict);
     let alice_hash = StringDictionary::hash("did:neunode:0xAlice");
-    let pat = neunode_knowledge::QueryPattern {
-        subject: Some(alice_hash),
-        ..Default::default()
-    };
+    let pat = neunode_knowledge::QueryPattern { subject: Some(alice_hash), ..Default::default() };
     let results = engine.query(&pat).expect("query should succeed");
     // type(Agent) + hasCapability(inference:llm) + hasCapability(training:lora) = 3
     assert_eq!(results.len(), 3, "Alice should have 3 quads (1 type + 2 capabilities)");
 
     // Verify capability quads include expected predicates
-    let predicates: Vec<&str> =
-        results.iter().map(|r| r.predicate.as_str()).collect();
-    assert!(
-        predicates.iter().any(|p| p.contains("hasCapability")),
-        "should have capability quads"
-    );
+    let predicates: Vec<&str> = results.iter().map(|r| r.predicate.as_str()).collect();
+    assert!(predicates.iter().any(|p| p.contains("hasCapability")), "should have capability quads");
 }
 
 // ---------------------------------------------------------------------------
@@ -194,8 +168,7 @@ fn basic_capability_matching() {
     let candidates = setup_agents_and_candidates(&db, &dict);
 
     // Request "inference:llm" — Alice, Charlie, Dave have it
-    let request =
-        make_request(&["inference:llm"], None, None, false, 10, &[]);
+    let request = make_request(&["inference:llm"], None, None, false, 10, &[]);
     let weights = ScoringWeights::default();
     let results = search(&candidates, &request, &weights).expect("search should succeed");
 
@@ -220,17 +193,13 @@ fn min_reputation_filtering() {
 
     // Request inference:llm with min_reputation = 3.0
     // Alice (4.5) ✓, Charlie (4.8) ✓, Dave (1.2) ✗
-    let request =
-        make_request(&["inference:llm"], Some(3.0), None, false, 10, &[]);
+    let request = make_request(&["inference:llm"], Some(3.0), None, false, 10, &[]);
     let weights = ScoringWeights::default();
     let results = search(&candidates, &request, &weights).expect("search should succeed");
 
     assert_eq!(results.len(), 2, "only Alice and Charlie pass min_reputation=3.0");
     for r in &results {
-        assert!(
-            r.candidate.reputation_score >= 3.0,
-            "all results should have reputation >= 3.0"
-        );
+        assert!(r.candidate.reputation_score >= 3.0, "all results should have reputation >= 3.0");
     }
 }
 
@@ -246,17 +215,13 @@ fn max_cost_filtering() {
 
     // Request inference:llm with max_cost = 15.0
     // Alice (12.0) ✓, Charlie (25.0) ✗, Dave (3.0) ✓
-    let request =
-        make_request(&["inference:llm"], None, Some(15.0), false, 10, &[]);
+    let request = make_request(&["inference:llm"], None, Some(15.0), false, 10, &[]);
     let weights = ScoringWeights::default();
     let results = search(&candidates, &request, &weights).expect("search should succeed");
 
     assert_eq!(results.len(), 2, "Alice and Dave pass max_cost=15.0");
     for r in &results {
-        assert!(
-            r.candidate.cost_per_unit <= 15.0,
-            "all results should have cost <= 15.0"
-        );
+        assert!(r.candidate.cost_per_unit <= 15.0, "all results should have cost <= 15.0");
     }
 }
 
@@ -272,8 +237,7 @@ fn must_be_online_filtering() {
 
     // Request inference:llm, online only
     // Alice (online) ✓, Charlie (offline) ✗, Dave (online) ✓
-    let request =
-        make_request(&["inference:llm"], None, None, true, 10, &[]);
+    let request = make_request(&["inference:llm"], None, None, true, 10, &[]);
     let weights = ScoringWeights::default();
     let results = search(&candidates, &request, &weights).expect("search should succeed");
 
@@ -294,8 +258,7 @@ fn max_results_limiting() {
     let candidates = setup_agents_and_candidates(&db, &dict);
 
     // Request inference:llm with max_results = 1
-    let request =
-        make_request(&["inference:llm"], None, None, false, 1, &[]);
+    let request = make_request(&["inference:llm"], None, None, false, 1, &[]);
     let weights = ScoringWeights::default();
     let results = search(&candidates, &request, &weights).expect("search should succeed");
 
@@ -317,14 +280,7 @@ fn multi_capability_matching() {
     // Request both "inference:llm" and "training:lora"
     // Alice has both (2/2), Bob has only training:lora (1/2),
     // Charlie has only inference:llm (1/2), Dave has only inference:llm (1/2)
-    let request = make_request(
-        &["inference:llm", "training:lora"],
-        None,
-        None,
-        false,
-        10,
-        &[],
-    );
+    let request = make_request(&["inference:llm", "training:lora"], None, None, false, 10, &[]);
     let weights = ScoringWeights::default();
     let results = search(&candidates, &request, &weights).expect("search should succeed");
 
@@ -348,7 +304,15 @@ fn find_complementary_with_jaccard() {
     let candidates = vec![
         make_candidate("did:1", &["inference:llm"], 4.0, 1000, 0.9, 10.0, true),
         make_candidate("did:2", &["training:lora"], 3.0, 500, 0.8, 8.0, true),
-        make_candidate("did:3", &["data:labeling", "training:pretrain"], 4.5, 2000, 0.95, 15.0, true),
+        make_candidate(
+            "did:3",
+            &["data:labeling", "training:pretrain"],
+            4.5,
+            2000,
+            0.95,
+            15.0,
+            true,
+        ),
     ];
 
     let results = find_complementary(&requester_caps, &candidates, 10);
@@ -421,7 +385,10 @@ fn find_capability_gaps_detection() {
         "data:labeling".to_string(),
     ];
     let agents = vec![
-        ("did:neunode:0xAlice".to_string(), vec!["inference:llm".to_string(), "training:lora".to_string()]),
+        (
+            "did:neunode:0xAlice".to_string(),
+            vec!["inference:llm".to_string(), "training:lora".to_string()],
+        ),
         ("did:neunode:0xBob".to_string(), vec!["training:lora".to_string()]),
     ];
     let bounties = vec![
@@ -477,22 +444,13 @@ fn compute_score_individual() {
     );
 
     // Quality: 4.0 / 5.0 = 0.8
-    assert!(
-        (scored.quality_score - 0.8).abs() < 1e-10,
-        "quality should be 4.0/5.0 = 0.8"
-    );
+    assert!((scored.quality_score - 0.8).abs() < 1e-10, "quality should be 4.0/5.0 = 0.8");
 
     // Availability: online with 0.9 uptime
-    assert!(
-        (scored.availability_score - 0.9).abs() < 1e-10,
-        "availability should be 0.9"
-    );
+    assert!((scored.availability_score - 0.9).abs() < 1e-10, "availability should be 0.9");
 
     // Cost: 10.0 is the cheaper of [10.0, 20.0] → score = 1.0
-    assert!(
-        (scored.cost_score - 1.0).abs() < 1e-10,
-        "cheapest agent should have cost_score 1.0"
-    );
+    assert!((scored.cost_score - 1.0).abs() < 1e-10, "cheapest agent should have cost_score 1.0");
 
     // Complementarity: requester has ["a"], candidate has ["a","b"]
     // intersection = {a}, union = {a,b}, Jaccard = 1/2, distance = 0.5
@@ -582,8 +540,7 @@ fn ranked_ordering_by_final_score() {
     let dict = StringDictionary::new(&db);
     let candidates = setup_agents_and_candidates(&db, &dict);
 
-    let request =
-        make_request(&["inference:llm"], None, None, false, 10, &[]);
+    let request = make_request(&["inference:llm"], None, None, false, 10, &[]);
     let weights = ScoringWeights::default();
     let results = search(&candidates, &request, &weights).expect("search should succeed");
 
@@ -625,11 +582,8 @@ fn error_empty_pool() {
 
 #[test]
 fn error_no_matches() {
-    let candidates = vec![
-        make_candidate("did:1", &["training:lora"], 4.0, 1000, 0.9, 10.0, true),
-    ];
-    let request =
-        make_request(&["inference:llm"], None, None, false, 10, &[]);
+    let candidates = vec![make_candidate("did:1", &["training:lora"], 4.0, 1000, 0.9, 10.0, true)];
+    let request = make_request(&["inference:llm"], None, None, false, 10, &[]);
     let weights = ScoringWeights::default();
 
     let result = search(&candidates, &request, &weights);
@@ -646,9 +600,7 @@ fn error_no_matches() {
 
 #[test]
 fn error_no_matches_due_to_filters() {
-    let candidates = vec![
-        make_candidate("did:1", &["inference:llm"], 2.0, 100, 0.5, 50.0, false),
-    ];
+    let candidates = vec![make_candidate("did:1", &["inference:llm"], 2.0, 100, 0.5, 50.0, false)];
     // All filters exclude the only candidate
     let request = make_request(
         &["inference:llm"],
@@ -682,14 +634,7 @@ fn combined_filtering() {
     // Alice: rep=4.5 ✓, cost=12.0 ✓, online ✓ → matches
     // Charlie: rep=4.8 ✓, cost=25.0 ✗ → filtered out
     // Dave: rep=1.2 ✗ → filtered out
-    let request = make_request(
-        &["inference:llm"],
-        Some(3.0),
-        Some(15.0),
-        true,
-        10,
-        &[],
-    );
+    let request = make_request(&["inference:llm"], Some(3.0), Some(15.0), true, 10, &[]);
     let weights = ScoringWeights::default();
     let results = search(&candidates, &request, &weights).expect("search should succeed");
 
@@ -719,24 +664,15 @@ fn bounty_registration_and_gap_cross_check() {
     // Verify bounty quads exist in KG
     let engine = QueryEngine::new(&db, &dict);
     let bounty_hash = StringDictionary::hash("bounty:rlhf-job");
-    let pat = neunode_knowledge::QueryPattern {
-        subject: Some(bounty_hash),
-        ..Default::default()
-    };
+    let pat = neunode_knowledge::QueryPattern { subject: Some(bounty_hash), ..Default::default() };
     let results = engine.query(&pat).expect("query should succeed");
     // type(Bounty) + requiresCapability(training:rlhf) + requiresCapability(data:labeling) = 3
     assert_eq!(results.len(), 3, "bounty should have 3 quads");
 
     // Now find capability gaps
-    let registered = vec![
-        "inference:llm".to_string(),
-        "training:rlhf".to_string(),
-        "data:labeling".to_string(),
-    ];
-    let agents = vec![(
-        "did:neunode:0xFelix".to_string(),
-        vec!["inference:llm".to_string()],
-    )];
+    let registered =
+        vec!["inference:llm".to_string(), "training:rlhf".to_string(), "data:labeling".to_string()];
+    let agents = vec![("did:neunode:0xFelix".to_string(), vec!["inference:llm".to_string()])];
     let bounties = vec![(
         "bounty:rlhf-job".to_string(),
         vec!["training:rlhf".to_string(), "data:labeling".to_string()],

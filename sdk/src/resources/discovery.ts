@@ -82,7 +82,9 @@ export interface DiscoveryResource {
 	/** Search for agents matching required capabilities with filters. */
 	search(params: DiscoverySearchParams): Promise<DiscoverySearchResult>;
 	/** Find agents with complementary capabilities to the requester. */
-	complement(params: DiscoveryComplementParams): Promise<DiscoveryComplementResult>;
+	complement(
+		params: DiscoveryComplementParams,
+	): Promise<DiscoveryComplementResult>;
 	/** Find capability gaps — capabilities with demand but no providers. */
 	gaps(): Promise<DiscoveryGapsResult>;
 	/** Score a specific agent against required capabilities. */
@@ -91,12 +93,16 @@ export interface DiscoveryResource {
 	weights(): Promise<DiscoveryWeightsResult>;
 }
 
-export function createDiscoveryResource(client: NeunodeClient): DiscoveryResource {
+export function createDiscoveryResource(
+	client: NeunodeClient,
+): DiscoveryResource {
 	const cli = client.cli;
 	if (!cli) throw new Error("CLI transport required for discovery operations");
 
 	return {
-		async search(params: DiscoverySearchParams): Promise<DiscoverySearchResult> {
+		async search(
+			params: DiscoverySearchParams,
+		): Promise<DiscoverySearchResult> {
 			const args = [
 				"discover",
 				"search",

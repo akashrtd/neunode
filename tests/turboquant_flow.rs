@@ -152,11 +152,8 @@ fn int8_reconstruction_error_bounded() {
     let quantized = q.quantize(&gradients).expect("quantize should succeed");
     let recovered = q.dequantize(&quantized);
 
-    let max_error = gradients
-        .iter()
-        .zip(&recovered)
-        .map(|(o, r)| (o - r).abs())
-        .fold(0.0f32, f32::max);
+    let max_error =
+        gradients.iter().zip(&recovered).map(|(o, r)| (o - r).abs()).fold(0.0f32, f32::max);
 
     // Maximum reconstruction error should be ≤ scale/2 (rounding to nearest)
     assert!(
@@ -168,10 +165,7 @@ fn int8_reconstruction_error_bounded() {
     // RMSE should be small relative to gradient magnitudes
     let rmse = mse(&gradients, &recovered).sqrt();
     let norm = vec_norm(&gradients) as f64;
-    assert!(
-        rmse / norm < 0.01,
-        "relative RMSE too high: {rmse:.6} / {norm:.6}"
-    );
+    assert!(rmse / norm < 0.01, "relative RMSE too high: {rmse:.6} / {norm:.6}");
 }
 
 // ---------------------------------------------------------------------------
@@ -183,10 +177,7 @@ fn int8_empty_input_errors() {
     let q = Int8Quantizer::new(1.0);
     let result = q.quantize(&[]);
     assert!(result.is_err());
-    assert!(
-        result.unwrap_err().to_string().contains("empty"),
-        "error should mention empty"
-    );
+    assert!(result.unwrap_err().to_string().contains("empty"), "error should mention empty");
 
     let auto_result = Int8Quantizer::new_auto(&[]);
     assert!(auto_result.is_err());
@@ -208,12 +199,8 @@ fn int8_compression_ratio() {
 
 #[test]
 fn mse_4bit_roundtrip() {
-    let config = MseConfig {
-        dimension: 64,
-        bits: 4,
-        rotation_strategy: RotationStrategy::Wht,
-        seed: 42,
-    };
+    let config =
+        MseConfig { dimension: 64, bits: 4, rotation_strategy: RotationStrategy::Wht, seed: 42 };
     let q = MseQuantizer::new(config).expect("quantizer creation should succeed");
     let input = gradient_vector(64);
 
@@ -235,12 +222,8 @@ fn mse_4bit_roundtrip() {
 
 #[test]
 fn mse_8bit_higher_fidelity() {
-    let config = MseConfig {
-        dimension: 64,
-        bits: 8,
-        rotation_strategy: RotationStrategy::Wht,
-        seed: 42,
-    };
+    let config =
+        MseConfig { dimension: 64, bits: 8, rotation_strategy: RotationStrategy::Wht, seed: 42 };
     let q = MseQuantizer::new(config).expect("quantizer creation should succeed");
     let input = gradient_vector(64);
 
@@ -257,12 +240,8 @@ fn mse_8bit_higher_fidelity() {
 
 #[test]
 fn mse_within_bounds() {
-    let config = MseConfig {
-        dimension: 64,
-        bits: 4,
-        rotation_strategy: RotationStrategy::Wht,
-        seed: 42,
-    };
+    let config =
+        MseConfig { dimension: 64, bits: 4, rotation_strategy: RotationStrategy::Wht, seed: 42 };
     let q = MseQuantizer::new(config).expect("quantizer creation should succeed");
     let input = gradient_vector(64);
 
@@ -282,12 +261,8 @@ fn mse_within_bounds() {
 
 #[test]
 fn mse_dimension_mismatch() {
-    let config = MseConfig {
-        dimension: 8,
-        bits: 4,
-        rotation_strategy: RotationStrategy::Wht,
-        seed: 0,
-    };
+    let config =
+        MseConfig { dimension: 8, bits: 4, rotation_strategy: RotationStrategy::Wht, seed: 0 };
     let q = MseQuantizer::new(config).expect("quantizer creation should succeed");
 
     let wrong_len = vec![1.0f32, 2.0, 3.0];
@@ -304,21 +279,13 @@ fn mse_dimension_mismatch() {
 
 #[test]
 fn mse_compression_ratio() {
-    let config_4bit = MseConfig {
-        dimension: 8,
-        bits: 4,
-        rotation_strategy: RotationStrategy::Wht,
-        seed: 0,
-    };
+    let config_4bit =
+        MseConfig { dimension: 8, bits: 4, rotation_strategy: RotationStrategy::Wht, seed: 0 };
     let q4 = MseQuantizer::new(config_4bit).unwrap();
     assert!((q4.compression_ratio() - 8.0).abs() < 1e-10, "4-bit = 8× compression");
 
-    let config_8bit = MseConfig {
-        dimension: 8,
-        bits: 8,
-        rotation_strategy: RotationStrategy::Wht,
-        seed: 0,
-    };
+    let config_8bit =
+        MseConfig { dimension: 8, bits: 8, rotation_strategy: RotationStrategy::Wht, seed: 0 };
     let q8 = MseQuantizer::new(config_8bit).unwrap();
     assert!((q8.compression_ratio() - 4.0).abs() < 1e-10, "8-bit = 4× compression");
 }
@@ -397,8 +364,7 @@ fn codebook_mse_decreases_with_bits() {
         CodebookConfig { bits: 8, dimension: 256, num_samples: 5000, ..Default::default() },
     ];
 
-    let codebooks: Vec<Codebook> =
-        configs.iter().map(|c| Codebook::generate(c).unwrap()).collect();
+    let codebooks: Vec<Codebook> = configs.iter().map(|c| Codebook::generate(c).unwrap()).collect();
 
     assert!(
         codebooks[0].mse > codebooks[1].mse,
@@ -575,10 +541,7 @@ fn rotation_roundtrip_identity() {
     let recovered = r.apply_inverse(&rotated).expect("apply_inverse");
 
     for (i, (orig, rec)) in input.iter().zip(&recovered).enumerate() {
-        assert!(
-            (orig - rec).abs() < 1e-4,
-            "roundtrip failed at index {i}: orig={orig}, rec={rec}"
-        );
+        assert!((orig - rec).abs() < 1e-4, "roundtrip failed at index {i}: orig={orig}, rec={rec}");
     }
 }
 
@@ -682,12 +645,8 @@ fn full_kv_cache_compression_pipeline() {
     let seed = 42u64;
 
     // Create MseQuantizer (internally does rotate → codebook quantize)
-    let config = MseConfig {
-        dimension: dim,
-        bits: 4,
-        rotation_strategy: RotationStrategy::Wht,
-        seed,
-    };
+    let config =
+        MseConfig { dimension: dim, bits: 4, rotation_strategy: RotationStrategy::Wht, seed };
     let q = MseQuantizer::new(config).expect("MseQuantizer creation");
 
     let input = gradient_vector(dim);
@@ -755,57 +714,33 @@ fn adaptive_selector_drives_quantizer_choice() {
 #[test]
 fn mse_config_validation() {
     // Valid config
-    let valid = MseConfig {
-        dimension: 8,
-        bits: 4,
-        rotation_strategy: RotationStrategy::Wht,
-        seed: 0,
-    };
+    let valid =
+        MseConfig { dimension: 8, bits: 4, rotation_strategy: RotationStrategy::Wht, seed: 0 };
     assert!(valid.validate().is_ok(), "valid config should pass");
 
     // Zero dimension
-    let zero_dim = MseConfig {
-        dimension: 0,
-        bits: 4,
-        rotation_strategy: RotationStrategy::Wht,
-        seed: 0,
-    };
+    let zero_dim =
+        MseConfig { dimension: 0, bits: 4, rotation_strategy: RotationStrategy::Wht, seed: 0 };
     assert!(zero_dim.validate().is_err(), "zero dimension should fail");
 
     // Zero bits
-    let zero_bits = MseConfig {
-        dimension: 8,
-        bits: 0,
-        rotation_strategy: RotationStrategy::Wht,
-        seed: 0,
-    };
+    let zero_bits =
+        MseConfig { dimension: 8, bits: 0, rotation_strategy: RotationStrategy::Wht, seed: 0 };
     assert!(zero_bits.validate().is_err(), "zero bits should fail");
 
     // Bits > 16
-    let too_many_bits = MseConfig {
-        dimension: 8,
-        bits: 17,
-        rotation_strategy: RotationStrategy::Wht,
-        seed: 0,
-    };
+    let too_many_bits =
+        MseConfig { dimension: 8, bits: 17, rotation_strategy: RotationStrategy::Wht, seed: 0 };
     assert!(too_many_bits.validate().is_err(), "bits > 16 should fail");
 
     // WHT with non-power-of-2 dimension
-    let non_pow2 = MseConfig {
-        dimension: 3,
-        bits: 4,
-        rotation_strategy: RotationStrategy::Wht,
-        seed: 0,
-    };
+    let non_pow2 =
+        MseConfig { dimension: 3, bits: 4, rotation_strategy: RotationStrategy::Wht, seed: 0 };
     assert!(non_pow2.validate().is_err(), "WHT with non-power-of-2 should fail");
 
     // QR with non-power-of-2 is fine
-    let qr_non_pow2 = MseConfig {
-        dimension: 3,
-        bits: 4,
-        rotation_strategy: RotationStrategy::Qr,
-        seed: 0,
-    };
+    let qr_non_pow2 =
+        MseConfig { dimension: 3, bits: 4, rotation_strategy: RotationStrategy::Qr, seed: 0 };
     assert!(qr_non_pow2.validate().is_ok(), "QR with non-power-of-2 should pass");
 }
 

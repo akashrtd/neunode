@@ -213,13 +213,8 @@ fn ontology_type_and_relation_quads() {
     assert_eq!(tq.graph, StringDictionary::hash(&nn(DEFAULT_GRAPH)));
 
     // relation_quad: (subject, predicate, object, graph)
-    let rq = relation_quad(
-        &dict,
-        "did:neunode:0xAlice",
-        PRED_OWNS_MODEL,
-        "ipfs://QmModel",
-    )
-    .expect("relation_quad");
+    let rq = relation_quad(&dict, "did:neunode:0xAlice", PRED_OWNS_MODEL, "ipfs://QmModel")
+        .expect("relation_quad");
     assert_eq!(rq.subject, StringDictionary::hash("did:neunode:0xAlice"));
     assert_eq!(rq.predicate, StringDictionary::hash(&nn(PRED_OWNS_MODEL)));
     assert_eq!(rq.object, StringDictionary::hash("ipfs://QmModel"));
@@ -301,9 +296,8 @@ fn register_model_with_and_without_lineage() {
     assert_eq!(with_parent.len(), 3);
 
     // Model without parent: type + ownsModel = 2.
-    let without_parent =
-        register_model(&dict, "did:neunode:0xDev", "ipfs://QmStandalone", None)
-            .expect("register_model without parent");
+    let without_parent = register_model(&dict, "did:neunode:0xDev", "ipfs://QmStandalone", None)
+        .expect("register_model without parent");
     assert_eq!(without_parent.len(), 2);
 }
 
@@ -317,13 +311,9 @@ fn register_model_apply_and_query_lineage() {
     let dict = StringDictionary::new(&db);
     let engine = QueryEngine::new(&db, &dict);
 
-    let batch = register_model(
-        &dict,
-        "did:neunode:0xDev",
-        "ipfs://QmChild",
-        Some("ipfs://QmParent"),
-    )
-    .expect("register_model");
+    let batch =
+        register_model(&dict, "did:neunode:0xDev", "ipfs://QmChild", Some("ipfs://QmParent"))
+            .expect("register_model");
     batch.apply(&db).expect("apply");
 
     // Model subject: type(Model) + dependsOn(parent) = 2.
@@ -452,10 +442,7 @@ fn query_engine_resolves_strings() {
     let engine = QueryEngine::new(&db, &dict);
 
     let agent_did = "did:neunode:0xAlice";
-    register_agent(&dict, agent_did, &["NLP"])
-        .expect("register_agent")
-        .apply(&db)
-        .expect("apply");
+    register_agent(&dict, agent_did, &["NLP"]).expect("register_agent").apply(&db).expect("apply");
 
     let pattern = QueryPattern {
         subject: Some(StringDictionary::hash(agent_did)),
@@ -511,15 +498,10 @@ fn full_knowledge_graph_workflow() {
         .expect("apply bob");
 
     // Step 2: Register a model with lineage (fine-tuned from base).
-    register_model(
-        &dict,
-        "did:neunode:0xAlice",
-        "ipfs://QmFineTuned",
-        Some("ipfs://QmBaseModel"),
-    )
-    .expect("register model")
-    .apply(&db)
-    .expect("apply model");
+    register_model(&dict, "did:neunode:0xAlice", "ipfs://QmFineTuned", Some("ipfs://QmBaseModel"))
+        .expect("register model")
+        .apply(&db)
+        .expect("apply model");
 
     // Step 3: Register a bounty requiring NLP capability.
     register_bounty(&dict, "bounty:sentiment", &["NLP", "RLHF"])

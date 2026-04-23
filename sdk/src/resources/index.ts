@@ -15,6 +15,21 @@ export type {
 export { createBountyResource } from "./bounty.js";
 export type { ConfigResource, ConfigSetParams } from "./config.js";
 export { createConfigResource } from "./config.js";
+// Phase 2 resources
+export type {
+	ComplementAgentResult,
+	DiscoveryComplementParams,
+	DiscoveryComplementResult,
+	DiscoveryGapsResult,
+	DiscoveryResource,
+	DiscoveryScoreParams,
+	DiscoveryScoreResult,
+	DiscoverySearchParams,
+	DiscoverySearchResult,
+	DiscoveryWeightsResult,
+	ScoredAgentResult,
+} from "./discovery.js";
+export { createDiscoveryResource } from "./discovery.js";
 export type {
 	FeedListItem,
 	FeedListParams,
@@ -45,6 +60,22 @@ export type {
 	InferenceRouteResult,
 } from "./inference.js";
 export { createInferenceResource } from "./inference.js";
+export type {
+	KnowledgeJoinJobParams,
+	KnowledgeJoinJobResult,
+	KnowledgeListClassesResult,
+	KnowledgeListPredicatesResult,
+	KnowledgeQueryListResult,
+	KnowledgeQueryParams,
+	KnowledgeRegisterAgentParams,
+	KnowledgeRegisterAgentResult,
+	KnowledgeRegisterBountyParams,
+	KnowledgeRegisterBountyResult,
+	KnowledgeRegisterModelParams,
+	KnowledgeRegisterModelResult,
+	KnowledgeResource,
+} from "./knowledge.js";
+export { createKnowledgeResource } from "./knowledge.js";
 export type {
 	MeshConnectResult,
 	MeshDisconnectResult,
@@ -99,37 +130,6 @@ export type {
 	WorkerRegisterResult,
 } from "./train.js";
 export { createTrainResource } from "./train.js";
-// Phase 2 resources
-export type {
-	DiscoveryComplementParams,
-	DiscoveryComplementResult,
-	DiscoveryGapsResult,
-	DiscoveryResource,
-	DiscoverySearchParams,
-	DiscoveryScoreParams,
-	DiscoveryScoreResult,
-	DiscoverySearchResult,
-	DiscoveryWeightsResult,
-	ScoredAgentResult,
-	ComplementAgentResult,
-} from "./discovery.js";
-export { createDiscoveryResource } from "./discovery.js";
-export type {
-	KnowledgeJoinJobParams,
-	KnowledgeJoinJobResult,
-	KnowledgeListClassesResult,
-	KnowledgeListPredicatesResult,
-	KnowledgeQueryListResult,
-	KnowledgeQueryParams,
-	KnowledgeRegisterAgentParams,
-	KnowledgeRegisterAgentResult,
-	KnowledgeRegisterBountyParams,
-	KnowledgeRegisterBountyResult,
-	KnowledgeRegisterModelParams,
-	KnowledgeRegisterModelResult,
-	KnowledgeResource,
-} from "./knowledge.js";
-export { createKnowledgeResource } from "./knowledge.js";
 export type {
 	TurboquantCodebookParams,
 	TurboquantCodebookResult,

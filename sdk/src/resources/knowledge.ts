@@ -83,11 +83,17 @@ export interface KnowledgeResource {
 	/** Query the knowledge graph with optional subject/predicate/object/graph filters. */
 	query(params?: KnowledgeQueryParams): Promise<KnowledgeQueryListResult>;
 	/** Register an agent with capabilities in the knowledge graph. */
-	registerAgent(params: KnowledgeRegisterAgentParams): Promise<KnowledgeRegisterAgentResult>;
+	registerAgent(
+		params: KnowledgeRegisterAgentParams,
+	): Promise<KnowledgeRegisterAgentResult>;
 	/** Register a model (with optional lineage parent) in the knowledge graph. */
-	registerModel(params: KnowledgeRegisterModelParams): Promise<KnowledgeRegisterModelResult>;
+	registerModel(
+		params: KnowledgeRegisterModelParams,
+	): Promise<KnowledgeRegisterModelResult>;
 	/** Register a bounty with required capabilities in the knowledge graph. */
-	registerBounty(params: KnowledgeRegisterBountyParams): Promise<KnowledgeRegisterBountyResult>;
+	registerBounty(
+		params: KnowledgeRegisterBountyParams,
+	): Promise<KnowledgeRegisterBountyResult>;
 	/** Join an agent to a training job in the knowledge graph. */
 	joinJob(params: KnowledgeJoinJobParams): Promise<KnowledgeJoinJobResult>;
 	/** List all ontology classes. */
@@ -96,12 +102,16 @@ export interface KnowledgeResource {
 	listPredicates(): Promise<KnowledgeListPredicatesResult>;
 }
 
-export function createKnowledgeResource(client: NeunodeClient): KnowledgeResource {
+export function createKnowledgeResource(
+	client: NeunodeClient,
+): KnowledgeResource {
 	const cli = client.cli;
 	if (!cli) throw new Error("CLI transport required for knowledge operations");
 
 	return {
-		async query(params?: KnowledgeQueryParams): Promise<KnowledgeQueryListResult> {
+		async query(
+			params?: KnowledgeQueryParams,
+		): Promise<KnowledgeQueryListResult> {
 			const args = ["knowledge", "query"];
 			if (params?.subject) args.push("--subject", params.subject);
 			if (params?.predicate) args.push("--predicate", params.predicate);
@@ -169,7 +179,10 @@ export function createKnowledgeResource(client: NeunodeClient): KnowledgeResourc
 		},
 
 		async listClasses(): Promise<KnowledgeListClassesResult> {
-			return cli.execute<KnowledgeListClassesResult>(["knowledge", "list-classes"]);
+			return cli.execute<KnowledgeListClassesResult>([
+				"knowledge",
+				"list-classes",
+			]);
 		},
 
 		async listPredicates(): Promise<KnowledgeListPredicatesResult> {

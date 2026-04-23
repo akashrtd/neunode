@@ -1,8 +1,6 @@
 // @neunode/sdk — Knowledge graph types mirroring neunode-knowledge crate
 // (triple, ontology, query, mutations, dictionary)
 
-import type { Did, CID, BountyId, JobId } from "./core.js";
-
 // ─── Ontology Classes ─────────────────────────────────────────────────────────────
 
 /** Entity classes in the knowledge graph ontology. */
