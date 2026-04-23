@@ -389,7 +389,7 @@ pub enum BountyCommands {
         #[arg(short, long)]
         reward: u64,
         /// Token type for reward
-        #[arg(short, long, default_value = "compute")]
+        #[arg(short = 'T', long, default_value = "compute")]
         token: String,
         /// Claim deadline in hours
         #[arg(long, default_value = "72")]
