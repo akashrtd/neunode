@@ -43,6 +43,7 @@ pub struct SettlementParams<'a> {
     pub timestamp: Timestamp,
 }
 
+#[derive(Debug)]
 pub struct SettlementEngine {
     config: PricingConfig,
 }

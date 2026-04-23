@@ -1,4 +1,5 @@
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 use crate::cli::{GlobalArgs, SecurityCommands};
 use crate::output::OutputWriter;
@@ -45,7 +46,6 @@ fn sanitize_text(input: &str) -> SanitizeResult {
         }
     }
 
-    // Check for excessive special characters (potential obfuscation)
     let special_count =
         input.chars().filter(|c| !c.is_alphanumeric() && !c.is_whitespace()).count();
     let total = input.chars().count();
@@ -53,14 +53,12 @@ fn sanitize_text(input: &str) -> SanitizeResult {
         flags.push("excessive_special_chars".to_string());
     }
 
-    // Check for null bytes and control characters
     if input.contains('\0')
         || input.chars().any(|c| c.is_control() && c != '\n' && c != '\r' && c != '\t')
     {
         flags.push("control_characters".to_string());
     }
 
-    // Strip null bytes and control chars
     let cleaned: String = input
         .chars()
         .filter(|c| !c.is_control() || *c == '\n' || *c == '\r' || *c == '\t')
@@ -77,39 +75,64 @@ struct SanitizeResult {
 }
 
 // ---------------------------------------------------------------------------
-// Circuit breakers
+// Circuit breakers — persistent state via RocksDB CF_CONFIG
 // ---------------------------------------------------------------------------
 
-#[allow(dead_code)]
+const BREAKER_NAMES: &[&str] = &["token_volume", "reputation", "bounty_drain"];
+
+const BREAKER_THRESHOLDS: &[&str] = &[
+    "Pauses transfers if >5% of total supply moves in 1 hour",
+    "Freezes reputation if >10% change in 24 hours",
+    "Limits bounty pool to max 5% drain per hour",
+];
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 enum BreakerState {
     Closed,
     Open,
 }
 
-struct CircuitBreaker {
-    name: String,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct BreakerRecord {
     state: BreakerState,
-    threshold_description: String,
+    tripped_at: Option<u64>,
+    trip_count: u64,
 }
 
-fn get_breakers() -> Vec<CircuitBreaker> {
-    vec![
-        CircuitBreaker {
-            name: "token_volume".into(),
-            state: BreakerState::Closed,
-            threshold_description: "Pauses transfers if >5% of total supply moves in 1 hour".into(),
-        },
-        CircuitBreaker {
-            name: "reputation".into(),
-            state: BreakerState::Closed,
-            threshold_description: "Freezes reputation if >10% change in 24 hours".into(),
-        },
-        CircuitBreaker {
-            name: "bounty_drain".into(),
-            state: BreakerState::Closed,
-            threshold_description: "Limits bounty pool to max 5% drain per hour".into(),
-        },
-    ]
+impl Default for BreakerRecord {
+    fn default() -> Self {
+        Self { state: BreakerState::Closed, tripped_at: None, trip_count: 0 }
+    }
+}
+
+fn breaker_db_key(name: &str) -> String {
+    format!("breaker:{name}")
+}
+
+fn load_breaker(db: &neunode_storage::db::NeunodeDb, name: &str) -> BreakerRecord {
+    let store = neunode_storage::identity_store::IdentityStore::new(db);
+    store.get(&breaker_db_key(name)).unwrap_or_default().unwrap_or_default()
+}
+
+fn save_breaker(
+    db: &neunode_storage::db::NeunodeDb,
+    name: &str,
+    record: &BreakerRecord,
+) -> Result<()> {
+    let store = neunode_storage::identity_store::IdentityStore::new(db);
+    store.put(&breaker_db_key(name), record)?;
+    Ok(())
+}
+
+fn now_ts() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
+}
+
+fn validate_breaker_name(name: &str) -> Result<()> {
+    if !BREAKER_NAMES.contains(&name) {
+        anyhow::bail!("unknown breaker: {name}. Valid: {}", BREAKER_NAMES.join(", "));
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -151,18 +174,25 @@ fn sanitize_cmd(input: &str, kind: &str, writer: &OutputWriter, _state: &AppStat
     Ok(())
 }
 
-fn breaker_status(writer: &OutputWriter, _state: &AppState) -> Result<()> {
-    let breakers = get_breakers();
-
-    let headers = ["Breaker", "State", "Threshold"];
-    let rows: Vec<Vec<String>> = breakers
+fn breaker_status(writer: &OutputWriter, state: &AppState) -> Result<()> {
+    let headers = ["Breaker", "State", "Trip Count", "Tripped At", "Threshold"];
+    let rows: Vec<Vec<String>> = BREAKER_NAMES
         .iter()
-        .map(|b| {
-            let state_str = match b.state {
-                BreakerState::Closed => "CLOSED (normal)",
-                BreakerState::Open => "OPEN (tripped)",
+        .zip(BREAKER_THRESHOLDS.iter())
+        .map(|(name, threshold)| {
+            let rec = load_breaker(&state.db, name);
+            let state_str = match rec.state {
+                BreakerState::Closed => "CLOSED (normal)".to_string(),
+                BreakerState::Open => "OPEN (tripped)".to_string(),
             };
-            vec![b.name.clone(), state_str.to_string(), b.threshold_description.clone()]
+            let tripped_at = rec.tripped_at.map(|t| t.to_string()).unwrap_or_else(|| "--".into());
+            vec![
+                name.to_string(),
+                state_str,
+                rec.trip_count.to_string(),
+                tripped_at,
+                threshold.to_string(),
+            ]
         })
         .collect();
 
@@ -170,25 +200,46 @@ fn breaker_status(writer: &OutputWriter, _state: &AppState) -> Result<()> {
     Ok(())
 }
 
-fn breaker_trip(name: &str, writer: &OutputWriter, _state: &AppState) -> Result<()> {
-    let valid = ["token_volume", "reputation", "bounty_drain"];
-    if !valid.contains(&name) {
-        anyhow::bail!("unknown breaker: {name}. Valid: {}", valid.join(", "));
+fn breaker_trip(name: &str, writer: &OutputWriter, state: &AppState) -> Result<()> {
+    validate_breaker_name(name)?;
+    let mut rec = load_breaker(&state.db, name);
+    if rec.state == BreakerState::Open {
+        anyhow::bail!("breaker {name} is already OPEN");
     }
-    // In a real implementation, this would persist state to RocksDB
+    rec.state = BreakerState::Open;
+    rec.tripped_at = Some(now_ts());
+    rec.trip_count += 1;
+    save_breaker(&state.db, name, &rec)?;
+
     writer.write_value("breaker", name);
     writer.write_value("action", "TRIPPED");
+    writer.write_value("trip_count", &rec.trip_count.to_string());
     Ok(())
 }
 
-fn breaker_reset(name: &str, writer: &OutputWriter, _state: &AppState) -> Result<()> {
-    let valid = ["token_volume", "reputation", "bounty_drain"];
-    if !valid.contains(&name) {
-        anyhow::bail!("unknown breaker: {name}. Valid: {}", valid.join(", "));
+fn breaker_reset(name: &str, writer: &OutputWriter, state: &AppState) -> Result<()> {
+    validate_breaker_name(name)?;
+    let mut rec = load_breaker(&state.db, name);
+    if rec.state == BreakerState::Closed {
+        anyhow::bail!("breaker {name} is already CLOSED");
     }
+    rec.state = BreakerState::Closed;
+    rec.tripped_at = None;
+    save_breaker(&state.db, name, &rec)?;
+
     writer.write_value("breaker", name);
     writer.write_value("action", "RESET");
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Public API for other modules to check breaker state
+// ---------------------------------------------------------------------------
+
+/// Check if a circuit breaker is currently tripped (Open).
+#[allow(dead_code)]
+pub fn is_breaker_tripped(db: &neunode_storage::db::NeunodeDb, name: &str) -> bool {
+    load_breaker(db, name).state == BreakerState::Open
 }
 
 #[cfg(test)]
@@ -265,17 +316,36 @@ mod tests {
     }
 
     #[test]
-    fn breaker_list() {
-        let breakers = get_breakers();
-        assert_eq!(breakers.len(), 3);
-        assert_eq!(breakers[0].name, "token_volume");
+    fn breaker_default_state_is_closed() {
+        let rec = BreakerRecord::default();
+        assert_eq!(rec.state, BreakerState::Closed);
+        assert!(rec.tripped_at.is_none());
+        assert_eq!(rec.trip_count, 0);
     }
 
     #[test]
-    fn breaker_valid_names() {
-        let valid = ["token_volume", "reputation", "bounty_drain"];
-        for name in valid {
-            assert!(["token_volume", "reputation", "bounty_drain"].contains(&name));
-        }
+    fn breaker_validate_known_names() {
+        assert!(validate_breaker_name("token_volume").is_ok());
+        assert!(validate_breaker_name("reputation").is_ok());
+        assert!(validate_breaker_name("bounty_drain").is_ok());
+    }
+
+    #[test]
+    fn breaker_validate_unknown_name_fails() {
+        assert!(validate_breaker_name("unknown").is_err());
+    }
+
+    #[test]
+    fn breaker_record_serde_roundtrip() {
+        let rec = BreakerRecord {
+            state: BreakerState::Open,
+            tripped_at: Some(1700000000),
+            trip_count: 3,
+        };
+        let json = serde_json::to_string(&rec).unwrap();
+        let back: BreakerRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(rec.state, back.state);
+        assert_eq!(rec.tripped_at, back.tripped_at);
+        assert_eq!(rec.trip_count, back.trip_count);
     }
 }
