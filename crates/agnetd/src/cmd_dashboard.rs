@@ -28,6 +28,7 @@ use crate::state::AppState;
 struct DashboardApp {
     selected_panel: usize,
     scroll_offsets: [u16; 5],
+    content_heights: [u16; 5],
     mesh_status: Option<MeshStatus>,
     token_balances: Vec<TokenBalanceRow>,
     reputation_score: u64,
@@ -69,6 +70,7 @@ impl DashboardApp {
         Self {
             selected_panel: 0,
             scroll_offsets: [0; 5],
+            content_heights: [0; 5],
             mesh_status: None,
             token_balances: vec![
                 TokenBalanceRow { token_type: "Compute", balance: 0, staked: 0 },
@@ -146,8 +148,9 @@ impl DashboardApp {
             KeyCode::Tab => self.selected_panel = (self.selected_panel + 1) % 5,
             KeyCode::BackTab => self.selected_panel = (self.selected_panel + 4) % 5,
             KeyCode::Down => {
+                let max_scroll = self.content_heights[self.selected_panel].saturating_sub(1);
                 self.scroll_offsets[self.selected_panel] =
-                    self.scroll_offsets[self.selected_panel].saturating_add(1);
+                    self.scroll_offsets[self.selected_panel].saturating_add(1).min(max_scroll);
             }
             KeyCode::Up => {
                 self.scroll_offsets[self.selected_panel] =
@@ -194,7 +197,7 @@ pub async fn execute(_args: &GlobalArgs, state: &mut AppState) -> Result<()> {
     let tick_rate = Duration::from_secs(2);
 
     loop {
-        terminal.draw(|f| render(f, &app))?;
+        terminal.draw(|f| render(f, &mut app))?;
 
         let timeout = tick_rate.saturating_sub(app.last_refresh.elapsed());
         if crossterm::event::poll(timeout)? {
@@ -219,7 +222,7 @@ pub async fn execute(_args: &GlobalArgs, state: &mut AppState) -> Result<()> {
 // Rendering
 // ---------------------------------------------------------------------------
 
-fn render(f: &mut Frame, app: &DashboardApp) {
+fn render(f: &mut Frame, app: &mut DashboardApp) {
     let size = f.area();
 
     let vertical = Layout::default()
@@ -229,7 +232,7 @@ fn render(f: &mut Frame, app: &DashboardApp) {
 
     render_header(f, vertical[0], app);
     render_content(f, vertical[1], app);
-    render_status_bar(f, vertical[2]);
+    render_status_bar(f, vertical[2], app);
 }
 
 fn render_header(f: &mut Frame, area: Rect, app: &DashboardApp) {
@@ -239,21 +242,32 @@ fn render_header(f: &mut Frame, area: Rect, app: &DashboardApp) {
         .map(|s| s.local_peer_id.chars().take(16).collect())
         .unwrap_or_else(|| "not connected".into());
 
+    let conn_glyph = if app.mesh_status.is_some() { "●" } else { "○" };
+    let conn_color = if app.mesh_status.is_some() { Color::Green } else { Color::Red };
+
+    let did_short: String = app
+        .mesh_status
+        .as_ref()
+        .map(|s| s.local_peer_id.chars().take(12).collect())
+        .unwrap_or_default();
+
     let header = Paragraph::new(Line::from(vec![
         Span::styled(
             " Neunode Dashboard ",
             Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         ),
         Span::raw("  "),
-        Span::styled(format!("Peer: {}…", peer_id), Style::default().fg(Color::DarkGray)),
+        Span::styled(conn_glyph.to_string(), Style::default().fg(conn_color)),
+        Span::raw(" "),
+        Span::styled(format!("{}…", peer_id), Style::default().fg(Color::DarkGray)),
         Span::raw("  "),
-        Span::styled("[q]uit  [Tab]panel  [↑↓]scroll", Style::default().fg(Color::DarkGray)),
+        Span::styled(did_short, Style::default().fg(Color::DarkGray)),
     ]))
     .block(Block::default().borders(Borders::BOTTOM).style(Style::default().fg(Color::DarkGray)));
     f.render_widget(header, area);
 }
 
-fn render_content(f: &mut Frame, area: Rect, app: &DashboardApp) {
+fn render_content(f: &mut Frame, area: Rect, app: &mut DashboardApp) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -295,7 +309,39 @@ fn panel_block(title: &str, selected: bool) -> Block<'_> {
         )
 }
 
-fn render_mesh_health(f: &mut Frame, area: Rect, app: &DashboardApp, panel_idx: usize) {
+fn kind_color(kind: u16) -> Color {
+    match kind {
+        1000..=1999 => Color::Blue,
+        2000..=2999 => Color::Green,
+        3000..=3999 => Color::Yellow,
+        _ => Color::White,
+    }
+}
+
+fn bounty_state_color(state: &str) -> Color {
+    match state {
+        "Open" => Color::Green,
+        "Claimed" => Color::Blue,
+        "Submitted" => Color::Yellow,
+        "UnderReview" => Color::Magenta,
+        "Paid" | "Cancelled" => Color::DarkGray,
+        _ => Color::White,
+    }
+}
+
+fn bounty_state_glyph(state: &str) -> &'static str {
+    match state {
+        "Open" => "●",
+        "Claimed" => "◐",
+        "Submitted" => "◑",
+        "UnderReview" => "◒",
+        "Paid" => "✓",
+        "Cancelled" => "✗",
+        _ => "·",
+    }
+}
+
+fn render_mesh_health(f: &mut Frame, area: Rect, app: &mut DashboardApp, panel_idx: usize) {
     let block = panel_block("Mesh Health", app.selected_panel == panel_idx);
 
     let status = app.mesh_status.as_ref();
@@ -309,6 +355,9 @@ fn render_mesh_health(f: &mut Frame, area: Rect, app: &DashboardApp, panel_idx: 
         ("○ Not Connected", Color::Red)
     };
 
+    const LABEL_WIDTH: usize = 12;
+    let label = |l: &str| -> String { format!("{:<width$}", l, width = LABEL_WIDTH) };
+
     let mut lines = vec![Line::from(vec![Span::styled(
         status_text.to_string(),
         Style::default().fg(status_color),
@@ -316,7 +365,7 @@ fn render_mesh_health(f: &mut Frame, area: Rect, app: &DashboardApp, panel_idx: 
 
     if let Some(s) = status {
         lines.push(Line::from(vec![
-            Span::raw("Peer ID:  "),
+            Span::raw(label("Peer ID:")),
             Span::styled(
                 s.local_peer_id.chars().take(24).collect::<String>(),
                 Style::default().fg(Color::Yellow),
@@ -325,15 +374,15 @@ fn render_mesh_health(f: &mut Frame, area: Rect, app: &DashboardApp, panel_idx: 
     }
 
     lines.push(Line::from(vec![
-        Span::raw("Peers:    "),
+        Span::raw(label("Peers:")),
         Span::styled(connected.to_string(), Style::default().fg(Color::Yellow)),
     ]));
     lines.push(Line::from(vec![
-        Span::raw("Listeners: "),
+        Span::raw(label("Listeners:")),
         Span::styled(listeners.to_string(), Style::default().fg(Color::Yellow)),
     ]));
     lines.push(Line::from(vec![
-        Span::raw("Topics:   "),
+        Span::raw(label("Topics:")),
         Span::styled(topics.to_string(), Style::default().fg(Color::Yellow)),
     ]));
 
@@ -345,11 +394,13 @@ fn render_mesh_health(f: &mut Frame, area: Rect, app: &DashboardApp, panel_idx: 
         )));
     }
 
+    let line_count = lines.len() as u16;
     let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
     f.render_widget(paragraph, area);
+    app.content_heights[panel_idx] = line_count;
 }
 
-fn render_token_balances(f: &mut Frame, area: Rect, app: &DashboardApp, panel_idx: usize) {
+fn render_token_balances(f: &mut Frame, area: Rect, app: &mut DashboardApp, panel_idx: usize) {
     let block = panel_block("Token Balances", app.selected_panel == panel_idx);
 
     let header = Row::new(vec![
@@ -370,20 +421,29 @@ fn render_token_balances(f: &mut Frame, area: Rect, app: &DashboardApp, panel_id
         })
         .collect();
 
+    let row_count = rows.len() as u16;
     let table = Table::new(rows, [Constraint::Percentage(33); 3])
         .header(header)
         .block(block)
         .row_highlight_style(Style::default().bg(Color::DarkGray));
     f.render_widget(table, area);
+    app.content_heights[panel_idx] = row_count;
 }
 
-fn render_feed_activity(f: &mut Frame, area: Rect, app: &DashboardApp, panel_idx: usize) {
+fn render_feed_activity(f: &mut Frame, area: Rect, app: &mut DashboardApp, panel_idx: usize) {
     let block = panel_block("Feed Activity", app.selected_panel == panel_idx);
 
     if app.feed_events.is_empty() {
-        let p =
-            Paragraph::new("No events").block(block).style(Style::default().fg(Color::DarkGray));
+        let lines = vec![
+            Line::from(Span::styled("No active feed events", Style::default().fg(Color::DarkGray))),
+            Line::from(Span::styled(
+                "Run 'agnetd feed post --kind 1000 ...' to create one",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
+        let p = Paragraph::new(lines).block(block);
         f.render_widget(p, area);
+        app.content_heights[panel_idx] = 0;
         return;
     }
 
@@ -391,12 +451,7 @@ fn render_feed_activity(f: &mut Frame, area: Rect, app: &DashboardApp, panel_idx
         .feed_events
         .iter()
         .map(|e| {
-            let kind_color = match e.kind {
-                1000..=1999 => Color::Cyan,
-                2000..=2999 => Color::Green,
-                3000..=3999 => Color::Yellow,
-                _ => Color::White,
-            };
+            let kind_color = kind_color(e.kind);
             Line::from(vec![
                 Span::styled(format!("[{}] ", e.kind), Style::default().fg(kind_color)),
                 Span::raw(&e.content_preview),
@@ -404,18 +459,26 @@ fn render_feed_activity(f: &mut Frame, area: Rect, app: &DashboardApp, panel_idx
         })
         .collect();
 
+    let line_count = lines.len() as u16;
     let p = Paragraph::new(lines).block(block).scroll((app.scroll_offsets[panel_idx], 0));
     f.render_widget(p, area);
+    app.content_heights[panel_idx] = line_count;
 }
 
-fn render_active_bounties(f: &mut Frame, area: Rect, app: &DashboardApp, panel_idx: usize) {
+fn render_active_bounties(f: &mut Frame, area: Rect, app: &mut DashboardApp, panel_idx: usize) {
     let block = panel_block("Active Bounties", app.selected_panel == panel_idx);
 
     if app.active_bounties.is_empty() {
-        let p = Paragraph::new("No active bounties")
-            .block(block)
-            .style(Style::default().fg(Color::DarkGray));
+        let lines = vec![
+            Line::from(Span::styled("No active bounties", Style::default().fg(Color::DarkGray))),
+            Line::from(Span::styled(
+                "Run 'agnetd bounty create ...' to create one",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
+        let p = Paragraph::new(lines).block(block);
         f.render_widget(p, area);
+        app.content_heights[panel_idx] = 0;
         return;
     }
 
@@ -429,36 +492,43 @@ fn render_active_bounties(f: &mut Frame, area: Rect, app: &DashboardApp, panel_i
         .active_bounties
         .iter()
         .map(|b| {
-            let state_color = match b.state.as_str() {
-                "Open" => Color::Green,
-                "Claimed" => Color::Cyan,
-                "Submitted" => Color::Magenta,
-                "UnderReview" => Color::Yellow,
-                _ => Color::White,
-            };
+            let state_color = bounty_state_color(&b.state);
+            let glyph = bounty_state_glyph(&b.state);
             Row::new(vec![
                 Cell::from(b.id.chars().take(8).collect::<String>()),
                 Cell::from(format!("{}", b.reward)),
-                Cell::from(b.state.as_str()).style(Style::default().fg(state_color)),
+                Cell::from(format!("{} {}", glyph, b.state))
+                    .style(Style::default().fg(state_color)),
             ])
         })
         .collect();
 
+    let row_count = rows.len() as u16;
     let table =
-        Table::new(rows, [Constraint::Length(10), Constraint::Length(12), Constraint::Length(14)])
+        Table::new(rows, [Constraint::Length(10), Constraint::Length(12), Constraint::Length(16)])
             .header(header)
             .block(block);
     f.render_widget(table, area);
+    app.content_heights[panel_idx] = row_count;
 }
 
-fn render_training_progress(f: &mut Frame, area: Rect, app: &DashboardApp, panel_idx: usize) {
+fn render_training_progress(f: &mut Frame, area: Rect, app: &mut DashboardApp, panel_idx: usize) {
     let block = panel_block("Training Progress", app.selected_panel == panel_idx);
 
     if app.training_jobs.is_empty() {
-        let p = Paragraph::new("No active training jobs")
-            .block(block)
-            .style(Style::default().fg(Color::DarkGray));
+        let lines = vec![
+            Line::from(Span::styled(
+                "No active training jobs",
+                Style::default().fg(Color::DarkGray),
+            )),
+            Line::from(Span::styled(
+                "Run 'agnetd train submit ...' to start one",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
+        let p = Paragraph::new(lines).block(block);
         f.render_widget(p, area);
+        app.content_heights[panel_idx] = 0;
         return;
     }
 
@@ -478,18 +548,30 @@ fn render_training_progress(f: &mut Frame, area: Rect, app: &DashboardApp, panel
             format!("Job {}: {}", job.id.chars().take(6).collect::<String>(), job.description);
         let gauge = Gauge::default()
             .block(Block::default().title(label))
-            .gauge_style(Style::default().fg(Color::Cyan).bg(Color::DarkGray))
+            .gauge_style(Style::default().fg(Color::Blue).bg(Color::DarkGray))
             .ratio(job.progress as f64 / 100.0)
             .label(format!("{}%", job.progress));
         f.render_widget(gauge, rects[i]);
     }
+    app.content_heights[panel_idx] = app.training_jobs.len() as u16;
 }
 
-fn render_status_bar(f: &mut Frame, area: Rect) {
-    let bar = Paragraph::new(Line::from(vec![Span::styled(
-        " Tab:switch  ↑↓:scroll  q:quit ",
-        Style::default().fg(Color::Black).bg(Color::DarkGray),
-    )]));
+fn render_status_bar(f: &mut Frame, area: Rect, app: &DashboardApp) {
+    let elapsed = app.last_refresh.elapsed().as_secs();
+    let refresh_text = format!("refreshed {elapsed}s ago");
+
+    let bar = Paragraph::new(Line::from(vec![
+        Span::styled(
+            " Tab:switch  ↑↓:scroll  q:quit ",
+            Style::default().add_modifier(Modifier::REVERSED),
+        ),
+        Span::raw(" "),
+        Span::styled(
+            format!("{refresh_text:>width$}", width = (area.width as usize).saturating_sub(40)),
+            Style::default().add_modifier(Modifier::REVERSED).fg(Color::DarkGray),
+        ),
+    ]))
+    .style(Style::default().add_modifier(Modifier::REVERSED));
     f.render_widget(bar, area);
 }
 
@@ -539,6 +621,7 @@ mod tests {
         let app = DashboardApp::new();
         assert_eq!(app.selected_panel, 0);
         assert_eq!(app.scroll_offsets, [0u16; 5]);
+        assert_eq!(app.content_heights, [0u16; 5]);
         assert!(app.mesh_status.is_none());
         assert_eq!(app.token_balances.len(), 4);
         assert_eq!(app.token_balances[0].token_type, "Compute");
@@ -595,6 +678,7 @@ mod tests {
     fn handle_key_down_scrolls() {
         let mut app = DashboardApp::new();
         app.selected_panel = 2;
+        app.content_heights[2] = 100;
         assert_eq!(app.scroll_offsets[2], 0);
         app.handle_key(key(KeyCode::Down));
         assert_eq!(app.scroll_offsets[2], 1);
@@ -654,6 +738,8 @@ mod tests {
     #[test]
     fn scroll_per_panel_independent() {
         let mut app = DashboardApp::new();
+        app.content_heights[0] = 100;
+        app.content_heights[3] = 100;
         app.selected_panel = 0;
         app.handle_key(key(KeyCode::Down));
         app.handle_key(key(KeyCode::Down));
@@ -663,5 +749,66 @@ mod tests {
         app.handle_key(key(KeyCode::Down));
         assert_eq!(app.scroll_offsets[3], 1);
         assert_eq!(app.scroll_offsets[0], 2);
+    }
+
+    #[test]
+    fn scroll_clamps_at_content_height() {
+        let mut app = DashboardApp::new();
+        app.selected_panel = 0;
+        app.content_heights[0] = 3;
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Down));
+        // max_scroll = content_height - 1 = 2
+        assert_eq!(app.scroll_offsets[0], 2);
+    }
+
+    #[test]
+    fn scroll_clamp_per_panel_independent() {
+        let mut app = DashboardApp::new();
+        app.content_heights[0] = 1;
+        app.content_heights[2] = 100;
+        app.selected_panel = 0;
+        app.handle_key(key(KeyCode::Down));
+        assert_eq!(app.scroll_offsets[0], 0);
+        app.selected_panel = 2;
+        app.handle_key(key(KeyCode::Down));
+        app.handle_key(key(KeyCode::Down));
+        assert_eq!(app.scroll_offsets[2], 2);
+    }
+
+    #[test]
+    fn kind_color_mapping() {
+        assert_eq!(kind_color(1000), Color::Blue);
+        assert_eq!(kind_color(1500), Color::Blue);
+        assert_eq!(kind_color(2000), Color::Green);
+        assert_eq!(kind_color(2500), Color::Green);
+        assert_eq!(kind_color(3000), Color::Yellow);
+        assert_eq!(kind_color(3500), Color::Yellow);
+        assert_eq!(kind_color(9001), Color::White);
+        assert_eq!(kind_color(0), Color::White);
+    }
+
+    #[test]
+    fn bounty_state_color_mapping() {
+        assert_eq!(bounty_state_color("Open"), Color::Green);
+        assert_eq!(bounty_state_color("Claimed"), Color::Blue);
+        assert_eq!(bounty_state_color("Submitted"), Color::Yellow);
+        assert_eq!(bounty_state_color("UnderReview"), Color::Magenta);
+        assert_eq!(bounty_state_color("Paid"), Color::DarkGray);
+        assert_eq!(bounty_state_color("Cancelled"), Color::DarkGray);
+        assert_eq!(bounty_state_color("Unknown"), Color::White);
+    }
+
+    #[test]
+    fn bounty_state_glyph_mapping() {
+        assert_eq!(bounty_state_glyph("Open"), "●");
+        assert_eq!(bounty_state_glyph("Claimed"), "◐");
+        assert_eq!(bounty_state_glyph("Submitted"), "◑");
+        assert_eq!(bounty_state_glyph("UnderReview"), "◒");
+        assert_eq!(bounty_state_glyph("Paid"), "✓");
+        assert_eq!(bounty_state_glyph("Cancelled"), "✗");
+        assert_eq!(bounty_state_glyph("Unknown"), "·");
     }
 }
