@@ -36,31 +36,31 @@ describe("Build output verification", () => {
 
 describe("Package exports", () => {
 	it("should export createNeunodeClient", async () => {
-		const mod = await import("../dist/index.js");
+		const mod = await import(join(distDir, "index.js"));
 		expect(mod.createNeunodeClient).toBeDefined();
 		expect(typeof mod.createNeunodeClient).toBe("function");
 	});
 
 	it("should export CliTransport", async () => {
-		const mod = await import("../dist/index.js");
+		const mod = await import(join(distDir, "index.js"));
 		expect(mod.CliTransport).toBeDefined();
 		expect(typeof mod.CliTransport).toBe("function");
 	});
 
 	it("should export CliTransportError", async () => {
-		const mod = await import("../dist/index.js");
+		const mod = await import(join(distDir, "index.js"));
 		expect(mod.CliTransportError).toBeDefined();
 		expect(typeof mod.CliTransportError).toBe("function");
 	});
 
 	it("should export ViemTransport", async () => {
-		const mod = await import("../dist/index.js");
+		const mod = await import(join(distDir, "index.js"));
 		expect(mod.ViemTransport).toBeDefined();
 		expect(typeof mod.ViemTransport).toBe("function");
 	});
 
 	it("should export type const objects", async () => {
-		const mod = await import("../dist/index.js");
+		const mod = await import(join(distDir, "index.js"));
 		expect(mod.Kind).toBeDefined();
 		expect(mod.TokenType).toBeDefined();
 		expect(mod.BountyState).toBeDefined();

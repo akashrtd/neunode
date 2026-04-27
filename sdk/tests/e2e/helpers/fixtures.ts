@@ -1,13 +1,15 @@
-import type { PublicClient, WalletClient, TestClient, HDAccount, Hex } from "viem";
+import type { PublicClient, WalletClient, TestClient, Hex, Transport } from "viem";
+import type { privateKeyToAccount } from "viem/accounts";
+import { foundry } from "viem/chains";
 import { beforeAll, beforeEach } from "vitest";
 import { createClients, ANVIL_RPC_URL, waitForAnvil } from "./anvil.js";
 import { deployAll, type DeployedContracts } from "./deploy.js";
 
 export interface E2EFixture {
   publicClient: PublicClient;
-  walletClient: WalletClient;
+  walletClient: WalletClient<Transport, typeof foundry, ReturnType<typeof privateKeyToAccount>>;
   testClient: TestClient;
-  account: HDAccount;
+  account: ReturnType<typeof privateKeyToAccount>;
   addresses: DeployedContracts;
   snapshotId: Hex;
 }

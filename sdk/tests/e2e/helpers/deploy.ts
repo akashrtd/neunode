@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { WalletClient, PublicClient } from "viem";
+import type { WalletClient, PublicClient, Transport } from "viem";
+import { foundry } from "viem/chains";
+import { privateKeyToAccount } from "viem/accounts";
 import { getFunctionSelector } from "viem";
 import { deployContract } from "viem/actions";
 
@@ -76,7 +78,7 @@ const FACET_ADDRESS_SELECTOR = getFunctionSelector("facetAddress(bytes4)");
  * Returns addresses of all deployed contracts.
  */
 export async function deployAll(
-  walletClient: WalletClient,
+  walletClient: WalletClient<Transport, typeof foundry, ReturnType<typeof privateKeyToAccount>>,
   publicClient: PublicClient,
 ): Promise<DeployedContracts> {
   const deployer = walletClient.account!.address as Addr;

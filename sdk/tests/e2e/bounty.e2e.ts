@@ -52,7 +52,7 @@ async function futureTimestamp(offsetSeconds: bigint): Promise<bigint> {
 
 function makeWalletClient(
   privateKey: `0x${string}`,
-): WalletClient<HDAccount> {
+) {
   const account = privateKeyToAccount(privateKey);
   return createWalletClient({
     account,

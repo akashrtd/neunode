@@ -11,7 +11,7 @@ import type {
   PublicClient,
   WalletClient,
   TestClient,
-  HDAccount,
+  Transport,
 } from "viem";
 
 export const ANVIL_HOST = "127.0.0.1";
@@ -74,9 +74,9 @@ export function stopAnvil(proc: ChildProcess): void {
 
 export interface ViemClients {
   publicClient: PublicClient;
-  walletClient: WalletClient;
+  walletClient: WalletClient<Transport, typeof foundry, ReturnType<typeof privateKeyToAccount>>;
   testClient: TestClient;
-  account: HDAccount;
+  account: ReturnType<typeof privateKeyToAccount>;
 }
 
 /**
