@@ -23,7 +23,7 @@ impl VerificationTier {
             Self::Tier1 => 0.85,
             Self::Tier2 => 0.95,
             Self::Tier3 => 0.99,
-            Self::Tier4 => 1.0,
+            Self::Tier4 => 0.999,
         }
     }
 }
@@ -118,7 +118,7 @@ mod tests {
         assert!((VerificationTier::Tier1.confidence() - 0.85).abs() < f64::EPSILON);
         assert!((VerificationTier::Tier2.confidence() - 0.95).abs() < f64::EPSILON);
         assert!((VerificationTier::Tier3.confidence() - 0.99).abs() < f64::EPSILON);
-        assert!((VerificationTier::Tier4.confidence() - 1.00).abs() < f64::EPSILON);
+        assert!((VerificationTier::Tier4.confidence() - 0.999).abs() < f64::EPSILON);
     }
 
     #[test]

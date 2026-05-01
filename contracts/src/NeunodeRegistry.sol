@@ -4,6 +4,8 @@ pragma solidity ^0.8.24;
 /// @title NeunodeRegistry — Agent capability and endpoint registry
 /// @notice Maps registered DIDs to their capabilities (JSON), endpoints, and stake.
 ///         Requires DID to exist in NeunodeIdentity.
+// NOTE: INeunodeIdentity should be imported from NeunodeIdentity.sol but is kept inline
+//       for now until Foundry remapping paths are configured for the interface.
 interface INeunodeIdentity {
     function getController(bytes32 didHash) external view returns (address);
     function isActive(bytes32 didHash) external view returns (bool);
@@ -146,5 +148,16 @@ contract NeunodeRegistry {
     /// @notice Get total registered agents (including deregistered)
     function getTotalAgents() external view returns (uint256) {
         return agentList.length;
+    }
+
+    /// @notice Get a paginated slice of agent DIDs
+    function getAgents(uint256 offset, uint256 limit) external view returns (bytes32[] memory) {
+        uint256 total = agentList.length;
+        uint256 end = offset + limit > total ? total : offset + limit;
+        bytes32[] memory result = new bytes32[](end - offset);
+        for (uint256 i = offset; i < end; i++) {
+            result[i - offset] = agentList[i];
+        }
+        return result;
     }
 }

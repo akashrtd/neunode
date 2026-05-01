@@ -61,7 +61,8 @@ pub struct BountyData {
 
 impl BountyData {
     pub fn required_bond(&self) -> TokenAmount {
-        let bond_units = (self.reward_amount.0 as f64 * PROVIDER_BOND_PCT / 100.0).ceil() as u64;
+        let bond_units = (self.reward_amount.0 as u128 * PROVIDER_BOND_PCT as u128)
+            .div_ceil(100) as u64;
         TokenAmount(bond_units)
     }
 }
@@ -100,9 +101,16 @@ impl BountyStateMachine {
             return Err(BountyError::TerminalState(self.data.state));
         }
 
+        let old_state = self.data.state;
         let next_state = self.compute_next_state(&event, now)?;
-        self.apply_side_effects(&event)?;
+
+        // Commit state first, then apply side effects
         self.data.state = next_state;
+        if let Err(e) = self.apply_side_effects(&event) {
+            // Rollback state on side-effect failure
+            self.data.state = old_state;
+            return Err(e);
+        }
         Ok(())
     }
 

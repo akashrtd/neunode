@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{InferenceError, Result};
@@ -73,12 +74,15 @@ impl Router {
                 })
                 .ok_or_else(|| InferenceError::RoutingError("no providers".to_string())),
             RoutingStrategy::Random => {
-                let s = seed.unwrap_or(0);
-                let idx = (s as usize) % eligible.len();
+                let idx = match seed {
+                    Some(s) => (s as usize) % eligible.len(),
+                    None => rand::thread_rng().gen_range(0..eligible.len()),
+                };
                 Ok(eligible[idx])
             }
             RoutingStrategy::RoundRobin => {
-                let idx = self.round_robin_index.fetch_add(1, Ordering::Relaxed) % eligible.len();
+                let idx =
+                    self.round_robin_index.fetch_add(1, Ordering::AcqRel) % eligible.len();
                 Ok(eligible[idx])
             }
         }
@@ -125,8 +129,10 @@ impl Router {
                 });
             }
             RoutingStrategy::Random | RoutingStrategy::RoundRobin => {
-                let s = seed.unwrap_or(0);
-                let start = (s as usize) % eligible.len();
+                let start = match seed {
+                    Some(s) => (s as usize) % eligible.len(),
+                    None => rand::thread_rng().gen_range(0..eligible.len()),
+                };
                 eligible.rotate_left(start);
             }
         }

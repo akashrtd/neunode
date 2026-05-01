@@ -72,6 +72,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl, ReentrancyGuard {
     // ─── Errors ───────────────────────────────────────────────────────────
 
     error EscrowNotFound(bytes32 bountyId);
+    error EscrowAlreadyExists(bytes32 bountyId);
     error EscrowNotCreated(bytes32 bountyId);
     error EscrowNotFunded(bytes32 bountyId);
     error NotRequester(bytes32 bountyId, address caller);
@@ -80,6 +81,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl, ReentrancyGuard {
     error InvalidToken();
     error DeadlinePassed(uint256 deadline);
     error Unauthorized();
+    error FeeBpsExceeds100Pct(uint256 totalBps);
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
@@ -108,7 +110,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl, ReentrancyGuard {
     ) external override onlyRole(BOUNTY_CONTRACT_ROLE) {
         if (amount == 0) revert InvalidAmount();
         if (token == address(0)) revert InvalidToken();
-        if (escrows[bountyId].created != 0) revert EscrowNotFound(bountyId);
+        if (escrows[bountyId].created != 0) revert EscrowAlreadyExists(bountyId);
 
         // Transfer payment from requester to this contract
         IERC20(token).safeTransferFrom(requester_, address(this), amount);
@@ -167,6 +169,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl, ReentrancyGuard {
         if (escrow.state != EscrowState.Funded) revert EscrowNotFunded(bountyId);
 
         uint256 totalFeesBps = protocolFeeBps + reviewerFeeBps + verificationFeeBps;
+        if (totalFeesBps > 10_000) revert FeeBpsExceeds100Pct(totalFeesBps);
         uint256 totalFee = (escrow.amount * totalFeesBps) / 10_000;
         uint256 providerPayout = escrow.amount - totalFee;
 
@@ -214,10 +217,8 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl, ReentrancyGuard {
         uint256 bondSlashed = escrow.providerBond;
         escrow.state = EscrowState.Refunded;
 
-        // Refund requester
-        IERC20(escrow.token).safeTransfer(escrow.requester, refundAmount);
-        // Slash provider bond to requester
-        IERC20(escrow.token).safeTransfer(escrow.requester, bondSlashed);
+        // Refund requester (amount + slashed bond combined into single transfer)
+        IERC20(escrow.token).safeTransfer(escrow.requester, refundAmount + bondSlashed);
 
         emit EscrowRefunded(bountyId, escrow.requester, refundAmount + bondSlashed);
     }
@@ -235,7 +236,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl, ReentrancyGuard {
     {
         if (amount == 0) revert InvalidAmount();
         if (token == address(0)) revert InvalidToken();
-        if (escrows[bountyId].created != 0) revert EscrowNotFound(bountyId); // reentrancy guard
+        if (escrows[bountyId].created != 0) revert EscrowAlreadyExists(bountyId);
 
         // Transfer payment from requester to this contract
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
@@ -301,10 +302,8 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl, ReentrancyGuard {
         uint256 bondSlashed = escrow.providerBond;
         escrow.state = EscrowState.Refunded;
 
-        // Refund requester
-        IERC20(escrow.token).safeTransfer(escrow.requester, refundAmount);
-        // Slash provider bond to requester
-        IERC20(escrow.token).safeTransfer(escrow.requester, bondSlashed);
+        // Refund requester (amount + slashed bond combined into single transfer)
+        IERC20(escrow.token).safeTransfer(escrow.requester, refundAmount + bondSlashed);
 
         emit EscrowRefunded(bountyId, escrow.requester, refundAmount + bondSlashed);
     }

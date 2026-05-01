@@ -82,8 +82,18 @@ impl ChatCompletionRequest {
     }
 
     pub fn estimate_tokens(&self) -> u32 {
-        let total_chars: usize = self.messages.iter().map(|m| m.content.len()).sum();
-        (total_chars as u32) / 4
+        // Improved heuristic: ASCII ~4 chars/token, non-ASCII ~1.5 chars/token.
+        // TODO: Integrate tiktoken-rs for production-grade estimation.
+        let total_str: String = self.messages.iter().map(|m| m.content.as_str()).collect();
+        let char_count = total_str.chars().count();
+        if char_count == 0 {
+            return 0;
+        }
+        let ascii_count = total_str.chars().filter(|c| c.is_ascii()).count() as u32;
+        let non_ascii_count = char_count as u32 - ascii_count;
+        // ASCII: ~4 chars per token, non-ASCII: ~1.5 chars per token (CJK, emoji)
+        let estimated = (ascii_count / 4) + ((non_ascii_count * 2).div_ceil(3));
+        estimated.max(1)
     }
 }
 

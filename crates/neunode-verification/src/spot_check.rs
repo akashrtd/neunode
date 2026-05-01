@@ -1,11 +1,4 @@
-use sha2::{Digest, Sha256};
-
-fn sha256_hex(data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    let result = hasher.finalize();
-    result.iter().map(|b| format!("{:02x}", b)).collect()
-}
+use crate::hash_util::sha256_hex;
 
 /// Configuration for random re-execution spot checks.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, ts_rs::TS)]

@@ -64,6 +64,7 @@ impl CliConfig {
             .join(CONFIG_FILE_NAME)
     }
 
+    // TODO: Replace string key matching with a ConfigKey enum for type safety
     pub fn set(&mut self, key: &str, value: &str) -> Result<()> {
         let parts: Vec<&str> = key.split('.').collect();
         match parts.as_slice() {
@@ -106,6 +107,7 @@ impl CliConfig {
         Ok(())
     }
 
+    // TODO: Replace string key matching with a ConfigKey enum for type safety
     pub fn get(&self, key: &str) -> Option<String> {
         let parts: Vec<&str> = key.split('.').collect();
         match parts.as_slice() {
@@ -161,7 +163,9 @@ impl CliConfig {
             agent: neunode_core::config::AgentConfig {
                 name: "default".to_string(),
                 did_method: "key".to_string(),
-                data_dir: "~/.neunode".to_string(),
+                data_dir: dirs::home_dir()
+                    .map(|p| p.join(".neunode").to_string_lossy().to_string())
+                    .unwrap_or_else(|| "~/.neunode".to_string()),
                 log_level: "info".to_string(),
             },
             network: neunode_core::config::NetworkConfig::default(),

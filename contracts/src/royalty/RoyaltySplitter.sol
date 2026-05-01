@@ -34,6 +34,9 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
     uint256 public constant DECAY_NUMERATOR = 9;
     uint256 public constant DECAY_DENOMINATOR = 10;
 
+    /// @dev Maximum lineage depth for BFS traversal (prevents gas exhaustion)
+    uint256 public maxLineageDepth;
+
     /// @dev Shapley score scale (100 = 1.0, stored for future per-model config)
     uint256 public constant DEFAULT_SHAPLEY_SCORE = 100;
 
@@ -47,6 +50,7 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
     error ZeroAddress();
     error BpsExceedsMax(uint256 bps, uint256 max);
     error InvalidContributionType(uint8 contributionType);
+    error LineageTooDeep(uint256 nodes, uint256 max);
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
@@ -59,6 +63,7 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
 
         protocolRoyaltyBps = 1000; // 10%
         defaultReceiver = msg.sender;
+        maxLineageDepth = 512;
     }
 
     // ─── ERC-165 ──────────────────────────────────────────────────────────
@@ -87,6 +92,12 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
     function setDefaultReceiver(address receiver) external onlyRole(ADMIN_ROLE) {
         if (receiver == address(0)) revert ZeroAddress();
         defaultReceiver = receiver;
+    }
+
+    /// @notice Update max lineage depth for BFS traversal
+    function setMaxLineageDepth(uint256 newMax) external onlyRole(ADMIN_ROLE) {
+        require(newMax > 0, "max lineage depth must be > 0");
+        maxLineageDepth = newMax;
     }
 
     // ─── ERC-2981 ─────────────────────────────────────────────────────────
@@ -191,31 +202,36 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
     /// @dev BFS traversal from model upward through parent lineage.
     ///      Only ancestors (depth > 0) are included as recipients.
     ///      The starting model is the one being used/served — it earns no royalty.
+    ///      Reverts if lineage exceeds maxLineageDepth to prevent silent truncation.
     function _getLineageRecipients(bytes32 modelCid)
         internal
         view
         returns (RecipientInfo[] memory)
     {
-        // First pass: count unique ancestors (BFS to count)
-        uint256 count = 0;
-        bytes32[] memory queue = new bytes32[](256);
-        bytes32[] memory visited = new bytes32[](256);
+        // Dynamic BFS using memory arrays that grow as needed
+        // We use a mapping-in-memory pattern via a fixed-size visited bitmap
+        uint256 maxNodes = maxLineageDepth;
+        bytes32[] memory queue = new bytes32[](maxNodes);
+        uint256[] memory depths = new uint256[](maxNodes);
+        // Track visited nodes using a flat array for O(1) lookup
+        mapping(bytes32 => bool) storage _visited; // not usable in pure view
+        // Use linear scan visited set (acceptable for on-chain with maxNodes cap)
+        bytes32[] memory visited = new bytes32[](maxNodes);
+        uint256 visitedCount = 0;
         uint256 queueSize = 1;
         uint256 head = 0;
-        uint256 visitedCount = 0;
 
         queue[0] = modelCid;
-
-        // Count phase
-        uint256[] memory depths = new uint256[](256);
         depths[0] = 0;
 
+        // First pass: count unique ancestors
+        uint256 count = 0;
         while (head < queueSize) {
             bytes32 current = queue[head];
             uint256 currentDepth = depths[head];
             head++;
 
-            // Skip visited
+            // Skip visited (linear scan — acceptable with maxNodes cap)
             bool isVisited = false;
             for (uint256 j = 0; j < visitedCount; j++) {
                 if (visited[j] == current) {
@@ -228,19 +244,19 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
             visited[visitedCount] = current;
             visitedCount++;
 
-            // Only count ancestors (depth > 0), not the starting model
             if (currentDepth > 0) {
                 count++;
             }
 
-            // Enqueue parents
+            // Enqueue parents, respecting maxLineageDepth
             bytes32[] memory parents = registry.getParents(current);
             for (uint256 i = 0; i < parents.length; i++) {
-                if (queueSize < 256) {
-                    queue[queueSize] = parents[i];
-                    depths[queueSize] = currentDepth + 1;
-                    queueSize++;
+                if (queueSize >= maxNodes) {
+                    revert LineageTooDeep(queueSize, maxNodes);
                 }
+                queue[queueSize] = parents[i];
+                depths[queueSize] = currentDepth + 1;
+                queueSize++;
             }
         }
 
@@ -276,7 +292,6 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
             visited[visitedCount] = current;
             visitedCount++;
 
-            // Only include ancestors (depth > 0)
             if (currentDepth > 0) {
                 IModelRegistry.ModelInfo memory info = registry.getModel(current);
                 uint256 typeWeight = contributionTypeWeights[uint8(info.contribution)];
@@ -291,11 +306,10 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
 
             bytes32[] memory parents = registry.getParents(current);
             for (uint256 i = 0; i < parents.length; i++) {
-                if (queueSize < 256) {
-                    queue[queueSize] = parents[i];
-                    depths[queueSize] = currentDepth + 1;
-                    queueSize++;
-                }
+                // No overflow check needed — already validated in first pass
+                queue[queueSize] = parents[i];
+                depths[queueSize] = currentDepth + 1;
+                queueSize++;
             }
         }
 

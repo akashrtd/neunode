@@ -124,7 +124,7 @@ fn main() -> ExitCode {
 }
 
 fn init_logging(verbose: bool) {
-    let level = if verbose { "debug" } else { "warn" };
+    let level = if verbose { "debug" } else { "info" };
     let env_filter = tracing_subscriber::EnvFilter::try_new(level)
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"));
     tracing_subscriber::fmt().with_env_filter(env_filter).with_target(false).init();

@@ -98,8 +98,13 @@ impl SettlementEngine {
             .map_err(|e| InferenceError::SettlementFailed(e.to_string()))?;
         let response_json = serde_json::to_string(response)
             .map_err(|e| InferenceError::SettlementFailed(e.to_string()))?;
-        let verification_hash =
-            Self::calculate_verification_hash(&model_info.id, &request_json, &response_json);
+        let verification_hash = Self::calculate_verification_hash(
+            &model_info.id,
+            &requester,
+            &provider,
+            &request_json,
+            &response_json,
+        );
 
         Ok(SettlementResult {
             requester_did: requester,
@@ -117,10 +122,13 @@ impl SettlementEngine {
 
     pub fn calculate_verification_hash(
         model_id: &str,
+        requester_did: &Did,
+        provider_did: &Did,
         request_json: &str,
         response_json: &str,
     ) -> Hash256 {
-        let combined = format!("{model_id}{request_json}{response_json}");
+        let combined =
+            format!("{model_id}:{requester_did}:{provider_did}:{request_json}:{response_json}");
         let hash_bytes = neunode_crypto::hash::sha256(combined.as_bytes());
         Hash256(hex::encode(hash_bytes))
     }
@@ -327,29 +335,50 @@ mod tests {
 
     #[test]
     fn settle_verification_hash_deterministic() {
+        let did1 = test_did(1);
+        let did2 = test_did(2);
         let hash1 = SettlementEngine::calculate_verification_hash(
-            "model-id",
-            r#"{"key":"val"}"#,
-            r#"{"result":42}"#,
+            "model-id", &did1, &did2, r#"{"key":"val"}"#, r#"{"result":42}"#,
         );
         let hash2 = SettlementEngine::calculate_verification_hash(
-            "model-id",
-            r#"{"key":"val"}"#,
-            r#"{"result":42}"#,
+            "model-id", &did1, &did2, r#"{"key":"val"}"#, r#"{"result":42}"#,
         );
         assert_eq!(hash1, hash2);
     }
 
     #[test]
     fn settle_verification_hash_differs_on_input() {
-        let hash1 = SettlementEngine::calculate_verification_hash("model-a", "req", "resp");
-        let hash2 = SettlementEngine::calculate_verification_hash("model-b", "req", "resp");
+        let did1 = test_did(1);
+        let did2 = test_did(2);
+        let hash1 = SettlementEngine::calculate_verification_hash(
+            "model-a", &did1, &did2, "req", "resp",
+        );
+        let hash2 = SettlementEngine::calculate_verification_hash(
+            "model-b", &did1, &did2, "req", "resp",
+        );
+        assert_ne!(hash1, hash2);
+    }
+
+    #[test]
+    fn settle_verification_hash_differs_on_requester() {
+        let did1 = test_did(1);
+        let did2 = test_did(2);
+        let did3 = test_did(3);
+        let hash1 = SettlementEngine::calculate_verification_hash(
+            "model-id", &did1, &did2, "req", "resp",
+        );
+        let hash2 = SettlementEngine::calculate_verification_hash(
+            "model-id", &did3, &did2, "req", "resp",
+        );
         assert_ne!(hash1, hash2);
     }
 
     #[test]
     fn settle_verification_hash_is_hex() {
-        let hash = SettlementEngine::calculate_verification_hash("m", "r", "s");
+        let did1 = test_did(1);
+        let did2 = test_did(2);
+        let hash =
+            SettlementEngine::calculate_verification_hash("m", &did1, &did2, "r", "s");
         assert_eq!(hash.0.len(), 64);
         assert!(hash.0.chars().all(|c| c.is_ascii_hexdigit()));
     }
@@ -384,7 +413,8 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].requester_did, test_did(1));
         assert_eq!(results[1].requester_did, test_did(2));
-        assert_eq!(results[0].verification_hash, results[1].verification_hash);
+        // Different requesters must produce different verification hashes
+        assert_ne!(results[0].verification_hash, results[1].verification_hash);
     }
 
     #[test]

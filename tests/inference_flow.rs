@@ -316,15 +316,21 @@ fn settlement_fee_calculation() {
 
 #[test]
 fn verification_hash_deterministic_and_unique() {
-    let h1 = SettlementEngine::calculate_verification_hash("model-a", "req", "resp");
-    let h2 = SettlementEngine::calculate_verification_hash("model-a", "req", "resp");
+    let did1 = Did("did:neunode:test_requester".to_string());
+    let did2 = Did("did:neunode:test_provider".to_string());
+    let h1 = SettlementEngine::calculate_verification_hash("model-a", &did1, &did2, "req", "resp");
+    let h2 = SettlementEngine::calculate_verification_hash("model-a", &did1, &did2, "req", "resp");
     assert_eq!(h1, h2, "same inputs should produce same hash");
 
-    let h3 = SettlementEngine::calculate_verification_hash("model-b", "req", "resp");
+    let h3 = SettlementEngine::calculate_verification_hash("model-b", &did1, &did2, "req", "resp");
     assert_ne!(h1, h3, "different model should produce different hash");
 
-    let h4 = SettlementEngine::calculate_verification_hash("model-a", "req2", "resp");
+    let h4 = SettlementEngine::calculate_verification_hash("model-a", &did1, &did2, "req2", "resp");
     assert_ne!(h1, h4, "different request should produce different hash");
+
+    let did3 = Did("did:neunode:other_requester".to_string());
+    let h5 = SettlementEngine::calculate_verification_hash("model-a", &did3, &did2, "req", "resp");
+    assert_ne!(h1, h5, "different requester should produce different hash");
 
     assert_eq!(h1.0.len(), 64, "hash should be 64 hex chars");
     assert!(h1.0.chars().all(|c| c.is_ascii_hexdigit()), "hash should be hex");

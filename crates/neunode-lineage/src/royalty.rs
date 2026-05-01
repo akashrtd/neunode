@@ -21,14 +21,7 @@ pub struct RoyaltyAllocation {
 }
 
 fn type_weight(ct: &ContributionType) -> f64 {
-    match ct {
-        ContributionType::PreTraining => 0.30,
-        ContributionType::FineTune { .. } => 0.25,
-        ContributionType::RL { .. } => 0.20,
-        ContributionType::Data { .. } => 0.15,
-        ContributionType::Merge { .. } => 0.05,
-        ContributionType::Compute { .. } => 0.05,
-    }
+    crate::types::type_weight(ct)
 }
 
 /// BFS backwards from the serving node, computing royalties for each ancestor.

@@ -11,7 +11,9 @@ pub fn deserialize_feed_event(data: &[u8]) -> Result<FeedEvent> {
         .map_err(|e| anyhow::anyhow!("feed event deserialization failed: {e}"))
 }
 
-pub fn feed_event_to_stored(event: &FeedEvent) -> StoredEvent {
+/// Convert a FeedEvent to StoredEvent for persistence.
+/// The caller MUST validate the event (including signature) before calling this.
+pub(crate) fn feed_event_to_stored(event: &FeedEvent) -> StoredEvent {
     StoredEvent {
         kind: event.kind.as_u16(),
         timestamp: event.timestamp,

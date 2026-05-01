@@ -21,8 +21,15 @@ import { trainingTokenAbi } from "./abi/training-token.js";
 
 type Addr = `0x${string}`;
 
-// TS7056 workaround: large ABIs exceed TS inference serialization limits.
-// We cast through unknown to prevent the compiler from expanding the full type.
+/**
+ * Workaround for TS7056: viem's generated contract types from large ABIs
+ * exceed TypeScript's type recursion depth limit. When ABIs are small enough
+ * to avoid this, individual getters return the fully-typed contract directly.
+ * For large ABIs that hit the limit, we use GenericContract as a fallback.
+ *
+ * Consumers who need full type safety for specific contracts should call
+ * `getContract({ address, abi, client })` directly with the imported ABI.
+ */
 interface GenericContract {
 	read: Record<string, (...args: unknown[]) => Promise<unknown>>;
 	write: Record<string, (...args: unknown[]) => Promise<unknown>>;

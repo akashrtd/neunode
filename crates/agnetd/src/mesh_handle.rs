@@ -158,13 +158,19 @@ async fn mesh_event_loop(
                 match cmd {
                     None => break,
                     Some(MeshCommand::Publish { topic, data }) => {
-                        let _ = node.publish(&topic, &data);
+                        if let Err(e) = node.publish(&topic, &data) {
+                            tracing::error!("mesh publish to {topic} failed: {e}");
+                        }
                     }
                     Some(MeshCommand::Subscribe { topic }) => {
-                        let _ = node.subscribe(&topic);
+                        if let Err(e) = node.subscribe(&topic) {
+                            tracing::error!("mesh subscribe to {topic} failed: {e}");
+                        }
                     }
                     Some(MeshCommand::Dial { addr }) => {
-                        let _ = node.dial(addr);
+                        if let Err(e) = node.dial(addr) {
+                            tracing::error!("mesh dial failed: {e}");
+                        }
                     }
                     Some(MeshCommand::Disconnect { peer_id }) => {
                         let _ = node.disconnect(peer_id);

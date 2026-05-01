@@ -61,6 +61,7 @@ contract NeunodeGovernance is AccessControl, IGovernance {
     mapping(address => bool) public allowedTargets;
 
     bytes32 public constant GOVERNANCE_ROLE = keccak256("GOVERNANCE_ROLE");
+    uint256 public constant MIN_TIMELOCK = 1 days;
 
     // ─── Events ───────────────────────────────────────────────────────────
 
@@ -194,6 +195,7 @@ contract NeunodeGovernance is AccessControl, IGovernance {
         internal
         returns (uint256 weight)
     {
+        require(support <= 2, "invalid vote type");
         Proposal storage p = _proposals[proposalId];
         if (p.id == 0) revert ProposalNotFound(proposalId);
         if (state(proposalId) != ProposalState.Active) {
@@ -347,6 +349,7 @@ contract NeunodeGovernance is AccessControl, IGovernance {
 
     /// @notice Update timelock duration (GOVERNANCE_ROLE only)
     function setTimelock(uint256 newTimelock) external onlyRole(GOVERNANCE_ROLE) {
+        require(newTimelock >= MIN_TIMELOCK, "timelock below minimum");
         timelock = newTimelock;
         emit GovernanceParametersUpdated(msg.sender);
     }
