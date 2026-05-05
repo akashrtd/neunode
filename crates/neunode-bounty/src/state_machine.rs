@@ -61,8 +61,8 @@ pub struct BountyData {
 
 impl BountyData {
     pub fn required_bond(&self) -> TokenAmount {
-        let bond_units = (self.reward_amount.0 as u128 * PROVIDER_BOND_PCT as u128)
-            .div_ceil(100) as u64;
+        let bond_units =
+            (self.reward_amount.0 as u128 * PROVIDER_BOND_PCT as u128).div_ceil(100) as u64;
         TokenAmount(bond_units)
     }
 }

@@ -338,10 +338,18 @@ mod tests {
         let did1 = test_did(1);
         let did2 = test_did(2);
         let hash1 = SettlementEngine::calculate_verification_hash(
-            "model-id", &did1, &did2, r#"{"key":"val"}"#, r#"{"result":42}"#,
+            "model-id",
+            &did1,
+            &did2,
+            r#"{"key":"val"}"#,
+            r#"{"result":42}"#,
         );
         let hash2 = SettlementEngine::calculate_verification_hash(
-            "model-id", &did1, &did2, r#"{"key":"val"}"#, r#"{"result":42}"#,
+            "model-id",
+            &did1,
+            &did2,
+            r#"{"key":"val"}"#,
+            r#"{"result":42}"#,
         );
         assert_eq!(hash1, hash2);
     }
@@ -350,12 +358,10 @@ mod tests {
     fn settle_verification_hash_differs_on_input() {
         let did1 = test_did(1);
         let did2 = test_did(2);
-        let hash1 = SettlementEngine::calculate_verification_hash(
-            "model-a", &did1, &did2, "req", "resp",
-        );
-        let hash2 = SettlementEngine::calculate_verification_hash(
-            "model-b", &did1, &did2, "req", "resp",
-        );
+        let hash1 =
+            SettlementEngine::calculate_verification_hash("model-a", &did1, &did2, "req", "resp");
+        let hash2 =
+            SettlementEngine::calculate_verification_hash("model-b", &did1, &did2, "req", "resp");
         assert_ne!(hash1, hash2);
     }
 
@@ -364,12 +370,10 @@ mod tests {
         let did1 = test_did(1);
         let did2 = test_did(2);
         let did3 = test_did(3);
-        let hash1 = SettlementEngine::calculate_verification_hash(
-            "model-id", &did1, &did2, "req", "resp",
-        );
-        let hash2 = SettlementEngine::calculate_verification_hash(
-            "model-id", &did3, &did2, "req", "resp",
-        );
+        let hash1 =
+            SettlementEngine::calculate_verification_hash("model-id", &did1, &did2, "req", "resp");
+        let hash2 =
+            SettlementEngine::calculate_verification_hash("model-id", &did3, &did2, "req", "resp");
         assert_ne!(hash1, hash2);
     }
 
@@ -377,8 +381,7 @@ mod tests {
     fn settle_verification_hash_is_hex() {
         let did1 = test_did(1);
         let did2 = test_did(2);
-        let hash =
-            SettlementEngine::calculate_verification_hash("m", &did1, &did2, "r", "s");
+        let hash = SettlementEngine::calculate_verification_hash("m", &did1, &did2, "r", "s");
         assert_eq!(hash.0.len(), 64);
         assert!(hash.0.chars().all(|c| c.is_ascii_hexdigit()));
     }

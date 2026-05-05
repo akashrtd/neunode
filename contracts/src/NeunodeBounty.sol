@@ -294,7 +294,10 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
     /// @notice Provider claims the bounty with escrow bond
     /// @dev DEPRECATED — use commitClaim + revealClaim for front-running protection.
     ///      Restricted to BOUNTY_MANAGER_ROLE for migration only.
-    function claimBountyWithBond(bytes32 id, uint256 bondAmount) external onlyRole(BOUNTY_MANAGER_ROLE) {
+    function claimBountyWithBond(bytes32 id, uint256 bondAmount)
+        external
+        onlyRole(BOUNTY_MANAGER_ROLE)
+    {
         _claimBounty(id, bondAmount);
     }
 

@@ -81,8 +81,7 @@ impl Router {
                 Ok(eligible[idx])
             }
             RoutingStrategy::RoundRobin => {
-                let idx =
-                    self.round_robin_index.fetch_add(1, Ordering::AcqRel) % eligible.len();
+                let idx = self.round_robin_index.fetch_add(1, Ordering::AcqRel) % eligible.len();
                 Ok(eligible[idx])
             }
         }

@@ -113,7 +113,7 @@ class NeunodeClientImpl implements NeunodeClient {
 		if (!cliConfig && !viemConfig) {
 			throw new Error(
 				"NeunodeClient requires at least one transport (cli or viem). " +
-				"Pass { cli: { ... } } or { viem: { ... } } to createNeunodeClient().",
+					"Pass { cli: { ... } } or { viem: { ... } } to createNeunodeClient().",
 			);
 		}
 		this.cli = cliConfig ? new CliTransport(cliConfig) : undefined;
@@ -142,15 +142,31 @@ class NeunodeClientImpl implements NeunodeClient {
 	extend<T>(extender: (client: NeunodeClient) => T): NeunodeClient & T {
 		const extension = extender(this);
 		const builtInKeys = new Set([
-			"cli", "viem", "identity", "config", "feed", "mesh", "model",
-			"train", "bounty", "token", "reputation", "inference",
-			"knowledge", "discovery", "turboquant", "transportMode", "extend",
+			"cli",
+			"viem",
+			"identity",
+			"config",
+			"feed",
+			"mesh",
+			"model",
+			"train",
+			"bounty",
+			"token",
+			"reputation",
+			"inference",
+			"knowledge",
+			"discovery",
+			"turboquant",
+			"transportMode",
+			"extend",
 		]);
-		const collisions = Object.keys(extension as Record<string, unknown>).filter((k) => builtInKeys.has(k));
+		const collisions = Object.keys(extension as Record<string, unknown>).filter(
+			(k) => builtInKeys.has(k),
+		);
 		if (collisions.length > 0) {
 			throw new Error(
 				`extend() collision: keys [${collisions.join(", ")}] ` +
-				"conflict with built-in client properties.",
+					"conflict with built-in client properties.",
 			);
 		}
 		return Object.assign(this, extension);
