@@ -6097,6 +6097,7 @@ name = "neunode-feed"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "hex",
  "neunode-core",
  "neunode-crypto",
  "neunode-identity",
@@ -6137,6 +6138,7 @@ dependencies = [
  "neunode-identity",
  "neunode-storage",
  "neunode-token",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -6309,6 +6311,7 @@ dependencies = [
 name = "neunode-verification"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "neunode-core",
  "neunode-crypto",
  "rand 0.8.5",

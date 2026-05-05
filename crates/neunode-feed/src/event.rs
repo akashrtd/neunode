@@ -84,14 +84,14 @@ impl FeedEvent {
     pub fn compute_id(&self) -> Result<EventId> {
         let bytes = self.canonical_bytes()?;
         let hash = neunode_crypto::hash::sha256(&bytes);
-        Ok(EventId(format!("f{}", to_hex(&hash))))
+        Ok(EventId(format!("f{}", hex::encode(hash))))
     }
 
     pub fn compute_hash(&self) -> Result<Hash256> {
         let full = serde_json::to_string(self)
             .map_err(|e| FeedError::SerializationError(e.to_string()))?;
         let hash = neunode_crypto::hash::sha256(full.as_bytes());
-        Ok(Hash256(to_hex(&hash)))
+        Ok(Hash256(hex::encode(hash)))
     }
 
     pub fn sign(&mut self, signing_key_bytes: &[u8; 32]) -> Result<()> {
@@ -105,7 +105,7 @@ impl FeedEvent {
             &canonical,
         );
 
-        self.signature = Some(Signature(format!("ed25519:{}", to_hex(&dalek_sig.to_bytes()))));
+        self.signature = Some(Signature(format!("ed25519:{}", hex::encode(dalek_sig.to_bytes()))));
         Ok(())
     }
 
@@ -196,32 +196,12 @@ fn core_sig_to_dalek(
         .0
         .strip_prefix("ed25519:")
         .ok_or_else(|| FeedError::InvalidSignature("missing ed25519: prefix".into()))?;
-    let bytes = from_hex(hex_str)?;
+    let bytes = hex::decode(hex_str)
+        .map_err(|e| FeedError::InvalidSignature(format!("invalid hex: {}", e)))?;
     let arr: [u8; 64] = bytes
         .try_into()
         .map_err(|_| FeedError::InvalidSignature("wrong signature length".into()))?;
     Ok(neunode_crypto::ed25519::Signature::from_bytes(&arr))
-}
-
-fn to_hex(bytes: &[u8]) -> String {
-    let mut s = String::with_capacity(bytes.len() * 2);
-    for b in bytes {
-        s.push_str(&format!("{:02x}", b));
-    }
-    s
-}
-
-fn from_hex(s: &str) -> std::result::Result<Vec<u8>, FeedError> {
-    if !s.len().is_multiple_of(2) {
-        return Err(FeedError::InvalidSignature("odd hex length".into()));
-    }
-    let mut result = Vec::with_capacity(s.len() / 2);
-    for i in (0..s.len()).step_by(2) {
-        let byte = u8::from_str_radix(&s[i..i + 2], 16)
-            .map_err(|e| FeedError::InvalidSignature(format!("invalid hex: {}", e)))?;
-        result.push(byte);
-    }
-    Ok(result)
 }
 
 #[cfg(test)]

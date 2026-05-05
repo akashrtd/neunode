@@ -285,14 +285,19 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
     // ─── Claim Bounty ─────────────────────────────────────────────────────
 
     /// @notice Provider claims the bounty (backward-compatible)
-    /// @dev DEPRECATED — use commitClaim + revealClaim for front-running protection
-    function claimBounty(bytes32 id) external {
+    /// @dev DEPRECATED — use commitClaim + revealClaim for front-running protection.
+    ///      Restricted to BOUNTY_MANAGER_ROLE for migration only.
+    function claimBounty(bytes32 id) external onlyRole(BOUNTY_MANAGER_ROLE) {
         _claimBounty(id, 0);
     }
 
     /// @notice Provider claims the bounty with escrow bond
-    /// @dev DEPRECATED — use commitClaim + revealClaim for front-running protection
-    function claimBountyWithBond(bytes32 id, uint256 bondAmount) external {
+    /// @dev DEPRECATED — use commitClaim + revealClaim for front-running protection.
+    ///      Restricted to BOUNTY_MANAGER_ROLE for migration only.
+    function claimBountyWithBond(bytes32 id, uint256 bondAmount)
+        external
+        onlyRole(BOUNTY_MANAGER_ROLE)
+    {
         _claimBounty(id, bondAmount);
     }
 
@@ -694,6 +699,7 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
         }
 
         // Check review contract resolution
+        if (address(reviewContract) == address(0)) revert("no review contract set");
         if (address(reviewContract) != address(0)) {
             if (!IBountyReview(reviewContract).isResolved(id)) revert ReviewNotResolved(id);
 

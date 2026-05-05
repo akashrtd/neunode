@@ -1,6 +1,7 @@
 pub mod bisection;
 pub mod error;
 pub mod gauntlet;
+pub mod hash_util;
 pub mod repops;
 pub mod spot_check;
 pub mod tee;

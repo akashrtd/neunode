@@ -1,8 +1,6 @@
 use sha2::{Digest, Sha256};
 
-fn to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
-}
+use crate::hash_util::sha256_hex;
 
 /// IEEE 754 rounding mode for deterministic float execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, ts_rs::TS)]
@@ -65,7 +63,7 @@ impl DeterministicExecutor {
         for &val in tensor {
             hasher.update(val.to_le_bytes());
         }
-        to_hex(&hasher.finalize())
+        sha256_hex(&hasher.finalize())
     }
 
     pub fn execute_op<F>(&mut self, op: F) -> Vec<f32>
@@ -87,12 +85,13 @@ impl DeterministicExecutor {
     pub fn finalize(mut self, output: &[f32]) -> RepOpsResult {
         let output_hash = self.hash_tensor(output);
         let hash_count = self.intermediate_hashes.len() as u32;
+        let has_checkpoints = !self.intermediate_hashes.is_empty();
         RepOpsResult {
             output_hash,
             intermediate_hashes: self.intermediate_hashes,
             op_count: self.op_count,
             hash_count,
-            reproducible: true,
+            reproducible: has_checkpoints,
         }
     }
 

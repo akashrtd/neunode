@@ -141,6 +141,9 @@ impl StreamingAccumulator {
 #[derive(Debug)]
 pub struct StreamingSettlementEngine {
     config: PricingConfig,
+    // TODO: Add session TTL cleanup — sessions abandoned by provider crashes
+    // will leak memory. Add a periodic cleanup task using tokio::time::interval
+    // that force-settles sessions older than a configurable TTL (e.g., 5 minutes).
     sessions: std::collections::HashMap<String, StreamingAccumulator>,
 }
 
@@ -223,6 +226,8 @@ impl StreamingSettlementEngine {
             .map_err(|e| InferenceError::SettlementFailed(e.to_string()))?;
         let verification_hash = SettlementEngine::calculate_verification_hash(
             &model_info.id,
+            &acc.requester_did,
+            &acc.provider_did,
             &request_json,
             &format!(
                 "streaming:{}:chunks:{}:tokens:{}",
@@ -252,6 +257,8 @@ impl StreamingSettlementEngine {
             .map_err(|e| InferenceError::SettlementFailed(e.to_string()))?;
         let verification_hash = SettlementEngine::calculate_verification_hash(
             &model_info.id,
+            &acc.requester_did,
+            &acc.provider_did,
             &request_json,
             &format!(
                 "force_settle:{}:chunks:{}:tokens:{}",

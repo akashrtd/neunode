@@ -1,20 +1,13 @@
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{Result, VerificationError};
+use crate::hash_util::sha256_hex;
 use crate::types::{VerificationLayer, VerificationResult};
 
 fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64
-}
-
-fn sha256_hex(data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    let result = hasher.finalize();
-    result.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 /// A single adversarial known-answer test.
