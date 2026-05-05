@@ -33,6 +33,8 @@ contract NeunodeBountyTest is Test {
         claimDeadline = block.timestamp + CLAIM_DEADLINE_OFFSET;
         workDeadline = block.timestamp + WORK_DEADLINE_OFFSET;
 
+        bounty.grantRole(bounty.BOUNTY_MANAGER_ROLE(), provider);
+
         token.mint(requester, 100_000e18);
 
         vm.prank(requester);

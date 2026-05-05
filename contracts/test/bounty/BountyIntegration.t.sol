@@ -54,6 +54,9 @@ contract BountyIntegrationTest is Test {
         bounty.setReviewContract(address(review));
         bounty.setEscrow(address(escrow));
 
+        // Grant provider BOUNTY_MANAGER_ROLE for deprecated claimBounty calls
+        bounty.grantRole(bounty.BOUNTY_MANAGER_ROLE(), provider);
+
         // Setup escrow — register bounty contract
         escrow.registerBountyContract(address(bounty));
 
