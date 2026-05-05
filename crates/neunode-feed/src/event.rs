@@ -84,14 +84,14 @@ impl FeedEvent {
     pub fn compute_id(&self) -> Result<EventId> {
         let bytes = self.canonical_bytes()?;
         let hash = neunode_crypto::hash::sha256(&bytes);
-        Ok(EventId(format!("f{}", hex::encode(&hash))))
+        Ok(EventId(format!("f{}", hex::encode(hash))))
     }
 
     pub fn compute_hash(&self) -> Result<Hash256> {
         let full = serde_json::to_string(self)
             .map_err(|e| FeedError::SerializationError(e.to_string()))?;
         let hash = neunode_crypto::hash::sha256(full.as_bytes());
-        Ok(Hash256(hex::encode(&hash)))
+        Ok(Hash256(hex::encode(hash)))
     }
 
     pub fn sign(&mut self, signing_key_bytes: &[u8; 32]) -> Result<()> {
@@ -105,7 +105,7 @@ impl FeedEvent {
             &canonical,
         );
 
-        self.signature = Some(Signature(format!("ed25519:{}", hex::encode(&dalek_sig.to_bytes()))));
+        self.signature = Some(Signature(format!("ed25519:{}", hex::encode(dalek_sig.to_bytes()))));
         Ok(())
     }
 

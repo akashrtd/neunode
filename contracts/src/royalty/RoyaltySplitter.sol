@@ -214,7 +214,6 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
         bytes32[] memory queue = new bytes32[](maxNodes);
         uint256[] memory depths = new uint256[](maxNodes);
         // Track visited nodes using a flat array for O(1) lookup
-        mapping(bytes32 => bool) storage _visited; // not usable in pure view
         // Use linear scan visited set (acceptable for on-chain with maxNodes cap)
         bytes32[] memory visited = new bytes32[](maxNodes);
         uint256 visitedCount = 0;

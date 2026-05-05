@@ -63,7 +63,7 @@ describe("createNeunodeClient", () => {
 
 	describe("with no config (empty)", () => {
 		it("should throw because resources require CLI transport", () => {
-			expect(() => createNeunodeClient()).toThrow("CLI transport required");
+			expect(() => createNeunodeClient()).toThrow("at least one transport");
 		});
 	});
 
