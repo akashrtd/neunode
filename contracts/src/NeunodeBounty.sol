@@ -76,6 +76,13 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
 
     FeeConfig public feeConfig;
 
+    /// @notice Pending fee config awaiting timelock expiry before execution
+    FeeConfig public pendingFeeConfig;
+    uint256 public pendingFeeConfigTimestamp;
+
+    /// @notice Minimum delay before a proposed fee config can be executed (24 hours)
+    uint256 public constant FEE_CHANGE_TIMELOCK = 24 hours;
+
     IBountyEscrow public escrow;
     IBountyReview public reviewContract;
 
@@ -100,6 +107,8 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
     event BountyCancelled(bytes32 indexed id);
     event BountyExpired(bytes32 indexed id);
     event FeeConfigUpdated(address indexed admin);
+    event FeeConfigProposed(address indexed admin, uint256 executesAt);
+    event FeeConfigCancelled(address indexed admin);
     event EscrowUpdated(address indexed escrow);
     event ReviewContractUpdated(address indexed reviewContract);
     event FeesCollected(
@@ -129,6 +138,8 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
     error ReviewNotAccepted(bytes32 id);
     error InsufficientBond();
     error TotalFeesExceed100();
+    error NoPendingFeeChange();
+    error FeeChangeTimelockNotExpired(uint256 expiresAt);
     error AlreadyCommitted(bytes32 bountyId);
     error NotCommitted(bytes32 bountyId);
     error InvalidReveal(bytes32 bountyId);
@@ -153,8 +164,9 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
 
     // ─── Admin Functions ──────────────────────────────────────────────────
 
-    /// @notice Set fee configuration (ADMIN only)
-    function setFeeConfig(
+    /// @notice Propose a new fee configuration (ADMIN only).
+    ///         The change must be executed after the timelock expires via executeFeeConfig.
+    function proposeFeeConfig(
         uint256 protocolBps,
         uint256 reviewerBps,
         uint256 verificationBps,
@@ -165,7 +177,7 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
         if (protocolBps + reviewerBps + verificationBps > 1000) {
             revert TotalFeesExceed100();
         }
-        feeConfig = FeeConfig({
+        pendingFeeConfig = FeeConfig({
             protocolBps: protocolBps,
             reviewerBps: reviewerBps,
             verificationBps: verificationBps,
@@ -173,7 +185,28 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
             reviewerFeeRecipient: reviewerFeeRecipient,
             verificationFeeRecipient: verificationFeeRecipient
         });
+        pendingFeeConfigTimestamp = block.timestamp;
+        emit FeeConfigProposed(msg.sender, block.timestamp + FEE_CHANGE_TIMELOCK);
+    }
+
+    /// @notice Execute a previously proposed fee config after the timelock expires (ADMIN only)
+    function executeFeeConfig() external onlyRole(ADMIN_ROLE) {
+        if (pendingFeeConfigTimestamp == 0) revert NoPendingFeeChange();
+        if (block.timestamp < pendingFeeConfigTimestamp + FEE_CHANGE_TIMELOCK) {
+            revert FeeChangeTimelockNotExpired(pendingFeeConfigTimestamp + FEE_CHANGE_TIMELOCK);
+        }
+        feeConfig = pendingFeeConfig;
+        delete pendingFeeConfig;
+        delete pendingFeeConfigTimestamp;
         emit FeeConfigUpdated(msg.sender);
+    }
+
+    /// @notice Cancel a pending fee config proposal (ADMIN only)
+    function cancelFeeConfigProposal() external onlyRole(ADMIN_ROLE) {
+        if (pendingFeeConfigTimestamp == 0) revert NoPendingFeeChange();
+        delete pendingFeeConfig;
+        delete pendingFeeConfigTimestamp;
+        emit FeeConfigCancelled(msg.sender);
     }
 
     /// @notice Set escrow contract (ADMIN only)

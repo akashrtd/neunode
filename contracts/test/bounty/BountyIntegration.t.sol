@@ -362,7 +362,7 @@ contract BountyIntegrationTest is Test {
 
     function testRevertFeeConfigTooHigh() public {
         vm.expectRevert(NeunodeBounty.TotalFeesExceed100.selector);
-        bounty.setFeeConfig(500, 400, 200, admin, admin, admin);
+        bounty.proposeFeeConfig(500, 400, 200, admin, admin, admin);
     }
 
     /// @notice Verify no rounding drift with separate fee recipients:
@@ -372,7 +372,9 @@ contract BountyIntegrationTest is Test {
         address protoRecipient = makeAddr("protoFee");
         address revRecipient = makeAddr("revFee");
         address verRecipient = makeAddr("verFee");
-        bounty.setFeeConfig(200, 300, 100, protoRecipient, revRecipient, verRecipient);
+        bounty.proposeFeeConfig(200, 300, 100, protoRecipient, revRecipient, verRecipient);
+        skip(24 hours);
+        bounty.executeFeeConfig();
 
         // Odd amounts that expose rounding: 10001 wei, 1 wei, 999 wei
         uint256[3] memory rewards = [uint256(10001), uint256(1), uint256(999)];
@@ -433,7 +435,18 @@ contract BountyIntegrationTest is Test {
         address feeRecipient2 = makeAddr("fee2");
         address feeRecipient3 = makeAddr("fee3");
 
-        bounty.setFeeConfig(100, 200, 50, feeRecipient1, feeRecipient2, feeRecipient3);
+        // Propose fee config
+        bounty.proposeFeeConfig(100, 200, 50, feeRecipient1, feeRecipient2, feeRecipient3);
+
+        // Cannot execute before timelock expires
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeBounty.FeeChangeTimelockNotExpired.selector, block.timestamp + 24 hours)
+        );
+        bounty.executeFeeConfig();
+
+        // Warp past timelock
+        skip(24 hours + 1);
+        bounty.executeFeeConfig();
 
         (
             uint256 protocolBps,
@@ -780,5 +793,80 @@ contract BountyIntegrationTest is Test {
 
         vm.prank(provider);
         bounty.submitWork(BOUNTY_ID, keccak256("test_submission"));
+    }
+
+    // ─── Fee Config Timelock Tests ──────────────────────────────────────────
+
+    function testRevertExecuteNoPendingFeeChange() public {
+        vm.expectRevert(NeunodeBounty.NoPendingFeeChange.selector);
+        bounty.executeFeeConfig();
+    }
+
+    function testRevertCancelNoPendingFeeChange() public {
+        vm.expectRevert(NeunodeBounty.NoPendingFeeChange.selector);
+        bounty.cancelFeeConfigProposal();
+    }
+
+    function testCancelFeeConfigProposal() public {
+        bounty.proposeFeeConfig(100, 200, 50, admin, admin, admin);
+
+        // Cancel before timelock expires
+        bounty.cancelFeeConfigProposal();
+
+        // Pending state should be cleared
+        (uint256 pBps,,,,,) = bounty.pendingFeeConfig();
+        assertEq(pBps, 0);
+        assertEq(bounty.pendingFeeConfigTimestamp(), 0);
+
+        // Execute should fail after cancel
+        skip(24 hours + 1);
+        vm.expectRevert(NeunodeBounty.NoPendingFeeChange.selector);
+        bounty.executeFeeConfig();
+    }
+
+    function testProposeOverwritesPreviousPending() public {
+        bounty.proposeFeeConfig(100, 100, 100, admin, admin, admin);
+        // Advance partially but not past timelock
+        skip(12 hours);
+        // Overwrite with new proposal — timer resets from now
+        bounty.proposeFeeConfig(50, 50, 50, admin, admin, admin);
+        // Skip remaining 12h from first proposal — NOT enough for second
+        skip(12 hours);
+        // Should NOT be executable — second proposal's timelock hasn't expired
+        uint256 expiresAt = block.timestamp + 12 hours;
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeBounty.FeeChangeTimelockNotExpired.selector, expiresAt)
+        );
+        bounty.executeFeeConfig();
+        // Warp past the second proposal's timelock
+        skip(12 hours + 1);
+        bounty.executeFeeConfig();
+        (uint256 pBps, uint256 rBps, uint256 vBps,,,) = bounty.feeConfig();
+        assertEq(pBps, 50);
+        assertEq(rBps, 50);
+        assertEq(vBps, 50);
+    }
+
+    function testFeeTimelockExactBoundary() public {
+        bounty.proposeFeeConfig(300, 300, 300, admin, admin, admin);
+        // Exactly at timelock boundary — should succeed
+        skip(24 hours);
+        bounty.executeFeeConfig();
+        (uint256 pBps, uint256 rBps, uint256 vBps,,,) = bounty.feeConfig();
+        assertEq(pBps, 300);
+    }
+
+    function testNonAdminCannotProposeFeeConfig() public {
+        vm.prank(outsider);
+        vm.expectRevert();
+        bounty.proposeFeeConfig(100, 100, 100, outsider, outsider, outsider);
+    }
+
+    function testNonAdminCannotExecuteFeeConfig() public {
+        bounty.proposeFeeConfig(100, 100, 100, admin, admin, admin);
+        skip(24 hours + 1);
+        vm.prank(outsider);
+        vm.expectRevert();
+        bounty.executeFeeConfig();
     }
 }
