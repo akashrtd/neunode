@@ -773,6 +773,32 @@ contract GovernanceTest is Test {
         assertEq(uint8(gov.state(proposalId)), uint8(IGovernance.ProposalState.Executed));
         assertEq(newTarget.value(), 77);
     }
+
+    // ─── 25. Voting Delay/Period Minimum Enforcement ────────────────────────
+
+    function testRevertVotingDelayBelowMinimum() public {
+        vm.prank(governanceAdmin);
+        vm.expectRevert("voting delay below minimum");
+        gov.setVotingDelay(12 hours);
+    }
+
+    function testRevertVotingPeriodBelowMinimum() public {
+        vm.prank(governanceAdmin);
+        vm.expectRevert("voting period below minimum");
+        gov.setVotingPeriod(1 days);
+    }
+
+    function testSetVotingDelayAtMinimum() public {
+        vm.prank(governanceAdmin);
+        gov.setVotingDelay(1 days);
+        assertEq(gov.votingDelay(), 1 days);
+    }
+
+    function testSetVotingPeriodAtMinimum() public {
+        vm.prank(governanceAdmin);
+        gov.setVotingPeriod(3 days);
+        assertEq(gov.votingPeriod(), 3 days);
+    }
 }
 
 /// @title TargetMock — Simple target contract for execution testing

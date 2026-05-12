@@ -62,6 +62,8 @@ contract NeunodeGovernance is AccessControl, IGovernance {
 
     bytes32 public constant GOVERNANCE_ROLE = keccak256("GOVERNANCE_ROLE");
     uint256 public constant MIN_TIMELOCK = 1 days;
+    uint256 public constant MIN_VOTING_DELAY = 1 days;
+    uint256 public constant MIN_VOTING_PERIOD = 3 days;
 
     // ─── Events ───────────────────────────────────────────────────────────
 
@@ -325,12 +327,14 @@ contract NeunodeGovernance is AccessControl, IGovernance {
 
     /// @notice Update voting delay (GOVERNANCE_ROLE only)
     function setVotingDelay(uint256 newVotingDelay) external onlyRole(GOVERNANCE_ROLE) {
+        require(newVotingDelay >= MIN_VOTING_DELAY, "voting delay below minimum");
         votingDelay = newVotingDelay;
         emit GovernanceParametersUpdated(msg.sender);
     }
 
     /// @notice Update voting period (GOVERNANCE_ROLE only)
     function setVotingPeriod(uint256 newVotingPeriod) external onlyRole(GOVERNANCE_ROLE) {
+        require(newVotingPeriod >= MIN_VOTING_PERIOD, "voting period below minimum");
         votingPeriod = newVotingPeriod;
         emit GovernanceParametersUpdated(msg.sender);
     }
