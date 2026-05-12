@@ -101,13 +101,16 @@ impl ProviderRegistry {
     }
 
     /// Update the heartbeat timestamp for a registered provider.
+    ///
+    /// `now_ms` MUST come from the server's clock, never from the provider's
+    /// self-reported timestamp, to prevent providers from faking liveness.
     /// Returns `PeerUnavailable` if the worker is not registered.
-    pub fn update_heartbeat(&mut self, worker_id: &WorkerId, timestamp_ms: u64) -> Result<()> {
+    pub fn update_heartbeat(&mut self, worker_id: &WorkerId, now_ms: u64) -> Result<()> {
         let entry = self
             .providers
             .get_mut(worker_id)
             .ok_or_else(|| TrainingError::PeerUnavailable(worker_id.0.clone()))?;
-        entry.last_heartbeat_ms = timestamp_ms;
+        entry.last_heartbeat_ms = now_ms;
         Ok(())
     }
 
@@ -270,7 +273,9 @@ mod tests {
         let mut reg = ProviderRegistry::new();
         reg.register(make_entry("w1", 4, 80.0, 0.8)).unwrap();
 
-        reg.update_heartbeat(&WorkerId("w1".to_string()), 1700000099000).unwrap();
+        // `now_ms` is server-derived, not from the provider
+        let server_now_ms: u64 = 1700000099000;
+        reg.update_heartbeat(&WorkerId("w1".to_string()), server_now_ms).unwrap();
 
         let got = reg.get(&WorkerId("w1".to_string())).unwrap();
         assert_eq!(got.last_heartbeat_ms, 1700000099000);

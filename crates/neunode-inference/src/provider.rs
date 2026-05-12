@@ -99,12 +99,28 @@ impl ProviderRegistry {
         self.providers.get_mut(did)
     }
 
-    pub fn update_heartbeat(&mut self, did: &Did, timestamp: Timestamp) -> Result<()> {
+    /// Record a provider heartbeat using a server-derived timestamp.
+    ///
+    /// `now` MUST come from the server's clock (e.g. `SystemTime::now()`),
+    /// never from the provider's self-reported timestamp, to prevent
+    /// providers from faking liveness or instantly recovering from Offline.
+    pub fn update_heartbeat(&mut self, did: &Did, now: Timestamp) -> Result<()> {
         let provider = self.providers.get_mut(did).ok_or(InferenceError::ProviderUnavailable)?;
-        provider.last_heartbeat = timestamp;
+        provider.last_heartbeat = now;
         if provider.status == ProviderStatus::Offline {
             provider.status = ProviderStatus::Online;
         }
+        Ok(())
+    }
+
+    /// Record latency measured by a requester (not self-reported by the provider).
+    /// Uses exponential moving average (α = 0.3) to smooth individual measurements.
+    pub fn record_latency(&mut self, did: &Did, measured_latency_ms: u32) -> Result<()> {
+        let provider = self.providers.get_mut(did).ok_or(InferenceError::ProviderUnavailable)?;
+        let alpha: f64 = 0.3;
+        provider.avg_latency_ms =
+            ((alpha * measured_latency_ms as f64) + ((1.0 - alpha) * provider.avg_latency_ms as f64))
+                as u32;
         Ok(())
     }
 
@@ -303,7 +319,9 @@ mod tests {
         p.last_heartbeat = 0;
         reg.register(p).unwrap();
 
-        reg.update_heartbeat(&test_did(1), 2000).unwrap();
+        // `now` is server-derived, not from the provider
+        let server_now: Timestamp = 2000;
+        reg.update_heartbeat(&test_did(1), server_now).unwrap();
 
         let updated = reg.get(&test_did(1)).unwrap();
         assert_eq!(updated.last_heartbeat, 2000);
@@ -314,6 +332,31 @@ mod tests {
     fn registry_update_heartbeat_missing() {
         let mut reg = ProviderRegistry::new();
         let result = reg.update_heartbeat(&test_did(99), 1000);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn registry_record_latency_updates_ema() {
+        let mut reg = ProviderRegistry::new();
+        let mut p = test_provider(1, &["llama-3b"]);
+        p.avg_latency_ms = 100;
+        reg.register(p).unwrap();
+
+        // Requester measures 200ms actual latency
+        reg.record_latency(&test_did(1), 200).unwrap();
+        // EMA: 0.3 * 200 + 0.7 * 100 = 130
+        assert_eq!(reg.get(&test_did(1)).unwrap().avg_latency_ms, 130);
+
+        // Second measurement of 50ms
+        reg.record_latency(&test_did(1), 50).unwrap();
+        // EMA: 0.3 * 50 + 0.7 * 130 = 106
+        assert_eq!(reg.get(&test_did(1)).unwrap().avg_latency_ms, 106);
+    }
+
+    #[test]
+    fn registry_record_latency_missing_provider() {
+        let mut reg = ProviderRegistry::new();
+        let result = reg.record_latency(&test_did(99), 100);
         assert!(result.is_err());
     }
 
