@@ -8,6 +8,8 @@ license.workspace = true
 ts-rs = { workspace = true }
 neunode-core = { path = "../neunode-core" }
 neunode-crypto = { path = "../neunode-crypto" }
+alloy = { workspace = true }
+url = "2"
 ed25519-dalek = { workspace = true }
 k256 = { workspace = true }
 ssi = { workspace = true }

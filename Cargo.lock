@@ -6114,6 +6114,7 @@ dependencies = [
 name = "neunode-identity"
 version = "0.1.0"
 dependencies = [
+ "alloy",
  "chrono",
  "ed25519-dalek",
  "k256",
@@ -6124,6 +6125,7 @@ dependencies = [
  "ssi",
  "thiserror 2.0.18",
  "ts-rs",
+ "url",
 ]
 
 [[package]]
@@ -6173,11 +6175,14 @@ dependencies = [
 name = "neunode-knowledge"
 version = "0.1.0"
 dependencies = [
+ "ed25519-dalek",
  "moka",
  "neunode-core",
+ "neunode-crypto",
  "neunode-storage",
  "rocksdb",
  "serde",
+ "serde_json",
  "siphasher",
  "thiserror 2.0.18",
  "ts-rs",

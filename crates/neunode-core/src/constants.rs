@@ -10,6 +10,21 @@ pub mod p2p {
     pub const PEER_SCORE_P6_WEIGHT: f64 = 5.0;
     pub const BOOTSTRAP_TIMEOUT_SECS: u64 = 30;
     pub const MAX_PEER_CONNECTIONS: usize = 100;
+
+    /// Default bootstrap peers for the Neunode network.
+    ///
+    /// These are 3 community bootstrap nodes with stable multiaddrs.
+    /// Replace placeholder addresses with actual deployed node addresses
+    /// before mainnet launch. Follows the IPFS/Bitcoin/Ethereum pattern
+    /// of hardcoded seed nodes for initial network discovery.
+    pub const DEFAULT_BOOTSTRAP_PEERS: &[&str] = &[
+        // bootstrap-1.neunode.dev
+        "/dns4/bootstrap-1.neunode.dev/tcp/41000/p2p/PLACEHOLDER_PEER_ID_1",
+        // bootstrap-2.neunode.dev
+        "/dns4/bootstrap-2.neunode.dev/tcp/41000/p2p/PLACEHOLDER_PEER_ID_2",
+        // bootstrap-3.neunode.dev
+        "/dns4/bootstrap-3.neunode.dev/tcp/41000/p2p/PLACEHOLDER_PEER_ID_3",
+    ];
 }
 
 pub mod feed {

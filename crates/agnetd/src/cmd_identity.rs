@@ -19,6 +19,7 @@ pub fn execute(cmd: &IdentityCommands, args: &GlobalArgs, state: &mut AppState) 
         IdentityCommands::Export { did, file } => {
             export_identity(did.as_deref(), file, &writer, state)
         }
+        IdentityCommands::RegisterOnChain => register_onchain(&writer, state),
     }
 }
 
@@ -121,6 +122,19 @@ fn create_identity(
     ];
     writer.write_key_value_pairs(&pairs);
     writer.write_status(&format!("Identity '{name}' created, persisted to DB, set as active"));
+
+    let keyring_ref = state.require_keyring()?;
+    match attempt_onchain_registration(keyring_ref, &state.config)? {
+        Some(result) => writer.write_status(&format!(
+            "DID registered on-chain: tx={}, block={}",
+            result.tx_hash, result.block_number
+        )),
+        None => writer.write_status(
+            "On-chain registration skipped — set contracts.eth_rpc_url and \
+             contracts.identity_contract_address to enable",
+        ),
+    }
+
     Ok(())
 }
 
@@ -224,4 +238,54 @@ fn export_identity(
 
 fn bytes_to_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn attempt_onchain_registration(
+    keyring: &neunode_identity::keyring::Keyring,
+    config: &crate::config::CliConfig,
+) -> Result<Option<neunode_identity::contracts::OnChainDidResult>> {
+    let contracts = &config.app_config.contracts;
+    let rpc_url = match &contracts.eth_rpc_url {
+        Some(url) => url,
+        None => return Ok(None),
+    };
+    let contract_addr = match &contracts.identity_contract_address {
+        Some(addr) => addr,
+        None => return Ok(None),
+    };
+
+    let onchain_config = neunode_identity::contracts::OnChainConfig {
+        eth_rpc_url: rpc_url.clone(),
+        identity_contract_address: contract_addr.clone(),
+    };
+
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| anyhow::anyhow!("failed to create runtime: {e}"))?;
+    let result = rt
+        .block_on(neunode_identity::contracts::register_did_onchain(&onchain_config, keyring))
+        .map_err(|e| anyhow::anyhow!("on-chain registration failed: {e}"))?;
+
+    Ok(Some(result))
+}
+
+fn register_onchain(writer: &OutputWriter, state: &AppState) -> Result<()> {
+    let keyring = state.require_keyring()?;
+    match attempt_onchain_registration(keyring, &state.config)? {
+        Some(result) => {
+            let out = serde_json::json!({
+                "tx_hash": result.tx_hash,
+                "did_hash": format!("0x{}", bytes_to_hex(&result.did_hash)),
+                "block_number": result.block_number,
+            });
+            writer.write_json(&out);
+            writer.write_status(&format!("DID registered on-chain: tx={}", result.tx_hash));
+        }
+        None => {
+            anyhow::bail!(
+                "on-chain registration not configured — set contracts.eth_rpc_url and \
+                 contracts.identity_contract_address"
+            );
+        }
+    }
+    Ok(())
 }

@@ -46,7 +46,13 @@ async fn mesh_start(
     let listen_addr: libp2p::Multiaddr =
         listen.parse().map_err(|e| anyhow::anyhow!("invalid listen address '{listen}': {e}"))?;
 
-    let bootstrap_addrs: Vec<libp2p::Multiaddr> = bootstrap
+    let bootstrap_sources: Vec<String> = if bootstrap.is_empty() {
+        state.config.app_config.network.bootstrap_peers.clone()
+    } else {
+        bootstrap.to_vec()
+    };
+
+    let bootstrap_addrs: Vec<libp2p::Multiaddr> = bootstrap_sources
         .iter()
         .map(|a| {
             a.parse::<libp2p::Multiaddr>()
@@ -66,10 +72,10 @@ async fn mesh_start(
     let peer_id = handle.local_peer_id.to_string();
     state.set_mesh_handle(handle);
 
-    let bootstrap_display = if bootstrap.is_empty() {
+    let bootstrap_display = if bootstrap_sources.is_empty() {
         "none (standalone mode)".to_string()
     } else {
-        bootstrap.join(", ")
+        bootstrap_sources.join(", ")
     };
 
     let pairs = [

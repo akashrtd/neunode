@@ -85,6 +85,13 @@ impl CliConfig {
                 self.app_config.network.enable_relay =
                     value.parse().with_context(|| format!("invalid boolean: {value}"))?;
             }
+            ["network", "bootstrap_peers"] => {
+                self.app_config.network.bootstrap_peers = if value.is_empty() {
+                    Vec::new()
+                } else {
+                    value.split(',').map(|s| s.trim().to_string()).collect()
+                };
+            }
             ["storage", "db_path"] => self.app_config.storage.db_path = value.to_string(),
             ["storage", "cache_size"] => {
                 self.app_config.storage.cache_size =
@@ -101,6 +108,12 @@ impl CliConfig {
             ["tokens", "unbonding_period_secs"] => {
                 self.app_config.tokens.unbonding_period_secs =
                     value.parse().with_context(|| format!("invalid integer: {value}"))?;
+            }
+            ["contracts", "eth_rpc_url"] => {
+                self.app_config.contracts.eth_rpc_url = Some(value.to_string());
+            }
+            ["contracts", "identity_contract_address"] => {
+                self.app_config.contracts.identity_contract_address = Some(value.to_string());
             }
             _ => anyhow::bail!("unknown config key: {key}"),
         }
@@ -119,6 +132,9 @@ impl CliConfig {
             ["network", "mesh_degree"] => Some(self.app_config.network.mesh_degree.to_string()),
             ["network", "enable_mdns"] => Some(self.app_config.network.enable_mdns.to_string()),
             ["network", "enable_relay"] => Some(self.app_config.network.enable_relay.to_string()),
+            ["network", "bootstrap_peers"] => {
+                Some(self.app_config.network.bootstrap_peers.join(", "))
+            }
             ["storage", "db_path"] => Some(self.app_config.storage.db_path.clone()),
             ["storage", "cache_size"] => Some(self.app_config.storage.cache_size.to_string()),
             ["storage", "cache_ttl_secs"] => {
@@ -129,6 +145,10 @@ impl CliConfig {
             }
             ["tokens", "unbonding_period_secs"] => {
                 Some(self.app_config.tokens.unbonding_period_secs.to_string())
+            }
+            ["contracts", "eth_rpc_url"] => self.app_config.contracts.eth_rpc_url.clone(),
+            ["contracts", "identity_contract_address"] => {
+                self.app_config.contracts.identity_contract_address.clone()
             }
             _ => None,
         }
@@ -144,6 +164,7 @@ impl CliConfig {
             ("network.mesh_degree".into(), self.app_config.network.mesh_degree.to_string()),
             ("network.enable_mdns".into(), self.app_config.network.enable_mdns.to_string()),
             ("network.enable_relay".into(), self.app_config.network.enable_relay.to_string()),
+            ("network.bootstrap_peers".into(), self.app_config.network.bootstrap_peers.join(", ")),
             ("storage.db_path".into(), self.app_config.storage.db_path.clone()),
             ("storage.cache_size".into(), self.app_config.storage.cache_size.to_string()),
             ("storage.cache_ttl_secs".into(), self.app_config.storage.cache_ttl_secs.to_string()),
@@ -154,6 +175,14 @@ impl CliConfig {
             (
                 "tokens.unbonding_period_secs".into(),
                 self.app_config.tokens.unbonding_period_secs.to_string(),
+            ),
+            (
+                "contracts.eth_rpc_url".into(),
+                self.app_config.contracts.eth_rpc_url.clone().unwrap_or_default(),
+            ),
+            (
+                "contracts.identity_contract_address".into(),
+                self.app_config.contracts.identity_contract_address.clone().unwrap_or_default(),
             ),
         ]
     }
@@ -171,6 +200,7 @@ impl CliConfig {
             network: neunode_core::config::NetworkConfig::default(),
             storage: neunode_core::config::StorageConfig::default(),
             tokens: neunode_core::config::TokenConfig::default(),
+            contracts: neunode_core::config::ContractsConfig::default(),
             active_identity: None,
         }
     }

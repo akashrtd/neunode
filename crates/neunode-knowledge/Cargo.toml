@@ -7,9 +7,12 @@ license.workspace = true
 [dependencies]
 neunode-core = { path = "../neunode-core" }
 neunode-storage = { path = "../neunode-storage" }
+neunode-crypto = { path = "../neunode-crypto" }
 thiserror = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 ts-rs = { workspace = true }
 siphasher = { workspace = true }
 moka = { workspace = true }
 rocksdb = { workspace = true }
+ed25519-dalek = { workspace = true }

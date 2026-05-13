@@ -9,6 +9,7 @@ pub const DOMAIN_BOUNTY: &[u8; 8] = b"NNBNT001";
 pub const DOMAIN_MODEL_LINEAGE: &[u8; 8] = b"NNMOD001";
 pub const DOMAIN_AGENT_CARD: &[u8; 8] = b"NNACD001";
 pub const DOMAIN_CHECKPOINT_DIST: &[u8; 8] = b"NNCKP001";
+pub const DOMAIN_KG_MUTATION: &[u8; 8] = b"NNKGM001";
 
 const SIPHASH_DEFAULT_KEY0: u64 = 0x_5be5_0b7d_6c3a_f093;
 const SIPHASH_DEFAULT_KEY1: u64 = 0x_62b2_8e4b_f352_7a1e;

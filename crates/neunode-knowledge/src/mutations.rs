@@ -1,5 +1,6 @@
 use neunode_storage::db::NeunodeDb;
 
+use crate::authorization::MutationAuthorization;
 use crate::dictionary::StringDictionary;
 use crate::error::Result;
 use crate::ontology::*;
@@ -140,6 +141,24 @@ pub fn join_training_job(
     let mut batch = MutationBatch::new();
     batch.insert(agent_participates_in(dict, agent_did, job_id)?);
     Ok(batch)
+}
+
+// ---------------------------------------------------------------------------
+// Authorized apply — verifies signature before writing
+// ---------------------------------------------------------------------------
+
+/// Apply a mutation batch after verifying the caller's Ed25519 authorization.
+///
+/// This is the authorized entry point for applying KG mutations in production.
+/// The raw `batch.apply(db)` remains available for tests and internal use.
+pub fn apply_authorized(
+    batch: &MutationBatch,
+    db: &NeunodeDb,
+    auth: &MutationAuthorization,
+    payload: &[u8],
+) -> Result<()> {
+    auth.verify(payload)?;
+    batch.apply(db)
 }
 
 // ---------------------------------------------------------------------------

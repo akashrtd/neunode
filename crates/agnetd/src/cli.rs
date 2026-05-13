@@ -203,6 +203,8 @@ pub enum IdentityCommands {
         #[arg(short, long)]
         file: String,
     },
+    /// Register active identity on-chain
+    RegisterOnChain,
 }
 
 #[derive(Subcommand, Debug)]

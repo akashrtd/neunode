@@ -144,12 +144,17 @@ fn register_agent(
         anyhow::bail!("agent DID cannot be empty");
     }
 
+    let keyring = state.require_keyring()?;
     let caps = parse_capabilities(capabilities);
+    let cap_refs: Vec<&str> = caps.iter().map(|s| s.as_str()).collect();
+
+    let payload = neunode_knowledge::authorization::canonical_register_agent(did, &cap_refs);
+    let auth = sign_mutation(keyring, did, &payload)?;
+
     let db = state.db();
     let dict = neunode_knowledge::StringDictionary::new(db);
-    let cap_refs: Vec<&str> = caps.iter().map(|s| s.as_str()).collect();
     let batch = neunode_knowledge::register_agent(&dict, did, &cap_refs)?;
-    batch.apply(db)?;
+    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
 
     let out = serde_json::json!({
         "did": did,
@@ -179,10 +184,14 @@ fn register_model(
         anyhow::bail!("model CID cannot be empty");
     }
 
+    let keyring = state.require_keyring()?;
+    let payload = neunode_knowledge::authorization::canonical_register_model(did, cid, parent);
+    let auth = sign_mutation(keyring, did, &payload)?;
+
     let db = state.db();
     let dict = neunode_knowledge::StringDictionary::new(db);
     let batch = neunode_knowledge::register_model(&dict, did, cid, parent)?;
-    batch.apply(db)?;
+    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
 
     let mut out = serde_json::json!({
         "owner": did,
@@ -211,12 +220,18 @@ fn register_bounty(
         anyhow::bail!("bounty ID cannot be empty");
     }
 
+    let keyring = state.require_keyring()?;
+    let active_did = state.require_did()?;
     let caps = parse_capabilities(capabilities);
+    let cap_refs: Vec<&str> = caps.iter().map(|s| s.as_str()).collect();
+
+    let payload = neunode_knowledge::authorization::canonical_register_bounty(id, &cap_refs);
+    let auth = sign_mutation(keyring, &active_did.0, &payload)?;
+
     let db = state.db();
     let dict = neunode_knowledge::StringDictionary::new(db);
-    let cap_refs: Vec<&str> = caps.iter().map(|s| s.as_str()).collect();
     let batch = neunode_knowledge::register_bounty(&dict, id, &cap_refs)?;
-    batch.apply(db)?;
+    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
 
     let out = serde_json::json!({
         "id": id,
@@ -240,10 +255,14 @@ fn join_job(did: &str, job_id: &str, writer: &OutputWriter, state: &AppState) ->
         anyhow::bail!("job ID cannot be empty");
     }
 
+    let keyring = state.require_keyring()?;
+    let payload = neunode_knowledge::authorization::canonical_join_training_job(did, job_id);
+    let auth = sign_mutation(keyring, did, &payload)?;
+
     let db = state.db();
     let dict = neunode_knowledge::StringDictionary::new(db);
     let batch = neunode_knowledge::join_training_job(&dict, did, job_id)?;
-    batch.apply(db)?;
+    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
 
     let out = serde_json::json!({
         "agent": did,
@@ -290,6 +309,24 @@ fn parse_capabilities(input: &str) -> Vec<String> {
         return Vec::new();
     }
     input.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+}
+
+fn sign_mutation(
+    keyring: &neunode_identity::keyring::Keyring,
+    signer_did: &str,
+    payload: &[u8],
+) -> Result<neunode_knowledge::MutationAuthorization> {
+    let (ed_bytes, _) = keyring.to_bytes();
+    let mut ed_signing = [0u8; 32];
+    ed_signing.copy_from_slice(&ed_bytes[..32]);
+    let vk_bytes = neunode_crypto::ed25519::verifying_key_to_bytes(&keyring.ed25519_public_key());
+    neunode_knowledge::MutationAuthorization::sign(
+        signer_did.to_string(),
+        vk_bytes,
+        &ed_signing,
+        payload,
+    )
+    .map_err(|e| anyhow::anyhow!("failed to sign mutation: {e}"))
 }
 
 // ---------------------------------------------------------------------------

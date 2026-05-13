@@ -20,6 +20,9 @@ pub enum KnowledgeError {
 
     #[error("storage error: {0}")]
     StorageError(String),
+
+    #[error("authorization error: {0}")]
+    AuthorizationError(String),
 }
 
 /// Result type alias for knowledge graph operations.
@@ -63,6 +66,12 @@ mod tests {
     fn error_display_storage_error() {
         let err = KnowledgeError::StorageError("write failed".to_string());
         assert_eq!(format!("{err}"), "storage error: write failed");
+    }
+
+    #[test]
+    fn error_display_authorization_error() {
+        let err = KnowledgeError::AuthorizationError("bad signature".to_string());
+        assert_eq!(format!("{err}"), "authorization error: bad signature");
     }
 
     #[test]

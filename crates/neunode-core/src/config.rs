@@ -12,6 +12,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub tokens: TokenConfig,
     #[serde(default)]
+    pub contracts: ContractsConfig,
+    #[serde(default)]
     pub active_identity: Option<String>,
 }
 
@@ -62,6 +64,10 @@ fn default_mesh_degree() -> usize {
     6
 }
 
+fn default_bootstrap_peers() -> Vec<String> {
+    crate::constants::p2p::DEFAULT_BOOTSTRAP_PEERS.iter().map(|s| s.to_string()).collect()
+}
+
 fn default_true() -> bool {
     true
 }
@@ -106,11 +112,20 @@ fn default_unbonding_period() -> u64 {
     7 * 24 * 3600
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, TS)]
+#[ts(export)]
+pub struct ContractsConfig {
+    #[serde(default)]
+    pub eth_rpc_url: Option<String>,
+    #[serde(default)]
+    pub identity_contract_address: Option<String>,
+}
+
 impl Default for NetworkConfig {
     fn default() -> Self {
         Self {
             listen_addr: default_listen_addr(),
-            bootstrap_peers: Vec::new(),
+            bootstrap_peers: default_bootstrap_peers(),
             mesh_degree: default_mesh_degree(),
             enable_mdns: true,
             enable_relay: true,
@@ -206,7 +221,11 @@ name = "minimal"
         assert_eq!(config.agent.data_dir, "~/.neunode");
         assert_eq!(config.agent.log_level, "info");
         assert_eq!(config.network.listen_addr, "/ip4/0.0.0.0/tcp/0");
-        assert!(config.network.bootstrap_peers.is_empty());
+        assert!(!config.network.bootstrap_peers.is_empty());
+        assert_eq!(
+            config.network.bootstrap_peers.len(),
+            crate::constants::p2p::DEFAULT_BOOTSTRAP_PEERS.len()
+        );
         assert_eq!(config.network.mesh_degree, 6);
         assert!(config.network.enable_mdns);
         assert!(config.network.enable_relay);
@@ -290,6 +309,7 @@ listen_addr = "/ip4/0.0.0.0/tcp/0"
                 decay_check_interval_secs: 3600,
                 unbonding_period_secs: 7 * 24 * 3600,
             },
+            contracts: ContractsConfig::default(),
             active_identity: None,
         };
         let toml_str = config.to_toml().unwrap();

@@ -1,3 +1,4 @@
+pub mod authorization;
 pub mod cache;
 pub mod dictionary;
 pub mod error;
@@ -6,11 +7,13 @@ pub mod ontology;
 pub mod query;
 pub mod triple;
 
+pub use authorization::MutationAuthorization;
 pub use cache::KgCache;
 pub use dictionary::StringDictionary;
 pub use error::{KnowledgeError, Result};
 pub use mutations::{
-    join_training_job, register_agent, register_bounty, register_model, MutationBatch,
+    apply_authorized, join_training_job, register_agent, register_bounty, register_model,
+    MutationBatch,
 };
 pub use ontology::{
     agent_has_capability, agent_owns_model, agent_participates_in, all_classes, all_predicates,
