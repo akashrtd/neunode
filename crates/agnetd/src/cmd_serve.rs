@@ -14,6 +14,7 @@ use futures::stream::Stream;
 use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 use tokio_stream::wrappers::BroadcastStream;
+use utoipa::OpenApi;
 
 use crate::cli::GlobalArgs;
 use crate::state::AppState;
@@ -29,7 +30,7 @@ pub struct ServerState {
     pub feed_tx: tokio::sync::broadcast::Sender<FeedEventUpdate>,
 }
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize, utoipa::ToSchema)]
 #[allow(dead_code)]
 pub struct FeedEventUpdate {
     pub kind: u16,
@@ -257,7 +258,7 @@ pub struct AgentQuery {
     pub did: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[allow(dead_code)]
 pub struct FeedPostForm {
     pub kind: String,
@@ -266,7 +267,7 @@ pub struct FeedPostForm {
     pub tags: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[allow(dead_code)]
 pub struct BountyCreateForm {
     pub title: String,
@@ -511,6 +512,16 @@ async fn feed_events_partial(
     Html(tpl.render().unwrap_or_default())
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/feed/post",
+    request_body(content = FeedPostForm, content_type = "application/x-www-form-urlencoded"),
+    responses(
+        (status = 200, description = "Feed event posted successfully"),
+        (status = 400, description = "Content empty or no active identity"),
+    ),
+    tag = "feed",
+)]
 async fn feed_post_handler(
     State(state): State<Arc<ServerState>>,
     axum::Form(form): axum::Form<FeedPostForm>,
@@ -585,6 +596,16 @@ async fn bounties_page_handler(State(state): State<Arc<ServerState>>) -> Html<St
     Html(tpl.render().unwrap_or_default())
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/bounties/create",
+    request_body(content = BountyCreateForm, content_type = "application/x-www-form-urlencoded"),
+    responses(
+        (status = 200, description = "Bounty created successfully"),
+        (status = 400, description = "No active identity or creation error"),
+    ),
+    tag = "bounty",
+)]
 async fn bounty_create_handler(
     State(state): State<Arc<ServerState>>,
     axum::Form(form): axum::Form<BountyCreateForm>,
@@ -1080,6 +1101,21 @@ async fn feed_sse_handler(
 // Serve command entry point
 // ---------------------------------------------------------------------------
 
+#[derive(utoipa::OpenApi)]
+#[openapi(
+    paths(feed_post_handler, bounty_create_handler),
+    components(schemas(FeedPostForm, BountyCreateForm, FeedEventUpdate)),
+    tags(
+        (name = "feed", description = "Feed event operations"),
+        (name = "bounty", description = "Bounty management"),
+    ),
+    info(
+        title = "Neunode Dashboard API",
+        version = "0.1.0",
+    ),
+)]
+struct ApiDoc;
+
 pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) -> Result<()> {
     let (feed_tx, _) = tokio::sync::broadcast::channel(256);
 
@@ -1112,6 +1148,11 @@ pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) ->
         // WebSocket stream
         .route("/ws/feed", get(feed_ws_handler))
         .with_state(server_state.clone());
+
+    let app = app.merge(
+        utoipa_swagger_ui::SwaggerUi::new("/swagger-ui")
+            .url("/api-docs/openapi.json", ApiDoc::openapi()),
+    );
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     println!("{}  neunode dashboard → http://127.0.0.1:{}", console::style("INFO").dim(), port);
