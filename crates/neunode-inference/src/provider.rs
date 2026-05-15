@@ -118,9 +118,9 @@ impl ProviderRegistry {
     pub fn record_latency(&mut self, did: &Did, measured_latency_ms: u32) -> Result<()> {
         let provider = self.providers.get_mut(did).ok_or(InferenceError::ProviderUnavailable)?;
         let alpha: f64 = 0.3;
-        provider.avg_latency_ms =
-            ((alpha * measured_latency_ms as f64) + ((1.0 - alpha) * provider.avg_latency_ms as f64))
-                as u32;
+        provider.avg_latency_ms = ((alpha * measured_latency_ms as f64)
+            + ((1.0 - alpha) * provider.avg_latency_ms as f64))
+            as u32;
         Ok(())
     }
 

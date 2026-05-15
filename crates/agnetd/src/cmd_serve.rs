@@ -3,12 +3,15 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use askama::Template;
-use axum::extract::{Query, State};
-use axum::response::{Html, Sse};
+use axum::extract::{
+    ws::{Message, WebSocket},
+    Query, State, WebSocketUpgrade,
+};
+use axum::response::{Html, IntoResponse, Sse};
 use axum::routing::{get, post};
 use axum::Router;
 use futures::stream::Stream;
-use futures::StreamExt;
+use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 use tokio_stream::wrappers::BroadcastStream;
 
@@ -26,7 +29,7 @@ pub struct ServerState {
     pub feed_tx: tokio::sync::broadcast::Sender<FeedEventUpdate>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize)]
 #[allow(dead_code)]
 pub struct FeedEventUpdate {
     pub kind: u16,
@@ -1007,6 +1010,43 @@ async fn bounty_list_partial(
     Html(tpl.render().unwrap_or_default())
 }
 
+async fn feed_ws_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<ServerState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| feed_ws_client(socket, state))
+}
+
+async fn feed_ws_client(socket: WebSocket, state: Arc<ServerState>) {
+    let (mut sender, mut receiver) = socket.split();
+    let mut rx = state.feed_tx.subscribe();
+
+    let mut send_task = tokio::spawn(async move {
+        while let Ok(update) = rx.recv().await {
+            let json = match serde_json::to_string(&update) {
+                Ok(j) => j,
+                Err(_) => continue,
+            };
+            if sender.send(Message::Text(json.into())).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    let mut recv_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            if matches!(msg, Message::Close(_)) {
+                break;
+            }
+        }
+    });
+
+    tokio::select! {
+        _ = (&mut send_task) => recv_task.abort(),
+        _ = (&mut recv_task) => send_task.abort(),
+    }
+}
+
 async fn feed_sse_handler(
     State(state): State<Arc<ServerState>>,
 ) -> Sse<impl Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>> {
@@ -1069,6 +1109,8 @@ pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) ->
         .route("/api/bounties/create", post(bounty_create_handler))
         // SSE stream
         .route("/events/stream", get(feed_sse_handler))
+        // WebSocket stream
+        .route("/ws/feed", get(feed_ws_handler))
         .with_state(server_state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
