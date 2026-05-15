@@ -1111,13 +1111,31 @@ pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) ->
         .route("/events/stream", get(feed_sse_handler))
         // WebSocket stream
         .route("/ws/feed", get(feed_ws_handler))
-        .with_state(server_state);
+        .with_state(server_state.clone());
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     println!("{}  neunode dashboard → http://127.0.0.1:{}", console::style("INFO").dim(), port);
+    println!("{}  Press Ctrl+C to shut down gracefully", console::style("INFO").dim());
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+
+    let shutdown_signal = async {
+        tokio::signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+        println!("\n{}  Shutting down gracefully...", console::style("INFO").dim());
+    };
+
+    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal).await?;
+
+    // Cleanup: close mesh connections, flush database
+    if let Ok(state) = Arc::try_unwrap(server_state) {
+        if let Some(mesh) = state.mesh_handle {
+            let _ = mesh.shutdown();
+            let _ = mesh.join_handle.await;
+            println!("{}  Mesh connections closed", console::style("INFO").dim());
+        }
+        drop(state.db);
+        println!("{}  Database flushed. Goodbye.", console::style("INFO").dim());
+    }
 
     Ok(())
 }
