@@ -74,6 +74,13 @@ pub enum Commands {
         #[command(subcommand)]
         command: ConfigCommands,
     },
+    /// Interactive first-run setup wizard (alias: ini)
+    #[command(alias = "ini")]
+    Init {
+        /// Accept all defaults (non-interactive)
+        #[arg(short, long)]
+        yes: bool,
+    },
     /// Manage P2P mesh network (alias: m)
     #[command(alias = "m")]
     Mesh {
@@ -1146,5 +1153,29 @@ mod tests {
             Cli::try_parse_from(["agnetd", "--identity", "did:neunode:0xabc", "identity", "list"])
                 .expect("parse");
         assert_eq!(cli.identity.as_deref(), Some("did:neunode:0xabc"));
+    }
+
+    #[test]
+    fn parse_init_default() {
+        let cli = Cli::try_parse_from(["agnetd", "init"]).expect("parse init");
+        match cli.command {
+            Commands::Init { yes } => assert!(!yes),
+            _ => panic!("expected Init"),
+        }
+    }
+
+    #[test]
+    fn parse_init_yes_flag() {
+        let cli = Cli::try_parse_from(["agnetd", "init", "--yes"]).expect("parse init --yes");
+        match cli.command {
+            Commands::Init { yes } => assert!(yes),
+            _ => panic!("expected Init"),
+        }
+    }
+
+    #[test]
+    fn parse_init_alias() {
+        let cli = Cli::try_parse_from(["agnetd", "ini", "--yes"]).expect("parse alias");
+        assert!(matches!(cli.command, Commands::Init { yes: true }));
     }
 }

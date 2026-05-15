@@ -240,7 +240,7 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn attempt_onchain_registration(
+pub(crate) fn attempt_onchain_registration(
     keyring: &neunode_identity::keyring::Keyring,
     config: &crate::config::CliConfig,
 ) -> Result<Option<neunode_identity::contracts::OnChainDidResult>> {

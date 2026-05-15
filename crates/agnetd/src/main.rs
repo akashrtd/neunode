@@ -10,6 +10,7 @@ mod cmd_discover;
 mod cmd_feed;
 mod cmd_identity;
 mod cmd_inference;
+mod cmd_init;
 mod cmd_knowledge;
 mod cmd_lifecycle;
 mod cmd_lineage;
@@ -68,6 +69,7 @@ fn main() -> ExitCode {
             cmd_identity::execute(command, &global_args, &mut app_state)
         }
         Commands::Config { command } => cmd_config::execute(command, &global_args, &mut app_state),
+        Commands::Init { yes } => cmd_init::execute(*yes, &global_args, &mut app_state),
         Commands::Mesh { command } => {
             rt.block_on(cmd_mesh::execute(command, &global_args, &mut app_state))
         }
