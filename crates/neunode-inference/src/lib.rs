@@ -1,3 +1,4 @@
+pub mod dispute;
 pub mod error;
 pub mod openai;
 pub mod provider;
