@@ -36,6 +36,13 @@ pub enum InferenceError {
 
     #[error("protocol fee exceeds gross cost: fee={fee}, gross={gross}")]
     FeeExceedsGross { fee: TokenAmount, gross: TokenAmount },
+
+    #[error("token count exceeds estimate: provider reports {provider_tokens} {token_type} tokens, max allowed is {max_allowed}")]
+    TokenCountExceedsEstimate {
+        provider_tokens: u32,
+        max_allowed: u32,
+        token_type: String,
+    },
 }
 
 /// Result type alias for inference operations.

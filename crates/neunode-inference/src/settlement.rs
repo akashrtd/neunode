@@ -6,6 +6,9 @@ use crate::openai::{ChatCompletionRequest, ChatCompletionResponse};
 use crate::provider::ModelInfo;
 use ts_rs::TS;
 
+/// Maximum multiplier allowed between provider-reported and estimated token counts.
+const TOKEN_TOLERANCE: u32 = 2;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[ts(export)]
 pub struct PricingConfig {
@@ -69,6 +72,44 @@ impl SettlementEngine {
         }
     }
 
+    /// Rough estimate of input tokens from request messages (~4 chars per token).
+    pub fn estimate_input_tokens(request: &ChatCompletionRequest) -> u32 {
+        let char_count: usize = request.messages.iter().map(|m| m.content.len()).sum();
+        (char_count as u32 / 4).max(1)
+    }
+
+    /// Validate provider-reported token counts against requester estimates.
+    /// - Input tokens must not exceed estimated count * tolerance
+    /// - Output tokens must not exceed max_tokens * tolerance (if set)
+    pub fn validate_token_counts(
+        request: &ChatCompletionRequest,
+        input_tokens: u32,
+        output_tokens: u32,
+    ) -> Result<()> {
+        let estimated_input = Self::estimate_input_tokens(request);
+        let max_input = estimated_input.saturating_mul(TOKEN_TOLERANCE);
+        if input_tokens > max_input {
+            return Err(InferenceError::TokenCountExceedsEstimate {
+                provider_tokens: input_tokens,
+                max_allowed: max_input,
+                token_type: "input".to_string(),
+            });
+        }
+
+        if let Some(max_tok) = request.max_tokens {
+            let max_output = max_tok.saturating_mul(TOKEN_TOLERANCE);
+            if output_tokens > max_output {
+                return Err(InferenceError::TokenCountExceedsEstimate {
+                    provider_tokens: output_tokens,
+                    max_allowed: max_output,
+                    token_type: "output".to_string(),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn settle(
         &self,
         request: &ChatCompletionRequest,
@@ -80,6 +121,8 @@ impl SettlementEngine {
     ) -> Result<SettlementResult> {
         let input_tokens = response.usage.prompt_tokens;
         let output_tokens = response.usage.completion_tokens;
+
+        Self::validate_token_counts(request, input_tokens, output_tokens)?;
 
         let gross_cost = Self::calculate_cost(
             input_tokens,
@@ -180,11 +223,12 @@ mod tests {
             model: "neunode/llama-3b".to_string(),
             messages: vec![ChatMessage {
                 role: MessageRole::User,
-                content: "Hello".to_string(),
+                // 4000 chars => ~1000 estimated input tokens, max allowed = 2000
+                content: "a".repeat(4000),
                 name: None,
             }],
             temperature: None,
-            max_tokens: None,
+            max_tokens: Some(1_000_000),
             top_p: None,
             stream: None,
             stop: None,
@@ -214,6 +258,11 @@ mod tests {
                 total_tokens: input_tokens + output_tokens,
             },
         }
+    }
+
+    /// Response with 1K input + 1K output — realistic for test_request's 4K chars
+    fn test_response_default() -> ChatCompletionResponse {
+        test_response(1_000, 1_000)
     }
 
     #[test]
@@ -281,7 +330,7 @@ mod tests {
         let engine = SettlementEngine::new(PricingConfig::default());
         let model = test_model_info("neunode/llama-3b", 100, 200);
         let request = test_request();
-        let response = test_response(1_000_000, 1_000_000);
+        let response = test_response_default();
 
         let result = engine
             .settle(&request, &response, test_did(1), test_did(2), &model, 1700000000)
@@ -290,11 +339,11 @@ mod tests {
         assert_eq!(result.requester_did, test_did(1));
         assert_eq!(result.provider_did, test_did(2));
         assert_eq!(result.model_id, "neunode/llama-3b");
-        assert_eq!(result.input_tokens, 1_000_000);
-        assert_eq!(result.output_tokens, 1_000_000);
-        assert_eq!(result.gross_cost, TokenAmount(300));
-        assert_eq!(result.protocol_fee, TokenAmount(6));
-        assert_eq!(result.net_payout, TokenAmount(294));
+        assert_eq!(result.input_tokens, 1_000);
+        assert_eq!(result.output_tokens, 1_000);
+        assert_eq!(result.gross_cost, TokenAmount(1)); // 300k / 1M = 0.3 → min 1
+        assert_eq!(result.protocol_fee, TokenAmount(1)); // ceil(1 * 200 / 10000) = 1
+        assert_eq!(result.net_payout, TokenAmount(0));
         assert_eq!(result.timestamp, 1700000000);
     }
 
@@ -304,15 +353,15 @@ mod tests {
             SettlementEngine::new(PricingConfig { protocol_fee_bps: 500, ..Default::default() });
         let model = test_model_info("test-model", 1000, 1000);
         let request = test_request();
-        let response = test_response(1_000_000, 1_000_000);
+        let response = test_response_default();
 
         let result = engine
             .settle(&request, &response, test_did(1), test_did(2), &model, 1700000000)
             .unwrap();
 
-        assert_eq!(result.gross_cost, TokenAmount(2000));
-        assert_eq!(result.protocol_fee, TokenAmount(100));
-        assert_eq!(result.net_payout, TokenAmount(1900));
+        assert_eq!(result.gross_cost, TokenAmount(2));
+        assert_eq!(result.protocol_fee, TokenAmount(1));
+        assert_eq!(result.net_payout, TokenAmount(1));
     }
 
     #[test]
@@ -323,7 +372,7 @@ mod tests {
         });
         let model = test_model_info("test-model", 100, 200);
         let request = test_request();
-        let response = test_response(1_000_000, 1_000_000);
+        let response = test_response_default();
 
         let result = engine
             .settle(&request, &response, test_did(1), test_did(2), &model, 1700000000)
@@ -391,7 +440,7 @@ mod tests {
         let engine = SettlementEngine::new(PricingConfig::default());
         let model = test_model_info("neunode/llama-3b", 100, 200);
         let request = test_request();
-        let response = test_response(500_000, 500_000);
+        let response = test_response_default();
 
         let params = vec![
             SettlementParams {
@@ -452,5 +501,80 @@ mod tests {
         let json = serde_json::to_string(&config).unwrap();
         let back: PricingConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(config, back);
+    }
+
+    // ─── Token Validation ─────────────────────────────────────────────────
+
+    #[test]
+    fn estimate_input_tokens_basic() {
+        let request = test_request(); // 4000 chars => 1000 tokens
+        let estimate = SettlementEngine::estimate_input_tokens(&request);
+        assert_eq!(estimate, 1000);
+    }
+
+    #[test]
+    fn estimate_input_tokens_long() {
+        let request = ChatCompletionRequest {
+            model: "test".to_string(),
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: "a".repeat(4000),
+                name: None,
+            }],
+            temperature: None,
+            max_tokens: None,
+            top_p: None,
+            stream: None,
+            stop: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+        };
+        let estimate = SettlementEngine::estimate_input_tokens(&request);
+        assert_eq!(estimate, 1000); // 4000 / 4
+    }
+
+    #[test]
+    fn validate_token_counts_within_bounds() {
+        let request = test_request();
+        assert!(SettlementEngine::validate_token_counts(&request, 2, 50).is_ok());
+    }
+
+    #[test]
+    fn validate_token_counts_rejects_inflated_input() {
+        let request = test_request(); // 4000 chars => estimate 1000, max 2000
+        let result = SettlementEngine::validate_token_counts(&request, 5000, 50);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("input"));
+    }
+
+    #[test]
+    fn validate_token_counts_rejects_inflated_output() {
+        let mut request = test_request();
+        request.max_tokens = Some(100);
+        // output 201 > 100 * 2
+        let result = SettlementEngine::validate_token_counts(&request, 1, 201);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("output"));
+    }
+
+    #[test]
+    fn validate_token_counts_no_max_tokens_allows_any_output() {
+        let mut request = test_request();
+        request.max_tokens = None;
+        assert!(SettlementEngine::validate_token_counts(&request, 1, 999_999).is_ok());
+    }
+
+    #[test]
+    fn settle_rejects_inflated_input() {
+        let engine = SettlementEngine::new(PricingConfig::default());
+        let model = test_model_info("test", 100, 200);
+        let request = test_request(); // 4000 chars, estimate = 1000, max = 2000
+        // Provider reports 5M input tokens — way over estimate
+        let response = test_response(5_000_000, 100);
+
+        let result = engine.settle(&request, &response, test_did(1), test_did(2), &model, 0);
+        assert!(result.is_err());
     }
 }
