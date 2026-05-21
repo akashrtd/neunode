@@ -32,6 +32,9 @@ pub enum FeedError {
 
     #[error("schema validation error: {0}")]
     SchemaValidationError(String),
+
+    #[error("unauthorized: {0}")]
+    Unauthorized(String),
 }
 
 pub type Result<T> = std::result::Result<T, FeedError>;

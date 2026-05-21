@@ -59,7 +59,9 @@ contract RoyaltySystemTest is Test {
     function _register(bytes32 cid, bytes32[] memory parents, IModelRegistry.ContributionType ctype)
         internal
     {
-        registry.registerModel(cid, parents, ctype, "ipfs://metadata");
+        bytes32 proof =
+            parents.length > 0 ? keccak256(abi.encodePacked(cid, parents[0])) : bytes32(0);
+        registry.registerModel(cid, parents, ctype, "ipfs://metadata", proof);
     }
 
     function _emptyParents() internal pure returns (bytes32[] memory) {
@@ -180,7 +182,8 @@ contract RoyaltySystemTest is Test {
             ROOT_MODEL,
             _emptyParents(),
             IModelRegistry.ContributionType.PreTraining,
-            "ipfs://metadata"
+            "ipfs://metadata",
+            bytes32(0)
         );
     }
 
@@ -276,7 +279,8 @@ contract RoyaltySystemTest is Test {
             keccak256("contrib1_model"),
             _emptyParents(),
             IModelRegistry.ContributionType.Data,
-            "ipfs://meta"
+            "ipfs://meta",
+            bytes32(0)
         );
 
         assertTrue(registry.modelExists(keccak256("contrib1_model")));

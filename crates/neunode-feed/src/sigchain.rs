@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use neunode_core::constants::feed::GENESIS_PREV_HASH;
 use neunode_core::kind::Kind;
 use neunode_core::types::{Did, Hash256};
@@ -11,6 +13,7 @@ pub struct SigChain {
     events: Vec<FeedEvent>,
     last_hash: Hash256,
     last_sequence: u64,
+    pending: HashMap<u64, FeedEvent>,
 }
 
 impl SigChain {
@@ -21,6 +24,7 @@ impl SigChain {
             events: Vec::new(),
             last_hash: Hash256(GENESIS_PREV_HASH.to_string()),
             last_sequence: 0,
+            pending: HashMap::new(),
         }
     }
 
@@ -102,6 +106,70 @@ impl SigChain {
 
     pub fn get_event(&self, sequence: u64) -> Option<&FeedEvent> {
         self.events.iter().find(|e| e.sequence == sequence)
+    }
+
+    /// Receive an event that may arrive out of order. Buffers if predecessor
+    /// hasn't arrived yet, then flushes consecutive buffered events.
+    pub fn receive_event(&mut self, event: FeedEvent) -> Result<()> {
+        if event.author != self.author {
+            return Err(FeedError::Unauthorized("event author mismatch".into()));
+        }
+        if !event.verify_signature(&self.verifying_key) {
+            return Err(FeedError::InvalidSignature(format!(
+                "invalid signature at sequence {}",
+                event.sequence
+            )));
+        }
+
+        let expected_seq = if self.events.is_empty() { 0 } else { self.last_sequence + 1 };
+
+        if event.sequence == expected_seq {
+            // Verify prev_hash links correctly
+            let expected_prev = if event.sequence == 0 {
+                Hash256(GENESIS_PREV_HASH.to_string())
+            } else {
+                self.last_hash.clone()
+            };
+            if event.prev_hash != expected_prev {
+                return Err(FeedError::HashChainBroken { seq: event.sequence });
+            }
+
+            self.events.push(event.clone());
+            self.last_hash = event.compute_hash()?;
+            self.last_sequence = event.sequence;
+
+            // Flush any buffered consecutive events
+            self.flush_pending()?;
+        } else if event.sequence > expected_seq {
+            // Buffer for later — predecessor hasn't arrived yet
+            self.pending.insert(event.sequence, event);
+        }
+        // Silently ignore duplicates (sequence < expected)
+
+        Ok(())
+    }
+
+    /// Flush consecutive buffered events after a successful append.
+    fn flush_pending(&mut self) -> Result<()> {
+        loop {
+            let next_seq = self.last_sequence + 1;
+            if let Some(event) = self.pending.remove(&next_seq) {
+                if event.prev_hash != self.last_hash {
+                    return Err(FeedError::HashChainBroken { seq: event.sequence });
+                }
+                self.events.push(event.clone());
+                self.last_hash = event.compute_hash()?;
+                self.last_sequence = event.sequence;
+            } else {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// Number of events waiting in the buffer for their predecessor.
+    pub fn pending_count(&self) -> usize {
+        self.pending.len()
     }
 
     pub fn len(&self) -> usize {
@@ -411,5 +479,66 @@ mod tests {
         chain.events[0].author = Did("did:neunode:impostor".to_string());
 
         assert!(chain.verify_chain().is_err());
+    }
+
+    // ─── Out-of-order receive_event ─────────────────────────────────────────
+
+    #[test]
+    fn receive_event_in_order() {
+        let (sk_bytes, vk_bytes) = test_keypair();
+        let mut chain = SigChain::new(test_did(), vk_bytes);
+
+        let e0 = chain.append(Kind::AgentMetadata, "first".to_string(), &sk_bytes).unwrap();
+        let e1 = chain.append(Kind::BountyPost, "second".to_string(), &sk_bytes).unwrap();
+
+        // New chain receives events in order
+        let mut chain2 = SigChain::new(test_did(), vk_bytes);
+        chain2.receive_event(e0).unwrap();
+        chain2.receive_event(e1).unwrap();
+        assert_eq!(chain2.len(), 2);
+        assert!(chain2.verify_chain().is_ok());
+    }
+
+    #[test]
+    fn receive_event_out_of_order_buffers_then_flushes() {
+        let (sk_bytes, vk_bytes) = test_keypair();
+        let mut chain1 = SigChain::new(test_did(), vk_bytes);
+
+        let e0 = chain1.append(Kind::AgentMetadata, "first".to_string(), &sk_bytes).unwrap();
+        let e1 = chain1.append(Kind::BountyPost, "second".to_string(), &sk_bytes).unwrap();
+        let e2 = chain1.append(Kind::Attest, "third".to_string(), &sk_bytes).unwrap();
+
+        // New chain receives events 2, 0, 1
+        let mut chain2 = SigChain::new(test_did(), vk_bytes);
+        chain2.receive_event(e2.clone()).unwrap(); // buffered
+        assert_eq!(chain2.len(), 0);
+        assert_eq!(chain2.pending_count(), 1);
+
+        chain2.receive_event(e0.clone()).unwrap(); // accepted, flushes nothing
+        assert_eq!(chain2.len(), 1);
+        assert_eq!(chain2.pending_count(), 1);
+
+        chain2.receive_event(e1.clone()).unwrap(); // accepted, flushes e2
+        assert_eq!(chain2.len(), 3);
+        assert_eq!(chain2.pending_count(), 0);
+
+        assert!(chain2.verify_chain().is_ok());
+    }
+
+    #[test]
+    fn receive_event_rejects_wrong_signature() {
+        let (sk_bytes, vk_bytes) = test_keypair();
+        let mut chain = SigChain::new(test_did(), vk_bytes);
+
+        let mut event =
+            FeedEvent::new(Kind::AgentMetadata, test_did(), 0, Hash256(GENESIS_PREV_HASH.to_string()), "bad".to_string()).unwrap();
+        // Sign with wrong key
+        let wrong_seed = [77u8; 32];
+        let (wrong_sk, _) = neunode_crypto::ed25519::keypair_from_seed(&wrong_seed);
+        let wrong_bytes = neunode_crypto::ed25519::signing_key_to_bytes(&wrong_sk);
+        event.sign(&wrong_bytes).unwrap();
+
+        let result = chain.receive_event(event);
+        assert!(result.is_err());
     }
 }

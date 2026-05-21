@@ -82,6 +82,7 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl, ReentrancyGuard {
     error DeadlinePassed(uint256 deadline);
     error Unauthorized();
     error FeeBpsExceeds100Pct(uint256 totalBps);
+    error ZeroAddressFeeRecipient();
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
@@ -170,6 +171,16 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl, ReentrancyGuard {
 
         uint256 totalFeesBps = protocolFeeBps + reviewerFeeBps + verificationFeeBps;
         if (totalFeesBps > 10_000) revert FeeBpsExceeds100Pct(totalFeesBps);
+
+        if (protocolFeeBps > 0 && protocolFeeRecipient == address(0)) {
+            revert ZeroAddressFeeRecipient();
+        }
+        if (reviewerFeeBps > 0 && reviewerFeeRecipient == address(0)) {
+            revert ZeroAddressFeeRecipient();
+        }
+        if (verificationFeeBps > 0 && verificationFeeRecipient == address(0)) {
+            revert ZeroAddressFeeRecipient();
+        }
         uint256 totalFee = (escrow.amount * totalFeesBps) / 10_000;
         uint256 providerPayout = escrow.amount - totalFee;
 
@@ -320,6 +331,26 @@ contract NeunodeEscrow is IBountyEscrow, AccessControl, ReentrancyGuard {
         escrow.state = EscrowState.Disputed;
 
         emit EscrowDisputed(bountyId, block.timestamp);
+    }
+
+    /// @notice Auto-refund after inactivity timeout (callable by anyone)
+    function autoRefund(bytes32 bountyId, uint256 timeoutSeconds) external nonReentrant {
+        Escrow storage escrow = escrows[bountyId];
+        if (escrow.created == 0) revert EscrowNotFound(bountyId);
+        if (escrow.state != EscrowState.Funded) revert EscrowNotFunded(bountyId);
+
+        if (block.timestamp < escrow.deadline + timeoutSeconds) {
+            revert DeadlinePassed(escrow.deadline + timeoutSeconds);
+        }
+
+        uint256 refundAmount = escrow.amount;
+        uint256 bondReturn = escrow.providerBond;
+        escrow.state = EscrowState.Refunded;
+
+        IERC20(escrow.token).safeTransfer(escrow.requester, refundAmount);
+        IERC20(escrow.token).safeTransfer(escrow.provider, bondReturn);
+
+        emit EscrowRefunded(bountyId, escrow.requester, refundAmount);
     }
 
     /// @notice Get escrow state

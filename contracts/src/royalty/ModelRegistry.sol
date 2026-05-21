@@ -24,6 +24,7 @@ contract ModelRegistry is IModelRegistry, AccessControl {
     error ModelAlreadyExists(bytes32 cid);
     error InvalidCid(bytes32 cid);
     error ParentNotFound(bytes32 cid);
+    error DerivationProofRequired(bytes32 parentCid);
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
@@ -39,16 +40,21 @@ contract ModelRegistry is IModelRegistry, AccessControl {
     /// @param parentCids Array of parent model CIDs (empty for root model)
     /// @param contribution Type of contribution (PreTraining, FineTune, etc.)
     /// @param metadataURI Off-chain metadata URI
+    /// @param derivationProofHash Hash proving derivation from parents (e.g., training logs hash)
     function registerModel(
         bytes32 cid,
         bytes32[] calldata parentCids,
         ContributionType contribution,
-        string calldata metadataURI
+        string calldata metadataURI,
+        bytes32 derivationProofHash
     ) external onlyRole(REGISTRAR_ROLE) {
         if (cid == bytes32(0)) revert InvalidCid(cid);
         if (_models[cid].exists) revert ModelAlreadyExists(cid);
 
-        // Validate all parents exist
+        // Validate all parents exist and derivation proof is provided
+        if (parentCids.length > 0 && derivationProofHash == bytes32(0)) {
+            revert DerivationProofRequired(parentCids[0]);
+        }
         for (uint256 i = 0; i < parentCids.length; i++) {
             if (!_models[parentCids[i]].exists) revert ParentNotFound(parentCids[i]);
         }

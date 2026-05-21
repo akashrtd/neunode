@@ -293,4 +293,34 @@ contract CommitRevealTest is Test {
         vm.expectRevert();
         bounty.revealClaim(BOUNTY_ID, 0, nonce2);
     }
+
+    // ─── Commitment Expiry (Anti-Griefing) ────────────────────────────────
+
+    function testExpireStaleCommitment() public {
+        _createBounty();
+
+        bytes32 commitment = _computeCommitment(attacker, BOUNTY_ID, NONCE);
+
+        // Attacker commits but never reveals
+        vm.prank(attacker);
+        bounty.commitClaim(BOUNTY_ID, commitment);
+
+        // Before timeout — can't expire
+        vm.expectRevert();
+        bounty.expireCommitment(attacker, BOUNTY_ID);
+
+        // After 1 hour timeout — anyone can expire
+        skip(1 hours + 1);
+        bounty.expireCommitment(attacker, BOUNTY_ID);
+
+        // Provider can now commit and claim normally
+        bytes32 providerNonce = keccak256("provider_nonce");
+        bytes32 providerCommitment = _computeCommitment(provider, BOUNTY_ID, providerNonce);
+        vm.prank(provider);
+        bounty.commitClaim(BOUNTY_ID, providerCommitment);
+        vm.prank(provider);
+        bounty.revealClaim(BOUNTY_ID, 0, providerNonce);
+
+        assertEq(uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Claimed));
+    }
 }

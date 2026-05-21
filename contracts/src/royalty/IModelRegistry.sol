@@ -42,7 +42,8 @@ interface IModelRegistry {
         bytes32 cid,
         bytes32[] calldata parentCids,
         ContributionType contribution,
-        string calldata metadataURI
+        string calldata metadataURI,
+        bytes32 derivationProofHash
     ) external;
 
     function getModel(bytes32 cid) external view returns (ModelInfo memory);

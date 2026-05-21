@@ -212,4 +212,56 @@ contract NeunodeEscrowTest is Test {
         // Provider gained AMOUNT (bond returned + payment)
         assertEq(token.balanceOf(provider) - providerBalBefore, AMOUNT);
     }
+
+    // ─── Zero Address Fee Recipient Prevention ────────────────────────────
+
+    function testRevertZeroAddressProtocolFeeRecipient() public {
+        _createAndFund();
+        escrow.grantRole(escrow.BOUNTY_CONTRACT_ROLE(), address(this));
+
+        vm.expectRevert(NeunodeEscrow.ZeroAddressFeeRecipient.selector);
+        escrow.releaseWithFees(
+            BOUNTY_ID,
+            provider,
+            200, // 2% protocol
+            0,
+            0,
+            address(0), // zero address — should revert
+            makeAddr("rev"),
+            makeAddr("ver")
+        );
+    }
+
+    // ─── Auto-Refund After Inactivity ─────────────────────────────────────
+
+    function testAutoRefundAfterTimeout() public {
+        _createAndFund();
+
+        uint256 requesterBalBefore = token.balanceOf(requester);
+        uint256 providerBalBefore = token.balanceOf(provider);
+
+        // Warp past deadline + 7 day timeout
+        vm.warp(block.timestamp + 7 days + 8 days);
+
+        escrow.autoRefund(BOUNTY_ID, 7 days);
+
+        assertEq(uint8(escrow.getEscrowState(BOUNTY_ID)), uint8(NeunodeEscrow.EscrowState.Refunded));
+        assertEq(token.balanceOf(requester) - requesterBalBefore, AMOUNT);
+        assertEq(token.balanceOf(provider) - providerBalBefore, BOND);
+    }
+
+    function testRevertAutoRefundBeforeTimeout() public {
+        _createAndFund();
+
+        vm.expectRevert();
+        escrow.autoRefund(BOUNTY_ID, 30 days);
+    }
+
+    function _createAndFund() internal {
+        vm.prank(requester);
+        escrow.createEscrow(BOUNTY_ID, address(token), AMOUNT, block.timestamp + 7 days);
+
+        vm.prank(provider);
+        escrow.fundEscrow(BOUNTY_ID, BOND);
+    }
 }

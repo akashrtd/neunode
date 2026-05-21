@@ -73,6 +73,9 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
 
     // Commit-reveal anti-front-running
     mapping(address => mapping(bytes32 => bytes32)) private _claimCommitments;
+    mapping(address => mapping(bytes32 => uint256)) private _claimCommitTimestamps;
+
+    uint256 public constant CLAIM_COMMIT_TIMEOUT = 1 hours;
 
     // Commit-reveal for submission artifacts — prevents reviewer theft
     mapping(bytes32 => bytes32) public submissionCommitments;
@@ -350,7 +353,18 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
             revert AlreadyCommitted(bountyId);
         }
         _claimCommitments[msg.sender][bountyId] = commitment;
+        _claimCommitTimestamps[msg.sender][bountyId] = block.timestamp;
         emit ClaimCommitted(msg.sender, bountyId);
+    }
+
+    /// @notice Expire a stale commitment that was never revealed (anti-griefing)
+    function expireCommitment(address claimer, bytes32 bountyId) external {
+        if (_claimCommitments[claimer][bountyId] == bytes32(0)) revert NotCommitted(bountyId);
+        if (block.timestamp < _claimCommitTimestamps[claimer][bountyId] + CLAIM_COMMIT_TIMEOUT) {
+            revert DeadlinePassed(_claimCommitTimestamps[claimer][bountyId] + CLAIM_COMMIT_TIMEOUT);
+        }
+        _claimCommitments[claimer][bountyId] = bytes32(0);
+        _claimCommitTimestamps[claimer][bountyId] = 0;
     }
 
     /// @notice Reveal commitment and claim bounty (second phase of commit-reveal)
