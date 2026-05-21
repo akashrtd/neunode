@@ -74,6 +74,10 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
     // Commit-reveal anti-front-running
     mapping(address => mapping(bytes32 => bytes32)) private _claimCommitments;
 
+    // Commit-reveal for submission artifacts — prevents reviewer theft
+    mapping(bytes32 => bytes32) public submissionCommitments;
+    mapping(bytes32 => bool) public submissionRevealed;
+
     FeeConfig public feeConfig;
 
     /// @notice Pending fee config awaiting timelock expiry before execution
@@ -97,7 +101,8 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
         bytes32 indexed id, address indexed requester, uint256 reward, address rewardToken
     );
     event BountyClaimed(bytes32 indexed id, address indexed provider);
-    event BountySubmitted(bytes32 indexed id, bytes32 submissionHash);
+    event BountySubmitted(bytes32 indexed id, bytes32 commitment);
+    event WorkRevealed(bytes32 indexed id, bytes32 submissionHash);
     event BountyReviewStarted(bytes32 indexed id);
     event BountyRevisionRequested(bytes32 indexed id);
     event BountyAccepted(bytes32 indexed id);
@@ -143,6 +148,9 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
     error AlreadyCommitted(bytes32 bountyId);
     error NotCommitted(bytes32 bountyId);
     error InvalidReveal(bytes32 bountyId);
+    error AlreadyRevealed(bytes32 bountyId);
+    error SubmissionNotRevealed(bytes32 bountyId);
+    error NotSubmitter(bytes32 bountyId, address caller);
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
@@ -389,14 +397,16 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
 
     // ─── Submit Work ──────────────────────────────────────────────────────
 
-    /// @notice Provider submits work
-    function submitWork(bytes32 id, bytes32 submissionHash) external {
+    /// @notice Provider submits work as a commitment hash (keccak256 of artifactHash + salt)
+    /// @param commitment keccak256(abi.encodePacked(artifactHash, salt))
+    function submitWork(bytes32 id, bytes32 commitment) external {
         Bounty storage bounty = bounties[id];
         if (bounty.created == 0) revert BountyNotFound(id);
         if (bounty.state != BountyState.Claimed && bounty.state != BountyState.Revision) {
             revert InvalidState(id, bounty.state, BountyState.Claimed);
         }
         if (bounty.provider != msg.sender) revert NotProvider(id, msg.sender);
+        if (commitment == bytes32(0)) revert InvalidReveal(id);
 
         // If resubmitting after revision, check revision deadline first
         if (bounty.state == BountyState.Revision && revisionDeadlines[id] != 0) {
@@ -407,10 +417,29 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
             revert DeadlinePassed(bounty.workDeadline);
         }
 
-        bounty.submissionHash = submissionHash;
+        submissionCommitments[id] = commitment;
+        submissionRevealed[id] = false;
+        bounty.submissionHash = bytes32(0);
         bounty.state = BountyState.Submitted;
 
-        emit BountySubmitted(id, submissionHash);
+        emit BountySubmitted(id, commitment);
+    }
+
+    /// @notice Provider reveals actual artifact hash after review resolves
+    function revealWork(bytes32 id, bytes32 artifactHash, bytes32 salt) external {
+        Bounty storage bounty = bounties[id];
+        if (bounty.created == 0) revert BountyNotFound(id);
+        if (bounty.provider != msg.sender) revert NotProvider(id, msg.sender);
+        if (submissionRevealed[id]) revert AlreadyRevealed(id);
+        if (submissionCommitments[id] == bytes32(0)) revert NotCommitted(id);
+
+        bytes32 expected = keccak256(abi.encodePacked(artifactHash, salt));
+        if (expected != submissionCommitments[id]) revert InvalidReveal(id);
+
+        bounty.submissionHash = artifactHash;
+        submissionRevealed[id] = true;
+
+        emit WorkRevealed(id, artifactHash);
     }
 
     // ─── Accept Submission ────────────────────────────────────────────────
@@ -639,6 +668,9 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
         if (bounty.created == 0) revert BountyNotFound(id);
         if (bounty.state != BountyState.Accepted) {
             revert InvalidState(id, bounty.state, BountyState.Accepted);
+        }
+        if (!submissionRevealed[id] && submissionCommitments[id] != bytes32(0)) {
+            revert SubmissionNotRevealed(id);
         }
 
         bounty.state = BountyState.Paid;

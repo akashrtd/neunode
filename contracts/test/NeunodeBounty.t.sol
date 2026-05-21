@@ -19,6 +19,9 @@ contract NeunodeBountyTest is Test {
     uint256 constant CLAIM_DEADLINE_OFFSET = 3 days;
     uint256 constant WORK_DEADLINE_OFFSET = 10 days;
 
+    bytes32 constant ARTIFACT_HASH = keccak256("submission_data");
+    bytes32 constant SALT = keccak256("salt");
+
     uint256 claimDeadline;
     uint256 workDeadline;
 
@@ -39,6 +42,10 @@ contract NeunodeBountyTest is Test {
 
         vm.prank(requester);
         token.approve(address(bounty), type(uint256).max);
+    }
+
+    function _commitment() internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(ARTIFACT_HASH, SALT));
     }
 
     // ─── Create Bounty ────────────────────────────────────────────────────
@@ -124,22 +131,40 @@ contract NeunodeBountyTest is Test {
         bounty.claimBounty(BOUNTY_ID);
     }
 
-    // ─── Submit Work ──────────────────────────────────────────────────────
+    // ─── Submit Work (Commit-Reveal) ─────────────────────────────────────
 
-    function testSubmitWork() public {
+    function testSubmitWorkCommitment() public {
         vm.prank(requester);
         bounty.createBounty(BOUNTY_ID, REWARD, address(token), claimDeadline, workDeadline);
 
         vm.prank(provider);
         bounty.claimBounty(BOUNTY_ID);
 
-        bytes32 subHash = keccak256("submission_data");
+        bytes32 commitment = _commitment();
         vm.prank(provider);
-        bounty.submitWork(BOUNTY_ID, subHash);
+        bounty.submitWork(BOUNTY_ID, commitment);
 
         assertEq(
             uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Submitted)
         );
+        assertEq(bounty.submissionCommitments(BOUNTY_ID), commitment);
+        assertFalse(bounty.submissionRevealed(BOUNTY_ID));
+
+        // submissionHash should be empty until reveal
+        (,,,,,,,,,, bytes32 subHash,) = bounty.bounties(BOUNTY_ID);
+        assertEq(subHash, bytes32(0));
+    }
+
+    function testRevertSubmitZeroCommitment() public {
+        vm.prank(requester);
+        bounty.createBounty(BOUNTY_ID, REWARD, address(token), claimDeadline, workDeadline);
+
+        vm.prank(provider);
+        bounty.claimBounty(BOUNTY_ID);
+
+        vm.prank(provider);
+        vm.expectRevert(abi.encodeWithSelector(NeunodeBounty.InvalidReveal.selector, BOUNTY_ID));
+        bounty.submitWork(BOUNTY_ID, bytes32(0));
     }
 
     function testRevertSubmitNotProvider() public {
@@ -153,7 +178,7 @@ contract NeunodeBountyTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(NeunodeBounty.NotProvider.selector, BOUNTY_ID, attacker)
         );
-        bounty.submitWork(BOUNTY_ID, keccak256("fake"));
+        bounty.submitWork(BOUNTY_ID, _commitment());
     }
 
     function testRevertSubmitAfterWorkDeadline() public {
@@ -167,7 +192,87 @@ contract NeunodeBountyTest is Test {
 
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(NeunodeBounty.DeadlinePassed.selector, workDeadline));
-        bounty.submitWork(BOUNTY_ID, keccak256("late"));
+        bounty.submitWork(BOUNTY_ID, _commitment());
+    }
+
+    // ─── Reveal Work ─────────────────────────────────────────────────────
+
+    function testRevealWork() public {
+        _createClaimSubmit();
+
+        vm.prank(provider);
+        bounty.revealWork(BOUNTY_ID, ARTIFACT_HASH, SALT);
+
+        assertTrue(bounty.submissionRevealed(BOUNTY_ID));
+        (,,,,,,,,,, bytes32 subHash,) = bounty.bounties(BOUNTY_ID);
+        assertEq(subHash, ARTIFACT_HASH);
+    }
+
+    function testRevertRevealWrongSalt() public {
+        _createClaimSubmit();
+
+        vm.prank(provider);
+        vm.expectRevert(abi.encodeWithSelector(NeunodeBounty.InvalidReveal.selector, BOUNTY_ID));
+        bounty.revealWork(BOUNTY_ID, ARTIFACT_HASH, keccak256("wrong_salt"));
+    }
+
+    function testRevertRevealWrongArtifact() public {
+        _createClaimSubmit();
+
+        vm.prank(provider);
+        vm.expectRevert(abi.encodeWithSelector(NeunodeBounty.InvalidReveal.selector, BOUNTY_ID));
+        bounty.revealWork(BOUNTY_ID, keccak256("wrong_artifact"), SALT);
+    }
+
+    function testRevertRevealTwice() public {
+        _createClaimSubmit();
+
+        vm.prank(provider);
+        bounty.revealWork(BOUNTY_ID, ARTIFACT_HASH, SALT);
+
+        vm.prank(provider);
+        vm.expectRevert(abi.encodeWithSelector(NeunodeBounty.AlreadyRevealed.selector, BOUNTY_ID));
+        bounty.revealWork(BOUNTY_ID, ARTIFACT_HASH, SALT);
+    }
+
+    function testRevertRevealNotProvider() public {
+        _createClaimSubmit();
+
+        vm.prank(attacker);
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeBounty.NotProvider.selector, BOUNTY_ID, attacker)
+        );
+        bounty.revealWork(BOUNTY_ID, ARTIFACT_HASH, SALT);
+    }
+
+    // ─── Payment blocked until reveal ────────────────────────────────────
+
+    function testRevertPayBeforeReveal() public {
+        _createClaimSubmit();
+
+        vm.prank(requester);
+        bounty.acceptSubmission(BOUNTY_ID);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeBounty.SubmissionNotRevealed.selector, BOUNTY_ID)
+        );
+        bounty.payBounty(BOUNTY_ID);
+    }
+
+    function testPayAfterReveal() public {
+        _createClaimSubmit();
+
+        vm.prank(provider);
+        bounty.revealWork(BOUNTY_ID, ARTIFACT_HASH, SALT);
+
+        vm.prank(requester);
+        bounty.acceptSubmission(BOUNTY_ID);
+
+        uint256 providerBalBefore = token.balanceOf(provider);
+        bounty.payBounty(BOUNTY_ID);
+
+        assertEq(uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Paid));
+        assertEq(token.balanceOf(provider) - providerBalBefore, REWARD);
     }
 
     // ─── Accept Submission ────────────────────────────────────────────────
@@ -293,12 +398,15 @@ contract NeunodeBountyTest is Test {
         vm.prank(requester);
         bounty.requestRevision(BOUNTY_ID);
 
+        bytes32 newCommitment =
+            keccak256(abi.encodePacked(keccak256("revised"), keccak256("salt2")));
         vm.prank(provider);
-        bounty.submitWork(BOUNTY_ID, keccak256("revised_submission"));
+        bounty.submitWork(BOUNTY_ID, newCommitment);
 
         assertEq(
             uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Submitted)
         );
+        assertEq(bounty.submissionCommitments(BOUNTY_ID), newCommitment);
     }
 
     function testRevertMaxRevisions() public {
@@ -308,8 +416,11 @@ contract NeunodeBountyTest is Test {
             vm.prank(requester);
             bounty.requestRevision(BOUNTY_ID);
 
+            bytes32 c = keccak256(
+                abi.encodePacked(keccak256(abi.encode("rev", i)), keccak256(abi.encode("salt", i)))
+            );
             vm.prank(provider);
-            bounty.submitWork(BOUNTY_ID, keccak256(abi.encode("revision", i)));
+            bounty.submitWork(BOUNTY_ID, c);
         }
 
         // 4th revision should fail
@@ -321,10 +432,7 @@ contract NeunodeBountyTest is Test {
     // ─── Pay Bounty ───────────────────────────────────────────────────────
 
     function testPayBounty() public {
-        _createClaimSubmit();
-
-        vm.prank(requester);
-        bounty.acceptSubmission(BOUNTY_ID);
+        _createClaimSubmitRevealAccept();
 
         uint256 providerBalBefore = token.balanceOf(provider);
 
@@ -379,9 +487,9 @@ contract NeunodeBountyTest is Test {
         bounty.claimBounty(BOUNTY_ID);
         assertEq(uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Claimed));
 
-        // Submit
+        // Submit (commitment only — artifact hidden from reviewers)
         vm.prank(provider);
-        bounty.submitWork(BOUNTY_ID, keccak256("final_work"));
+        bounty.submitWork(BOUNTY_ID, _commitment());
         assertEq(
             uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Submitted)
         );
@@ -390,6 +498,10 @@ contract NeunodeBountyTest is Test {
         vm.prank(requester);
         bounty.acceptSubmission(BOUNTY_ID);
         assertEq(uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Accepted));
+
+        // Reveal (provider exposes artifact after acceptance)
+        vm.prank(provider);
+        bounty.revealWork(BOUNTY_ID, ARTIFACT_HASH, SALT);
 
         // Pay
         bounty.payBounty(BOUNTY_ID);
@@ -409,6 +521,16 @@ contract NeunodeBountyTest is Test {
         bounty.claimBounty(BOUNTY_ID);
 
         vm.prank(provider);
-        bounty.submitWork(BOUNTY_ID, keccak256("test_submission"));
+        bounty.submitWork(BOUNTY_ID, _commitment());
+    }
+
+    function _createClaimSubmitRevealAccept() internal {
+        _createClaimSubmit();
+
+        vm.prank(provider);
+        bounty.revealWork(BOUNTY_ID, ARTIFACT_HASH, SALT);
+
+        vm.prank(requester);
+        bounty.acceptSubmission(BOUNTY_ID);
     }
 }

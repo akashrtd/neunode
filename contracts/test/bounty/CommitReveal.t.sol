@@ -108,13 +108,20 @@ contract CommitRevealTest is Test {
         vm.prank(provider);
         bounty.revealClaim(BOUNTY_ID, 0, NONCE);
 
-        // Submit work
+        // Submit work (commit-reveal for artifact)
+        bytes32 artifactHash = keccak256("final_work");
+        bytes32 salt = keccak256("work_salt");
+        bytes32 workCommitment = keccak256(abi.encodePacked(artifactHash, salt));
         vm.prank(provider);
-        bounty.submitWork(BOUNTY_ID, keccak256("final_work"));
+        bounty.submitWork(BOUNTY_ID, workCommitment);
 
         // Accept
         vm.prank(requester);
         bounty.acceptSubmission(BOUNTY_ID);
+
+        // Reveal work
+        vm.prank(provider);
+        bounty.revealWork(BOUNTY_ID, artifactHash, salt);
 
         // Pay
         uint256 providerBalBefore = token.balanceOf(provider);

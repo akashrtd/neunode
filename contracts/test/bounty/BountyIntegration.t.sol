@@ -302,6 +302,9 @@ contract BountyIntegrationTest is Test {
         bounty.processReviewResult(BOUNTY_ID);
         assertEq(uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Accepted));
 
+        vm.prank(provider);
+        bounty.revealWork(BOUNTY_ID, keccak256("test_submission"), keccak256("submission_salt"));
+
         uint256 providerBalBefore = token.balanceOf(provider);
         bounty.payBounty(BOUNTY_ID);
 
@@ -333,8 +336,7 @@ contract BountyIntegrationTest is Test {
         _createBountyWithDeadlines();
         _claimAndSubmit();
 
-        vm.prank(requester);
-        bounty.acceptSubmission(BOUNTY_ID);
+        _revealAndAccept();
 
         uint256 providerBalBefore = token.balanceOf(provider);
         uint256 adminBalBefore = token.balanceOf(admin);
@@ -352,8 +354,7 @@ contract BountyIntegrationTest is Test {
         _createBountyWithDeadlines();
         _claimAndSubmit();
 
-        vm.prank(requester);
-        bounty.acceptSubmission(BOUNTY_ID);
+        _revealAndAccept();
 
         bounty.payBountyWithFees(BOUNTY_ID);
 
@@ -398,7 +399,12 @@ contract BountyIntegrationTest is Test {
             bounty.claimBounty(bountyId);
 
             vm.prank(provider);
-            bounty.submitWork(bountyId, keccak256("work"));
+            bounty.submitWork(
+                bountyId, keccak256(abi.encodePacked(keccak256("work"), keccak256("salt")))
+            );
+
+            vm.prank(provider);
+            bounty.revealWork(bountyId, keccak256("work"), keccak256("salt"));
 
             vm.prank(requester);
             bounty.acceptSubmission(bountyId);
@@ -440,7 +446,9 @@ contract BountyIntegrationTest is Test {
 
         // Cannot execute before timelock expires
         vm.expectRevert(
-            abi.encodeWithSelector(NeunodeBounty.FeeChangeTimelockNotExpired.selector, block.timestamp + 24 hours)
+            abi.encodeWithSelector(
+                NeunodeBounty.FeeChangeTimelockNotExpired.selector, block.timestamp + 24 hours
+            )
         );
         bounty.executeFeeConfig();
 
@@ -484,7 +492,12 @@ contract BountyIntegrationTest is Test {
         bounty.claimBountyWithBond(BOUNTY_ID, BOND);
 
         vm.prank(provider);
-        bounty.submitWork(BOUNTY_ID, keccak256("work"));
+        bounty.submitWork(
+            BOUNTY_ID, keccak256(abi.encodePacked(keccak256("work"), keccak256("salt")))
+        );
+
+        vm.prank(provider);
+        bounty.revealWork(BOUNTY_ID, keccak256("work"), keccak256("salt"));
 
         vm.prank(requester);
         bounty.acceptSubmission(BOUNTY_ID);
@@ -502,7 +515,9 @@ contract BountyIntegrationTest is Test {
         bounty.claimBountyWithBond(BOUNTY_ID, BOND);
 
         vm.prank(provider);
-        bounty.submitWork(BOUNTY_ID, keccak256("work"));
+        bounty.submitWork(
+            BOUNTY_ID, keccak256(abi.encodePacked(keccak256("work"), keccak256("salt")))
+        );
 
         uint256 providerBalBefore = token.balanceOf(provider);
         uint256 requesterBalBefore = token.balanceOf(requester);
@@ -571,7 +586,9 @@ contract BountyIntegrationTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(NeunodeBounty.DeadlinePassed.selector, revisionDeadline)
         );
-        bounty.submitWork(BOUNTY_ID, keccak256("late_revision"));
+        bounty.submitWork(
+            BOUNTY_ID, keccak256(abi.encodePacked(keccak256("late_revision"), keccak256("salt")))
+        );
     }
 
     function testDisputeDeadlineEnforcement() public {
@@ -791,8 +808,18 @@ contract BountyIntegrationTest is Test {
         vm.prank(provider);
         bounty.claimBounty(BOUNTY_ID);
 
+        bytes32 artifactHash = keccak256("test_submission");
+        bytes32 salt = keccak256("submission_salt");
         vm.prank(provider);
-        bounty.submitWork(BOUNTY_ID, keccak256("test_submission"));
+        bounty.submitWork(BOUNTY_ID, keccak256(abi.encodePacked(artifactHash, salt)));
+    }
+
+    function _revealAndAccept() internal {
+        vm.prank(provider);
+        bounty.revealWork(BOUNTY_ID, keccak256("test_submission"), keccak256("submission_salt"));
+
+        vm.prank(requester);
+        bounty.acceptSubmission(BOUNTY_ID);
     }
 
     // ─── Fee Config Timelock Tests ──────────────────────────────────────────
