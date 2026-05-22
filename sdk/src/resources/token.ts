@@ -80,19 +80,34 @@ export interface TokenResource {
 }
 
 export function createTokenResource(client: NeunodeClient): TokenResource {
-	const cli = client.cli;
-	if (!cli) throw new Error("CLI transport required for token operations");
-
 	return {
 		async balance(
 			token?: string,
 		): Promise<TokenBalanceResult | TokenAllBalancesResult> {
+			if (client.http) {
+				const qs = new URLSearchParams();
+				if (token) qs.set("token", token);
+				const query = qs.toString();
+				return client.http.get<TokenBalanceResult | TokenAllBalancesResult>(
+					query ? `/api/v1/tokens/balance?${query}` : "/api/v1/tokens/balance",
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for token operations");
 			const args = ["token", "balance"];
 			if (token) args.push("--token", token);
 			return cli.execute<TokenBalanceResult | TokenAllBalancesResult>(args);
 		},
 
 		async transfer(params: TokenTransferParams): Promise<TokenTransferResult> {
+			if (client.http) {
+				return client.http.post<TokenTransferResult>(
+					"/api/v1/tokens/transfer",
+					params,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for token operations");
 			return cli.execute<TokenTransferResult>([
 				"token",
 				"transfer",
@@ -106,6 +121,14 @@ export function createTokenResource(client: NeunodeClient): TokenResource {
 		},
 
 		async stake(params: TokenStakeParams): Promise<TokenStakeResult> {
+			if (client.http) {
+				return client.http.post<TokenStakeResult>(
+					"/api/v1/tokens/stake",
+					params,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for token operations");
 			return cli.execute<TokenStakeResult>([
 				"token",
 				"stake",
@@ -117,6 +140,14 @@ export function createTokenResource(client: NeunodeClient): TokenResource {
 		},
 
 		async unstake(amount: number): Promise<TokenUnstakeResult> {
+			if (client.http) {
+				return client.http.post<TokenUnstakeResult>(
+					"/api/v1/tokens/unstake",
+					{ amount },
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for token operations");
 			return cli.execute<TokenUnstakeResult>([
 				"token",
 				"unstake",
@@ -126,10 +157,24 @@ export function createTokenResource(client: NeunodeClient): TokenResource {
 		},
 
 		async stakeStatus(): Promise<TokenStakeStatusResult> {
+			if (client.http) {
+				return client.http.get<TokenStakeStatusResult>(
+					"/api/v1/tokens/stake-status",
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for token operations");
 			return cli.execute<TokenStakeStatusResult>(["token", "stake-status"]);
 		},
 
 		async decayInfo(): Promise<TokenDecayInfoResult> {
+			if (client.http) {
+				return client.http.get<TokenDecayInfoResult>(
+					"/api/v1/tokens/decay-info",
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for token operations");
 			return cli.execute<TokenDecayInfoResult>(["token", "decay-info"]);
 		},
 	};

@@ -54,17 +54,31 @@ export interface ModelResource {
 }
 
 export function createModelResource(client: NeunodeClient): ModelResource {
-	const cli = client.cli;
-	if (!cli) throw new Error("CLI transport required for model operations");
-
 	return {
 		async list(provider?: string): Promise<ModelListResult> {
+			if (client.http) {
+				const qs = new URLSearchParams();
+				if (provider) qs.set("provider", provider);
+				const query = qs.toString();
+				return client.http.get<ModelListResult>(
+					query ? `/api/v1/models?${query}` : "/api/v1/models",
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for model operations");
 			const args = ["model", "list"];
 			if (provider) args.push("--provider", provider);
 			return cli.execute<ModelListResult>(args);
 		},
 
 		async show(modelId: string): Promise<ModelShowResult> {
+			if (client.http) {
+				return client.http.get<ModelShowResult>(
+					`/api/v1/models/${encodeURIComponent(modelId)}`,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for model operations");
 			return cli.execute<ModelShowResult>([
 				"model",
 				"show",
@@ -74,6 +88,11 @@ export function createModelResource(client: NeunodeClient): ModelResource {
 		},
 
 		async push(params: ModelPushParams): Promise<ModelPushResult> {
+			if (client.http) {
+				return client.http.post<ModelPushResult>("/api/v1/models", params);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for model operations");
 			return cli.execute<ModelPushResult>([
 				"model",
 				"push",
@@ -85,6 +104,13 @@ export function createModelResource(client: NeunodeClient): ModelResource {
 		},
 
 		async rm(modelId: string): Promise<ModelRmResult> {
+			if (client.http) {
+				return client.http.delete<ModelRmResult>(
+					`/api/v1/models/${encodeURIComponent(modelId)}`,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for model operations");
 			return cli.execute<ModelRmResult>(["model", "rm", "--model-id", modelId]);
 		},
 	};

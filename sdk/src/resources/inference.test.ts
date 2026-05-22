@@ -1,17 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NeunodeClient } from "../client/client.js";
 import type { CliTransport } from "../transport/cli-transport.js";
+import type { HttpTransport } from "../transport/http-transport.js";
 import { createInferenceResource } from "./inference.js";
 
-function makeMockClient(): NeunodeClient {
+function makeMockClient(
+	opts: { withHttp?: boolean; withCli?: boolean } = {},
+): NeunodeClient {
 	const execute = vi.fn();
 	const transport = {
 		execute,
 		executeMulti: vi.fn(),
 		executeRaw: vi.fn(),
 	} as unknown as CliTransport;
+
+	const httpGet = vi.fn();
+	const httpPost = vi.fn();
+	const httpTransport = {
+		get: httpGet,
+		post: httpPost,
+		put: vi.fn(),
+		delete: vi.fn(),
+	} as unknown as HttpTransport;
+
 	return {
-		cli: transport,
+		cli: opts.withHttp && !opts.withCli ? undefined : transport,
+		http: opts.withHttp ? httpTransport : undefined,
 		viem: undefined,
 		transportMode: "cli",
 		identity: {} as never,
@@ -40,14 +54,34 @@ describe("createInferenceResource", () => {
 		execute = mockClient.cli?.execute as ReturnType<typeof vi.fn>;
 	});
 
-	it("should throw if cli transport is missing", () => {
-		expect(() =>
-			createInferenceResource({ ...mockClient, cli: undefined }),
-		).toThrow("CLI transport required");
+	it("should throw if both transports are missing", async () => {
+		const resource = createInferenceResource({ ...mockClient, cli: undefined, http: undefined });
+		await expect(resource.listModels()).rejects.toThrow("HTTP or CLI transport required");
 	});
 
 	describe("request", () => {
-		it("should call execute with inference request (required params)", async () => {
+		it("should use HTTP transport when available", async () => {
+			const expected = { model: "llama-3b", status: "routed" };
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				post: ReturnType<typeof vi.fn>;
+			};
+			http.post.mockResolvedValue(expected);
+			const resource = createInferenceResource(dualClient);
+			const result = await resource.request({
+				model: "llama-3b",
+				prompt: "hello",
+				maxTokens: 512,
+			});
+			expect(http.post).toHaveBeenCalledWith("/api/v1/inference/request", {
+				model: "llama-3b",
+				prompt: "hello",
+				maxTokens: 512,
+			});
+			expect(result).toEqual(expected);
+		});
+
+		it("should call execute with inference request (required params) via CLI", async () => {
 			execute.mockResolvedValue({ model: "llama-3b", status: "routed" });
 			const resource = createInferenceResource(mockClient);
 			await resource.request({
@@ -67,7 +101,7 @@ describe("createInferenceResource", () => {
 			]);
 		});
 
-		it("should pass --temperature when provided", async () => {
+		it("should pass --temperature when provided via CLI", async () => {
 			execute.mockResolvedValue({ model: "llama-3b", status: "routed" });
 			const resource = createInferenceResource(mockClient);
 			await resource.request({
@@ -120,14 +154,25 @@ describe("createInferenceResource", () => {
 	});
 
 	describe("listModels", () => {
-		it("should call execute with inference list-models (no provider)", async () => {
+		it("should use HTTP transport", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				get: ReturnType<typeof vi.fn>;
+			};
+			http.get.mockResolvedValue({ data: [] });
+			const resource = createInferenceResource(dualClient);
+			await resource.listModels("provider-abc");
+			expect(http.get).toHaveBeenCalledWith("/api/v1/inference/models?provider=provider-abc");
+		});
+
+		it("should call execute with inference list-models (no provider) via CLI", async () => {
 			execute.mockResolvedValue({ data: [] });
 			const resource = createInferenceResource(mockClient);
 			await resource.listModels();
 			expect(execute).toHaveBeenCalledWith(["inference", "list-models"]);
 		});
 
-		it("should pass --provider when provided", async () => {
+		it("should pass --provider when provided via CLI", async () => {
 			execute.mockResolvedValue({ data: [] });
 			const resource = createInferenceResource(mockClient);
 			await resource.listModels("provider-abc");
@@ -141,14 +186,25 @@ describe("createInferenceResource", () => {
 	});
 
 	describe("providers", () => {
-		it("should call execute with inference providers (no model)", async () => {
+		it("should use HTTP transport", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				get: ReturnType<typeof vi.fn>;
+			};
+			http.get.mockResolvedValue({ data: [] });
+			const resource = createInferenceResource(dualClient);
+			await resource.providers("llama-3b");
+			expect(http.get).toHaveBeenCalledWith("/api/v1/inference/providers?model=llama-3b");
+		});
+
+		it("should call execute with inference providers (no model) via CLI", async () => {
 			execute.mockResolvedValue({ data: [] });
 			const resource = createInferenceResource(mockClient);
 			await resource.providers();
 			expect(execute).toHaveBeenCalledWith(["inference", "providers"]);
 		});
 
-		it("should pass --model when provided", async () => {
+		it("should pass --model when provided via CLI", async () => {
 			execute.mockResolvedValue({ data: [] });
 			const resource = createInferenceResource(mockClient);
 			await resource.providers("llama-3b");
@@ -162,7 +218,20 @@ describe("createInferenceResource", () => {
 	});
 
 	describe("route", () => {
-		it("should default strategy to 'cheapest'", async () => {
+		it("should use HTTP transport", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				get: ReturnType<typeof vi.fn>;
+			};
+			http.get.mockResolvedValue({ model: "llama-3b", strategy: "cheapest" });
+			const resource = createInferenceResource(dualClient);
+			await resource.route("llama-3b", "Fastest");
+			expect(http.get).toHaveBeenCalledWith(
+				"/api/v1/inference/route?model=llama-3b&strategy=Fastest",
+			);
+		});
+
+		it("should default strategy to 'cheapest' via CLI", async () => {
 			execute.mockResolvedValue({ model: "llama-3b", strategy: "cheapest" });
 			const resource = createInferenceResource(mockClient);
 			await resource.route("llama-3b");
@@ -176,7 +245,7 @@ describe("createInferenceResource", () => {
 			]);
 		});
 
-		it("should use provided strategy", async () => {
+		it("should use provided strategy via CLI", async () => {
 			execute.mockResolvedValue({ model: "llama-3b", strategy: "Fastest" });
 			const resource = createInferenceResource(mockClient);
 			await resource.route("llama-3b", "Fastest");
@@ -192,7 +261,20 @@ describe("createInferenceResource", () => {
 	});
 
 	describe("pricing", () => {
-		it("should call execute with inference pricing --model --input-tokens --output-tokens", async () => {
+		it("should use HTTP transport", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				get: ReturnType<typeof vi.fn>;
+			};
+			http.get.mockResolvedValue({ model: "llama-3b", total_cost: 0.5 });
+			const resource = createInferenceResource(dualClient);
+			await resource.pricing("llama-3b", 1000, 500);
+			expect(http.get).toHaveBeenCalledWith(
+				"/api/v1/inference/pricing?model=llama-3b&inputTokens=1000&outputTokens=500",
+			);
+		});
+
+		it("should call execute with inference pricing --model --input-tokens --output-tokens via CLI", async () => {
 			execute.mockResolvedValue({ model: "llama-3b", total_cost: 0.5 });
 			const resource = createInferenceResource(mockClient);
 			await resource.pricing("llama-3b", 1000, 500);

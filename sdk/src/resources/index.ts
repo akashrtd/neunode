@@ -37,6 +37,7 @@ export type {
 	FeedPostResult,
 	FeedResource,
 	FeedShowResult,
+	FeedStreamEvent,
 	FeedSubscribeResult,
 } from "./feed.js";
 export { createFeedResource } from "./feed.js";

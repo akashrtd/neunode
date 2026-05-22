@@ -96,13 +96,29 @@ export interface DiscoveryResource {
 export function createDiscoveryResource(
 	client: NeunodeClient,
 ): DiscoveryResource {
-	const cli = client.cli;
-	if (!cli) throw new Error("CLI transport required for discovery operations");
-
 	return {
 		async search(
 			params: DiscoverySearchParams,
 		): Promise<DiscoverySearchResult> {
+			if (client.http) {
+				const qs = new URLSearchParams();
+				qs.set("capabilities", params.capabilities);
+				if (params.minReputation !== undefined && params.minReputation > 0) {
+					qs.set("minReputation", String(params.minReputation));
+				}
+				if (params.maxCost !== undefined) {
+					qs.set("maxCost", String(params.maxCost));
+				}
+				if (params.onlineOnly) qs.set("onlineOnly", "true");
+				if (params.limit !== undefined) {
+					qs.set("limit", String(params.limit));
+				}
+				return client.http.get<DiscoverySearchResult>(
+					`/api/v1/discovery/search?${qs.toString()}`,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for discovery operations");
 			const args = [
 				"discover",
 				"search",
@@ -125,6 +141,18 @@ export function createDiscoveryResource(
 		async complement(
 			params: DiscoveryComplementParams,
 		): Promise<DiscoveryComplementResult> {
+			if (client.http) {
+				const qs = new URLSearchParams();
+				qs.set("capabilities", params.capabilities);
+				if (params.limit !== undefined) {
+					qs.set("limit", String(params.limit));
+				}
+				return client.http.get<DiscoveryComplementResult>(
+					`/api/v1/discovery/complement?${qs.toString()}`,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for discovery operations");
 			const args = [
 				"discover",
 				"complement",
@@ -138,10 +166,25 @@ export function createDiscoveryResource(
 		},
 
 		async gaps(): Promise<DiscoveryGapsResult> {
+			if (client.http) {
+				return client.http.get<DiscoveryGapsResult>("/api/v1/discovery/gaps");
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for discovery operations");
 			return cli.execute<DiscoveryGapsResult>(["discover", "gaps"]);
 		},
 
 		async score(params: DiscoveryScoreParams): Promise<DiscoveryScoreResult> {
+			if (client.http) {
+				const qs = new URLSearchParams();
+				qs.set("agent", params.agent);
+				qs.set("capabilities", params.capabilities);
+				return client.http.get<DiscoveryScoreResult>(
+					`/api/v1/discovery/score?${qs.toString()}`,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for discovery operations");
 			const args = [
 				"discover",
 				"score",
@@ -154,6 +197,13 @@ export function createDiscoveryResource(
 		},
 
 		async weights(): Promise<DiscoveryWeightsResult> {
+			if (client.http) {
+				return client.http.get<DiscoveryWeightsResult>(
+					"/api/v1/discovery/weights",
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for discovery operations");
 			return cli.execute<DiscoveryWeightsResult>(["discover", "weights"]);
 		},
 	};

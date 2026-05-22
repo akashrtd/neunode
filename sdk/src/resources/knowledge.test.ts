@@ -1,17 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NeunodeClient } from "../client/client.js";
 import type { CliTransport } from "../transport/cli-transport.js";
+import type { HttpTransport } from "../transport/http-transport.js";
 import { createKnowledgeResource } from "./knowledge.js";
 
-function makeMockClient(): NeunodeClient {
+function makeMockClient(
+	opts: { withHttp?: boolean; withCli?: boolean } = {},
+): NeunodeClient {
 	const execute = vi.fn();
 	const transport = {
 		execute,
 		executeMulti: vi.fn(),
 		executeRaw: vi.fn(),
 	} as unknown as CliTransport;
+
+	const httpGet = vi.fn();
+	const httpPost = vi.fn();
+	const httpTransport = {
+		get: httpGet,
+		post: httpPost,
+		put: vi.fn(),
+		delete: vi.fn(),
+	} as unknown as HttpTransport;
+
 	return {
-		cli: transport,
+		cli: opts.withHttp && !opts.withCli ? undefined : transport,
+		http: opts.withHttp ? httpTransport : undefined,
 		viem: undefined,
 		transportMode: "cli",
 		identity: {} as never,
@@ -40,21 +54,35 @@ describe("createKnowledgeResource", () => {
 		execute = mockClient.cli?.execute as ReturnType<typeof vi.fn>;
 	});
 
-	it("should throw if cli transport is missing", () => {
-		expect(() =>
-			createKnowledgeResource({ ...mockClient, cli: undefined }),
-		).toThrow("CLI transport required");
+	it("should throw if both transports are missing", async () => {
+		const resource = createKnowledgeResource({ ...mockClient, cli: undefined, http: undefined });
+		await expect(resource.listClasses()).rejects.toThrow("HTTP or CLI transport required");
 	});
 
 	describe("query", () => {
-		it("should call execute with knowledge query (no params)", async () => {
+		it("should use HTTP transport with query params", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				get: ReturnType<typeof vi.fn>;
+			};
+			http.get.mockResolvedValue({ data: [] });
+			const resource = createKnowledgeResource(dualClient);
+			await resource.query({ subject: "did:neunode:abc", limit: 10 });
+			expect(http.get).toHaveBeenCalled();
+			const callUrl = http.get.mock.calls[0]?.[0] as string;
+			expect(callUrl).toContain("/api/v1/knowledge/query?");
+			expect(callUrl).toContain("subject=did%3Aneunode%3Aabc");
+			expect(callUrl).toContain("limit=10");
+		});
+
+		it("should call execute with knowledge query (no params) via CLI", async () => {
 			execute.mockResolvedValue({ data: [] });
 			const resource = createKnowledgeResource(mockClient);
 			await resource.query();
 			expect(execute).toHaveBeenCalledWith(["knowledge", "query"]);
 		});
 
-		it("should pass all filter params when provided", async () => {
+		it("should pass all filter params when provided via CLI", async () => {
 			execute.mockResolvedValue({ data: [] });
 			const resource = createKnowledgeResource(mockClient);
 			await resource.query({
@@ -82,7 +110,21 @@ describe("createKnowledgeResource", () => {
 	});
 
 	describe("registerAgent", () => {
-		it("should call execute with knowledge register-agent args", async () => {
+		it("should use HTTP transport", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				post: ReturnType<typeof vi.fn>;
+			};
+			http.post.mockResolvedValue({ did: "did:neunode:test", triples_inserted: 3 });
+			const resource = createKnowledgeResource(dualClient);
+			await resource.registerAgent({ did: "did:neunode:test", capabilities: "NLP,Vision" });
+			expect(http.post).toHaveBeenCalledWith("/api/v1/knowledge/register-agent", {
+				did: "did:neunode:test",
+				capabilities: "NLP,Vision",
+			});
+		});
+
+		it("should call execute with knowledge register-agent args via CLI", async () => {
 			execute.mockResolvedValue({
 				did: "did:neunode:test",
 				capabilities: ["NLP", "Vision"],
@@ -105,7 +147,21 @@ describe("createKnowledgeResource", () => {
 	});
 
 	describe("registerModel", () => {
-		it("should call execute with knowledge register-model args", async () => {
+		it("should use HTTP transport", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				post: ReturnType<typeof vi.fn>;
+			};
+			http.post.mockResolvedValue({ owner: "did:neunode:dev", cid: "ipfs://QmModel" });
+			const resource = createKnowledgeResource(dualClient);
+			await resource.registerModel({ did: "did:neunode:dev", cid: "ipfs://QmModel" });
+			expect(http.post).toHaveBeenCalledWith("/api/v1/knowledge/register-model", {
+				did: "did:neunode:dev",
+				cid: "ipfs://QmModel",
+			});
+		});
+
+		it("should call execute with knowledge register-model args via CLI", async () => {
 			execute.mockResolvedValue({
 				owner: "did:neunode:dev",
 				cid: "ipfs://QmModel",
@@ -126,7 +182,7 @@ describe("createKnowledgeResource", () => {
 			]);
 		});
 
-		it("should pass --parent when provided", async () => {
+		it("should pass --parent when provided via CLI", async () => {
 			execute.mockResolvedValue({
 				owner: "did:neunode:dev",
 				cid: "ipfs://QmChild",
@@ -153,7 +209,21 @@ describe("createKnowledgeResource", () => {
 	});
 
 	describe("registerBounty", () => {
-		it("should call execute with knowledge register-bounty args", async () => {
+		it("should use HTTP transport", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				post: ReturnType<typeof vi.fn>;
+			};
+			http.post.mockResolvedValue({ id: "bounty:42", triples_inserted: 3 });
+			const resource = createKnowledgeResource(dualClient);
+			await resource.registerBounty({ id: "bounty:42", capabilities: "NLP,RLHF" });
+			expect(http.post).toHaveBeenCalledWith("/api/v1/knowledge/register-bounty", {
+				id: "bounty:42",
+				capabilities: "NLP,RLHF",
+			});
+		});
+
+		it("should call execute with knowledge register-bounty args via CLI", async () => {
 			execute.mockResolvedValue({
 				id: "bounty:42",
 				required_capabilities: ["NLP", "RLHF"],
@@ -176,7 +246,21 @@ describe("createKnowledgeResource", () => {
 	});
 
 	describe("joinJob", () => {
-		it("should call execute with knowledge join-job args", async () => {
+		it("should use HTTP transport", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				post: ReturnType<typeof vi.fn>;
+			};
+			http.post.mockResolvedValue({ agent: "did:neunode:worker", job: "job:101", triples_inserted: 1 });
+			const resource = createKnowledgeResource(dualClient);
+			await resource.joinJob({ did: "did:neunode:worker", jobId: "job:101" });
+			expect(http.post).toHaveBeenCalledWith("/api/v1/knowledge/join-job", {
+				did: "did:neunode:worker",
+				jobId: "job:101",
+			});
+		});
+
+		it("should call execute with knowledge join-job args via CLI", async () => {
 			execute.mockResolvedValue({
 				agent: "did:neunode:worker",
 				job: "job:101",
@@ -199,7 +283,18 @@ describe("createKnowledgeResource", () => {
 	});
 
 	describe("listClasses", () => {
-		it("should call execute with knowledge list-classes", async () => {
+		it("should use HTTP transport", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				get: ReturnType<typeof vi.fn>;
+			};
+			http.get.mockResolvedValue({ data: [] });
+			const resource = createKnowledgeResource(dualClient);
+			await resource.listClasses();
+			expect(http.get).toHaveBeenCalledWith("/api/v1/knowledge/classes");
+		});
+
+		it("should call execute with knowledge list-classes via CLI", async () => {
 			execute.mockResolvedValue({ data: [] });
 			const resource = createKnowledgeResource(mockClient);
 			await resource.listClasses();
@@ -208,7 +303,18 @@ describe("createKnowledgeResource", () => {
 	});
 
 	describe("listPredicates", () => {
-		it("should call execute with knowledge list-predicates", async () => {
+		it("should use HTTP transport", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				get: ReturnType<typeof vi.fn>;
+			};
+			http.get.mockResolvedValue({ data: [] });
+			const resource = createKnowledgeResource(dualClient);
+			await resource.listPredicates();
+			expect(http.get).toHaveBeenCalledWith("/api/v1/knowledge/predicates");
+		});
+
+		it("should call execute with knowledge list-predicates via CLI", async () => {
 			execute.mockResolvedValue({ data: [] });
 			const resource = createKnowledgeResource(mockClient);
 			await resource.listPredicates();

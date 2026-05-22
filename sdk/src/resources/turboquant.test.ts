@@ -1,17 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NeunodeClient } from "../client/client.js";
 import type { CliTransport } from "../transport/cli-transport.js";
+import type { HttpTransport } from "../transport/http-transport.js";
 import { createTurboquantResource } from "./turboquant.js";
 
-function makeMockClient(): NeunodeClient {
+function makeMockClient(
+	opts: { withHttp?: boolean; withCli?: boolean } = {},
+): NeunodeClient {
 	const execute = vi.fn();
 	const transport = {
 		execute,
 		executeMulti: vi.fn(),
 		executeRaw: vi.fn(),
 	} as unknown as CliTransport;
+
+	const httpGet = vi.fn();
+	const httpPost = vi.fn();
+	const httpTransport = {
+		get: httpGet,
+		post: httpPost,
+		put: vi.fn(),
+		delete: vi.fn(),
+	} as unknown as HttpTransport;
+
 	return {
-		cli: transport,
+		cli: opts.withHttp && !opts.withCli ? undefined : transport,
+		http: opts.withHttp ? httpTransport : undefined,
 		viem: undefined,
 		transportMode: "cli",
 		identity: {} as never,
@@ -40,14 +54,34 @@ describe("createTurboquantResource", () => {
 		execute = mockClient.cli?.execute as ReturnType<typeof vi.fn>;
 	});
 
-	it("should throw if cli transport is missing", () => {
-		expect(() =>
-			createTurboquantResource({ ...mockClient, cli: undefined }),
-		).toThrow("CLI transport required");
+	it("should throw if both transports are missing", async () => {
+		const resource = createTurboquantResource({ ...mockClient, cli: undefined, http: undefined });
+		await expect(resource.compress({ model: "test", strategy: "adaptive" } as any)).rejects.toThrow("HTTP or CLI transport required");
 	});
 
 	describe("compress", () => {
-		it("should call execute with gradient profile", async () => {
+		it("should use HTTP transport when available", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				post: ReturnType<typeof vi.fn>;
+			};
+			http.post.mockResolvedValue({ strategy: "int8" });
+			const resource = createTurboquantResource(dualClient);
+			await resource.compress({
+				profile: "gradient",
+				dimension: 4096,
+				workers: 4,
+				bandwidthMbps: 100,
+			});
+			expect(http.post).toHaveBeenCalledWith("/api/v1/turboquant/compress", {
+				profile: "gradient",
+				dimension: 4096,
+				workers: 4,
+				bandwidthMbps: 100,
+			});
+		});
+
+		it("should call execute with gradient profile via CLI", async () => {
 			execute.mockResolvedValue({ strategy: "int8" });
 			const resource = createTurboquantResource(mockClient);
 			await resource.compress({
@@ -70,7 +104,7 @@ describe("createTurboquantResource", () => {
 			]);
 		});
 
-		it("should call execute with kv_cache profile", async () => {
+		it("should call execute with kv_cache profile via CLI", async () => {
 			execute.mockResolvedValue({ strategy: "mse", bits: 3.5 });
 			const resource = createTurboquantResource(mockClient);
 			await resource.compress({
@@ -90,7 +124,7 @@ describe("createTurboquantResource", () => {
 			]);
 		});
 
-		it("should call execute with custom profile", async () => {
+		it("should call execute with custom profile via CLI", async () => {
 			execute.mockResolvedValue({ strategy: "mse", bits: 5 });
 			const resource = createTurboquantResource(mockClient);
 			await resource.compress({
@@ -112,7 +146,21 @@ describe("createTurboquantResource", () => {
 	});
 
 	describe("generateCodebook", () => {
-		it("should call execute with required params", async () => {
+		it("should use HTTP transport when available", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				post: ReturnType<typeof vi.fn>;
+			};
+			http.post.mockResolvedValue({ bits: 4, levels: [0.1, 0.2, 0.3, 0.4], dimension: 4096, iterations: 20, mse: 0.001 });
+			const resource = createTurboquantResource(dualClient);
+			await resource.generateCodebook({ bits: 4, dimension: 4096 });
+			expect(http.post).toHaveBeenCalledWith("/api/v1/turboquant/codebook", {
+				bits: 4,
+				dimension: 4096,
+			});
+		});
+
+		it("should call execute with required params via CLI", async () => {
 			execute.mockResolvedValue({
 				bits: 4,
 				levels: [0.1, 0.2, 0.3, 0.4],
@@ -132,7 +180,7 @@ describe("createTurboquantResource", () => {
 			]);
 		});
 
-		it("should pass optional params when provided", async () => {
+		it("should pass optional params when provided via CLI", async () => {
 			execute.mockResolvedValue({
 				bits: 8,
 				levels: [],

@@ -37,6 +37,8 @@ import {
 } from "../resources/turboquant.js";
 import type { CliTransportConfig } from "../transport/cli-transport.js";
 import { CliTransport } from "../transport/cli-transport.js";
+import type { HttpTransportConfig } from "../transport/http-transport.js";
+import { HttpTransport } from "../transport/http-transport.js";
 import type { ViemTransportConfig } from "../transport/viem-transport.js";
 import { ViemTransport } from "../transport/viem-transport.js";
 
@@ -44,12 +46,14 @@ import { ViemTransport } from "../transport/viem-transport.js";
 export interface NeunodeClientConfig {
 	/** CLI subprocess transport config. Spawns `agnetd` as a child process. */
 	readonly cli?: CliTransportConfig;
+	/** HTTP REST transport config. Talks to a running `agnetd serve` instance. */
+	readonly http?: HttpTransportConfig;
 	/** Viem (Ethereum) transport config. Direct on-chain reads/writes via RPC. */
 	readonly viem?: ViemTransportConfig;
 }
 
 /** Which transport(s) the client was configured with. */
-export type TransportMode = "cli" | "viem" | "dual";
+export type TransportMode = "cli" | "http" | "viem" | "dual";
 
 /** Root client for interacting with the Neunode network. */
 export interface NeunodeClient {
@@ -57,6 +61,8 @@ export interface NeunodeClient {
 	readonly transportMode: TransportMode;
 	/** CLI subprocess transport, if configured. */
 	readonly cli: CliTransport | undefined;
+	/** HTTP REST transport, if configured. */
+	readonly http: HttpTransport | undefined;
 	/** Viem on-chain transport, if configured. */
 	readonly viem: ViemTransport | undefined;
 	/** DID creation, listing, and export. */
@@ -91,6 +97,7 @@ export interface NeunodeClient {
 
 class NeunodeClientImpl implements NeunodeClient {
 	readonly cli: CliTransport | undefined;
+	readonly http: HttpTransport | undefined;
 	readonly viem: ViemTransport | undefined;
 	readonly identity: IdentityResource;
 	readonly config: ConfigResource;
@@ -108,15 +115,17 @@ class NeunodeClientImpl implements NeunodeClient {
 
 	constructor(
 		cliConfig?: CliTransportConfig,
+		httpConfig?: HttpTransportConfig,
 		viemConfig?: ViemTransportConfig,
 	) {
-		if (!cliConfig && !viemConfig) {
+		if (!cliConfig && !httpConfig && !viemConfig) {
 			throw new Error(
-				"NeunodeClient requires at least one transport (cli or viem). " +
-					"Pass { cli: { ... } } or { viem: { ... } } to createNeunodeClient().",
+				"NeunodeClient requires at least one transport (cli, http, or viem). " +
+					"Pass { cli: { ... } }, { http: { ... } }, or { viem: { ... } } to createNeunodeClient().",
 			);
 		}
 		this.cli = cliConfig ? new CliTransport(cliConfig) : undefined;
+		this.http = httpConfig ? new HttpTransport(httpConfig) : undefined;
 		this.viem = viemConfig ? new ViemTransport(viemConfig) : undefined;
 		this.identity = createIdentityResource(this);
 		this.config = createConfigResource(this);
@@ -134,7 +143,11 @@ class NeunodeClientImpl implements NeunodeClient {
 	}
 
 	get transportMode(): TransportMode {
+		if (this.cli && this.http && this.viem) return "dual";
+		if (this.cli && this.http) return "dual";
 		if (this.cli && this.viem) return "dual";
+		if (this.http && this.viem) return "dual";
+		if (this.http) return "http";
 		if (this.viem) return "viem";
 		return "cli";
 	}
@@ -143,6 +156,7 @@ class NeunodeClientImpl implements NeunodeClient {
 		const extension = extender(this);
 		const builtInKeys = new Set([
 			"cli",
+			"http",
 			"viem",
 			"identity",
 			"config",
@@ -174,19 +188,31 @@ class NeunodeClientImpl implements NeunodeClient {
 }
 
 /**
- * Create a new Neunode client with one or both transports.
+ * Create a new Neunode client with one or more transports.
  *
  * @example
  * ```ts
  * import { createNeunodeClient } from "@neunode/sdk";
+ *
+ * // HTTP-only (recommended — talks to agnetd REST API)
+ * const client = createNeunodeClient({
+ *   http: { baseUrl: "http://127.0.0.1:41000" },
+ * });
  *
  * // CLI-only (spawns agnetd subprocess)
  * const client = createNeunodeClient({
  *   cli: { binaryPath: "/usr/local/bin/agnetd" },
  * });
  *
- * // Dual transport (CLI + on-chain)
+ * // Dual transport (HTTP + CLI fallback)
  * const client = createNeunodeClient({
+ *   http: { baseUrl: "http://127.0.0.1:41000" },
+ *   cli: { timeout: 60_000 },
+ * });
+ *
+ * // Full stack (HTTP + CLI + on-chain)
+ * const client = createNeunodeClient({
+ *   http: { baseUrl: "http://127.0.0.1:41000" },
  *   cli: { timeout: 60_000 },
  *   viem: { publicClient, chain, walletClient },
  * });
@@ -195,11 +221,11 @@ class NeunodeClientImpl implements NeunodeClient {
  * const did = await client.identity.create({ name: "my-agent" });
  * ```
  *
- * @param config - Transport configuration. At least one of `cli` or `viem` is required.
+ * @param config - Transport configuration. At least one of `cli`, `http`, or `viem` is required.
  * @returns A typed Neunode client instance.
  */
 export function createNeunodeClient(
 	config: NeunodeClientConfig = {},
 ): NeunodeClient {
-	return new NeunodeClientImpl(config.cli, config.viem);
+	return new NeunodeClientImpl(config.cli, config.http, config.viem);
 }

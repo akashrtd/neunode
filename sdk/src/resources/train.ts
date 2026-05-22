@@ -105,11 +105,16 @@ export interface TrainResource {
 }
 
 export function createTrainResource(client: NeunodeClient): TrainResource {
-	const cli = client.cli;
-	if (!cli) throw new Error("CLI transport required for train operations");
-
 	return {
 		async start(params: TrainStartParams): Promise<TrainStartResult> {
+			if (client.http) {
+				return client.http.post<TrainStartResult>(
+					"/api/v1/train/start",
+					params,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for train operations");
 			const args = [
 				"train",
 				"start",
@@ -123,22 +128,53 @@ export function createTrainResource(client: NeunodeClient): TrainResource {
 		},
 
 		async status(jobId?: string): Promise<TrainStatusResult> {
+			if (client.http) {
+				const qs = new URLSearchParams();
+				if (jobId) qs.set("jobId", jobId);
+				const query = qs.toString();
+				return client.http.get<TrainStatusResult>(
+					query ? `/api/v1/train/status?${query}` : "/api/v1/train/status",
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for train operations");
 			const args = ["train", "status"];
 			if (jobId) args.push("--job-id", jobId);
 			return cli.execute<TrainStatusResult>(args);
 		},
 
 		async stop(jobId: string): Promise<TrainStopResult> {
+			if (client.http) {
+				return client.http.post<TrainStopResult>(
+					`/api/v1/train/stop`,
+					{ jobId },
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for train operations");
 			return cli.execute<TrainStopResult>(["train", "stop", "--job-id", jobId]);
 		},
 
 		async list(): Promise<TrainListResult> {
+			if (client.http) {
+				return client.http.get<TrainListResult>("/api/v1/train/list");
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for train operations");
 			return cli.execute<TrainListResult>(["train", "list"]);
 		},
 
 		async registerWorker(
 			params: WorkerRegisterParams,
 		): Promise<WorkerRegisterResult> {
+			if (client.http) {
+				return client.http.post<WorkerRegisterResult>(
+					"/api/v1/train/worker-register",
+					params,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for train operations");
 			const args = [
 				"train",
 				"worker-register",
@@ -154,6 +190,17 @@ export function createTrainResource(client: NeunodeClient): TrainResource {
 		},
 
 		async listWorkers(params?: WorkerListParams): Promise<WorkerListResult> {
+			if (client.http) {
+				const qs = new URLSearchParams();
+				if (params?.minGpu) qs.set("minGpu", String(params.minGpu));
+				if (params?.minMemory) qs.set("minMemory", String(params.minMemory));
+				const query = qs.toString();
+				return client.http.get<WorkerListResult>(
+					query ? `/api/v1/train/workers?${query}` : "/api/v1/train/workers",
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for train operations");
 			const args = ["train", "worker-list"];
 			if (params?.minGpu) args.push("--min-gpu", String(params.minGpu));
 			if (params?.minMemory)
@@ -164,6 +211,13 @@ export function createTrainResource(client: NeunodeClient): TrainResource {
 		async coordinatorStatus(
 			params: CoordinatorStatusParams,
 		): Promise<CoordinatorStatusResult> {
+			if (client.http) {
+				return client.http.get<CoordinatorStatusResult>(
+					`/api/v1/train/coordinator-status?jobId=${encodeURIComponent(params.jobId)}`,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for train operations");
 			return cli.execute<CoordinatorStatusResult>([
 				"train",
 				"coordinator-status",

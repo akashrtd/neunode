@@ -66,6 +66,11 @@ export class HttpTransport {
 		this.timeout = config.timeout ?? 30_000;
 	}
 
+	/** The base URL this transport connects to (e.g. "http://127.0.0.1:41000"). */
+	getBaseUrl(): string {
+		return this.baseUrl;
+	}
+
 	/** Execute a GET request and return typed data. */
 	async get<T>(path: string): Promise<T> {
 		return this.request<T>("GET", path);

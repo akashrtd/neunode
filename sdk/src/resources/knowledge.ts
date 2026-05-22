@@ -105,13 +105,24 @@ export interface KnowledgeResource {
 export function createKnowledgeResource(
 	client: NeunodeClient,
 ): KnowledgeResource {
-	const cli = client.cli;
-	if (!cli) throw new Error("CLI transport required for knowledge operations");
-
 	return {
 		async query(
 			params?: KnowledgeQueryParams,
 		): Promise<KnowledgeQueryListResult> {
+			if (client.http) {
+				const qs = new URLSearchParams();
+				if (params?.subject) qs.set("subject", params.subject);
+				if (params?.predicate) qs.set("predicate", params.predicate);
+				if (params?.object) qs.set("object", params.object);
+				if (params?.graph) qs.set("graph", params.graph);
+				if (params?.limit) qs.set("limit", String(params.limit));
+				const query = qs.toString();
+				return client.http.get<KnowledgeQueryListResult>(
+					query ? `/api/v1/knowledge/query?${query}` : "/api/v1/knowledge/query",
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
 			const args = ["knowledge", "query"];
 			if (params?.subject) args.push("--subject", params.subject);
 			if (params?.predicate) args.push("--predicate", params.predicate);
@@ -124,6 +135,14 @@ export function createKnowledgeResource(
 		async registerAgent(
 			params: KnowledgeRegisterAgentParams,
 		): Promise<KnowledgeRegisterAgentResult> {
+			if (client.http) {
+				return client.http.post<KnowledgeRegisterAgentResult>(
+					"/api/v1/knowledge/register-agent",
+					params,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
 			const args = [
 				"knowledge",
 				"register-agent",
@@ -138,6 +157,14 @@ export function createKnowledgeResource(
 		async registerModel(
 			params: KnowledgeRegisterModelParams,
 		): Promise<KnowledgeRegisterModelResult> {
+			if (client.http) {
+				return client.http.post<KnowledgeRegisterModelResult>(
+					"/api/v1/knowledge/register-model",
+					params,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
 			const args = [
 				"knowledge",
 				"register-model",
@@ -153,6 +180,14 @@ export function createKnowledgeResource(
 		async registerBounty(
 			params: KnowledgeRegisterBountyParams,
 		): Promise<KnowledgeRegisterBountyResult> {
+			if (client.http) {
+				return client.http.post<KnowledgeRegisterBountyResult>(
+					"/api/v1/knowledge/register-bounty",
+					params,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
 			const args = [
 				"knowledge",
 				"register-bounty",
@@ -167,6 +202,14 @@ export function createKnowledgeResource(
 		async joinJob(
 			params: KnowledgeJoinJobParams,
 		): Promise<KnowledgeJoinJobResult> {
+			if (client.http) {
+				return client.http.post<KnowledgeJoinJobResult>(
+					"/api/v1/knowledge/join-job",
+					params,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
 			const args = [
 				"knowledge",
 				"join-job",
@@ -179,6 +222,13 @@ export function createKnowledgeResource(
 		},
 
 		async listClasses(): Promise<KnowledgeListClassesResult> {
+			if (client.http) {
+				return client.http.get<KnowledgeListClassesResult>(
+					"/api/v1/knowledge/classes",
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
 			return cli.execute<KnowledgeListClassesResult>([
 				"knowledge",
 				"list-classes",
@@ -186,6 +236,13 @@ export function createKnowledgeResource(
 		},
 
 		async listPredicates(): Promise<KnowledgeListPredicatesResult> {
+			if (client.http) {
+				return client.http.get<KnowledgeListPredicatesResult>(
+					"/api/v1/knowledge/predicates",
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
 			return cli.execute<KnowledgeListPredicatesResult>([
 				"knowledge",
 				"list-predicates",

@@ -54,13 +54,18 @@ export interface TurboquantResource {
 export function createTurboquantResource(
 	client: NeunodeClient,
 ): TurboquantResource {
-	const cli = client.cli;
-	if (!cli) throw new Error("CLI transport required for turboquant operations");
-
 	return {
 		async compress(
 			params: TurboquantCompressParams,
 		): Promise<TurboquantCompressResult> {
+			if (client.http) {
+				return client.http.post<TurboquantCompressResult>(
+					"/api/v1/turboquant/compress",
+					params,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for turboquant operations");
 			const args = [
 				"turboquant",
 				"compress",
@@ -89,6 +94,14 @@ export function createTurboquantResource(
 		async generateCodebook(
 			params: TurboquantCodebookParams,
 		): Promise<TurboquantCodebookResult> {
+			if (client.http) {
+				return client.http.post<TurboquantCodebookResult>(
+					"/api/v1/turboquant/codebook",
+					params,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) throw new Error("HTTP or CLI transport required for turboquant operations");
 			const args = [
 				"turboquant",
 				"generate-codebook",

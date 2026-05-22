@@ -29,12 +29,11 @@ describe("createNeunodeClient", () => {
 	});
 
 	describe("with Viem config only", () => {
-		it("should throw because resources require CLI transport", () => {
-			expect(() =>
-				createNeunodeClient({
-					viem: { publicClient: mockPublicClient, chain: mockChain },
-				}),
-			).toThrow("CLI transport required");
+		it("should return a client with transportMode 'viem'", () => {
+			const client = createNeunodeClient({
+				viem: { publicClient: mockPublicClient, chain: mockChain },
+			});
+			expect(client.transportMode).toBe("viem");
 		});
 	});
 
