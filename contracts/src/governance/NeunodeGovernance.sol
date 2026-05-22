@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "../interfaces/INeunodeToken.sol";
 import "./IGovernance.sol";
 
@@ -9,7 +10,8 @@ import "./IGovernance.sol";
 /// @notice Full proposal lifecycle: Pending → Active → Succeeded/Defeated →
 ///         Queued → Executed/Expired. Cancelled from Pending. Voting power via
 ///         checkpointed staked balances. All parameters configurable by GOVERNANCE_ROLE.
-contract NeunodeGovernance is AccessControl, IGovernance {
+///         Emergency pause via GOVERNANCE_ROLE for incident response.
+contract NeunodeGovernance is AccessControl, Pausable, IGovernance {
     // ─── Types ────────────────────────────────────────────────────────────
 
     struct Proposal {
@@ -137,7 +139,7 @@ contract NeunodeGovernance is AccessControl, IGovernance {
         uint256[] calldata values,
         bytes[] calldata calldatas,
         string calldata description
-    ) external returns (uint256 proposalId) {
+    ) external whenNotPaused returns (uint256 proposalId) {
         if (targets.length == 0) revert EmptyProposal();
         if (targets.length != values.length || targets.length != calldatas.length) {
             revert ArrayLengthMismatch();
@@ -181,13 +183,14 @@ contract NeunodeGovernance is AccessControl, IGovernance {
     // ─── Vote ────────────────────────────────────────────────────────────
 
     /// @notice Cast a vote on an active proposal
-    function castVote(uint256 proposalId, uint8 support) external returns (uint256) {
+    function castVote(uint256 proposalId, uint8 support) external whenNotPaused returns (uint256) {
         return _castVote(proposalId, support, "");
     }
 
     /// @notice Cast a vote with a reason on an active proposal
     function castVoteWithReason(uint256 proposalId, uint8 support, string calldata reason)
         external
+        whenNotPaused
         returns (uint256)
     {
         return _castVote(proposalId, support, reason);
@@ -321,6 +324,18 @@ contract NeunodeGovernance is AccessControl, IGovernance {
         }
 
         return ProposalState.Queued;
+    }
+
+    // ─── Emergency Pause ───────────────────────────────────────────────────
+
+    /// @notice Pause all governance operations (propose, vote) for incident response
+    function pause() external onlyRole(GOVERNANCE_ROLE) {
+        _pause();
+    }
+
+    /// @notice Unpause governance operations after incident is resolved
+    function unpause() external onlyRole(GOVERNANCE_ROLE) {
+        _unpause();
     }
 
     // ─── Parameter Updates ───────────────────────────────────────────────

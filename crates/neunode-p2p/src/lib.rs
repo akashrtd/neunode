@@ -4,4 +4,5 @@ pub mod discovery;
 pub mod error;
 pub mod gossipsub;
 pub mod node;
+pub mod peer_auth;
 pub mod peer_score;

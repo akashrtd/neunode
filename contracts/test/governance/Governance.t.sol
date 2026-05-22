@@ -799,6 +799,72 @@ contract GovernanceTest is Test {
         gov.setVotingPeriod(3 days);
         assertEq(gov.votingPeriod(), 3 days);
     }
+
+    // ─── 35. Emergency Pause ─────────────────────────────────────────────
+
+    function testPauseBlocksProposeAndVote() public {
+        // Pause governance
+        vm.prank(governanceAdmin);
+        gov.pause();
+        assertTrue(gov.paused());
+
+        // Propose should revert
+        address[] memory targets = new address[](1);
+        uint256[] memory values = new uint256[](1);
+        bytes[] memory calldatas = new bytes[](1);
+        targets[0] = address(target);
+        values[0] = 0;
+        calldatas[0] = "";
+        vm.prank(proposer);
+        vm.expectRevert(abi.encodeWithSelector(bytes4(keccak256("EnforcedPause()"))));
+        gov.propose(targets, values, calldatas, "Paused Proposal");
+
+        // Create proposal before pause, then try to vote after pause
+        // First unpause, create proposal, then pause again
+        vm.prank(governanceAdmin);
+        gov.unpause();
+        assertFalse(gov.paused());
+
+        uint256 proposalId = _createProposal();
+        vm.warp(block.timestamp + VOTING_DELAY + 1);
+
+        vm.prank(governanceAdmin);
+        gov.pause();
+
+        vm.prank(voter1);
+        vm.expectRevert(abi.encodeWithSelector(bytes4(keccak256("EnforcedPause()"))));
+        gov.castVote(proposalId, uint8(IGovernance.VoteType.For));
+    }
+
+    function testUnpauseRestoresOperations() public {
+        vm.prank(governanceAdmin);
+        gov.pause();
+        assertTrue(gov.paused());
+
+        vm.prank(governanceAdmin);
+        gov.unpause();
+        assertFalse(gov.paused());
+
+        // Propose should work after unpause
+        uint256 proposalId = _createProposal();
+        assertEq(proposalId, 1);
+    }
+
+    function testRevertPauseNonGovernance() public {
+        vm.prank(attacker);
+        vm.expectRevert();
+        gov.pause();
+        assertFalse(gov.paused());
+    }
+
+    function testRevertUnpauseNonGovernance() public {
+        vm.prank(governanceAdmin);
+        gov.pause();
+
+        vm.prank(attacker);
+        vm.expectRevert();
+        gov.unpause();
+    }
 }
 
 /// @title TargetMock — Simple target contract for execution testing

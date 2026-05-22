@@ -26,6 +26,13 @@ pub struct QueryResult {
     pub graph: String,
 }
 
+/// Default maximum number of results returned by a query.
+pub const DEFAULT_QUERY_LIMIT: usize = 1000;
+/// Default offset (start from the first result).
+pub const DEFAULT_QUERY_OFFSET: usize = 0;
+/// Absolute maximum number of results to prevent abuse.
+pub const MAX_QUERY_LIMIT: usize = 10_000;
+
 /// Knowledge graph query engine.
 ///
 /// Performs prefix-scan queries across the 6 permutation indexes (SPOG, POSG,
@@ -33,22 +40,43 @@ pub struct QueryResult {
 pub struct QueryEngine<'a> {
     db: &'a NeunodeDb,
     dict: &'a StringDictionary<'a>,
+    default_limit: usize,
 }
 
 impl<'a> QueryEngine<'a> {
     /// Create a new query engine backed by the given database and dictionary.
     pub fn new(db: &'a NeunodeDb, dict: &'a StringDictionary<'a>) -> Self {
-        Self { db, dict }
+        Self { db, dict, default_limit: DEFAULT_QUERY_LIMIT }
     }
 
-    /// Execute a query pattern, returning all matching quads as strings.
-    ///
-    /// 1. Choose the best index for the pattern.
-    /// 2. Prefix-scan that index.
-    /// 3. Decode keys and filter against all bound components.
-    /// 4. Resolve hashes to strings via the dictionary.
+    /// Create a query engine with a custom default result limit.
+    pub fn with_limit(db: &'a NeunodeDb, dict: &'a StringDictionary<'a>, limit: usize) -> Self {
+        Self { db, dict, default_limit: limit }
+    }
+
+    /// Execute a query pattern, returning matching quads as strings (bounded by default limit).
     pub fn query(&self, pattern: &QueryPattern) -> Result<Vec<QueryResult>> {
-        let quads = self.query_quads(pattern)?;
+        self.query_with_limit(pattern, self.default_limit)
+    }
+
+    /// Execute a query pattern with a custom limit.
+    pub fn query_with_limit(
+        &self,
+        pattern: &QueryPattern,
+        limit: usize,
+    ) -> Result<Vec<QueryResult>> {
+        self.query_page(pattern, limit, DEFAULT_QUERY_OFFSET)
+    }
+
+    /// Execute a query pattern with limit and offset for pagination.
+    pub fn query_page(
+        &self,
+        pattern: &QueryPattern,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<QueryResult>> {
+        let capped = limit.min(MAX_QUERY_LIMIT);
+        let quads = self.query_quads_page(pattern, capped, offset)?;
         let mut results = Vec::with_capacity(quads.len());
         for quad in &quads {
             let (s, p, o, g) = quad.to_strings(self.dict)?;
@@ -73,17 +101,44 @@ impl<'a> QueryEngine<'a> {
         Ok(count)
     }
 
-    /// Query returning raw `Quad`s (no string resolution, faster for bulk ops).
+    /// Query returning raw `Quad`s (bounded by default limit).
     pub fn query_quads(&self, pattern: &QueryPattern) -> Result<Vec<Quad>> {
+        self.query_quads_with_limit(pattern, self.default_limit)
+    }
+
+    /// Query returning raw `Quad`s with a custom limit.
+    pub fn query_quads_with_limit(
+        &self,
+        pattern: &QueryPattern,
+        limit: usize,
+    ) -> Result<Vec<Quad>> {
+        self.query_quads_page(pattern, limit, DEFAULT_QUERY_OFFSET)
+    }
+
+    /// Query returning raw `Quad`s with limit and offset.
+    pub fn query_quads_page(
+        &self,
+        pattern: &QueryPattern,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Quad>> {
+        let capped = limit.min(MAX_QUERY_LIMIT);
         let (cf_name, prefix) = self.choose_index(pattern)?;
         let raw = self
             .db
             .prefix_scan(cf_name, &prefix)
             .map_err(|e| KnowledgeError::StorageError(format!("prefix_scan on {cf_name}: {e}")))?;
-        let mut quads = Vec::with_capacity(raw.len());
+        let mut quads = Vec::with_capacity(capped);
+        let mut matched = 0usize;
         for (key, _val) in &raw {
             if self.matches_pattern(cf_name, key, pattern)? {
-                quads.push(decode_index_key_to_quad(cf_name, key)?);
+                if matched >= offset {
+                    quads.push(decode_index_key_to_quad(cf_name, key)?);
+                    if quads.len() >= capped {
+                        break;
+                    }
+                }
+                matched += 1;
             }
         }
         Ok(quads)
@@ -671,5 +726,104 @@ mod tests {
         let p = QueryPattern { ..pat() };
         let result = engine.count(&p);
         assert!(result.is_err());
+    }
+
+    // ── Pagination tests ──
+
+    #[test]
+    fn query_with_limit_caps_results() {
+        let db = temp_db();
+        let dict = StringDictionary::new(&db);
+        let engine = QueryEngine::new(&db, &dict);
+
+        let shared_s = "http://example.org/agent/alice";
+        for i in 0..20 {
+            insert_quad(&dict, &db, shared_s, &format!("p{i}"), &format!("o{i}"), &format!("g{i}"));
+        }
+
+        let p = QueryPattern { subject: Some(hash(shared_s)), ..pat() };
+        let results = engine.query_with_limit(&p, 5).unwrap();
+        assert_eq!(results.len(), 5);
+    }
+
+    #[test]
+    fn query_default_limit_applied() {
+        let db = temp_db();
+        let dict = StringDictionary::new(&db);
+        let engine = QueryEngine::with_limit(&db, &dict, 2);
+
+        let shared_s = "http://example.org/agent/alice";
+        insert_quad(&dict, &db, shared_s, "p1", "o1", "g1");
+        insert_quad(&dict, &db, shared_s, "p2", "o2", "g2");
+        insert_quad(&dict, &db, shared_s, "p3", "o3", "g3");
+
+        let p = QueryPattern { subject: Some(hash(shared_s)), ..pat() };
+        let results = engine.query(&p).unwrap();
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn query_quads_with_limit() {
+        let db = temp_db();
+        let dict = StringDictionary::new(&db);
+        let engine = QueryEngine::new(&db, &dict);
+
+        for i in 0..10 {
+            insert_quad(&dict, &db, "s1", &format!("p{i}"), &format!("o{i}"), &format!("g{i}"));
+        }
+
+        let p = QueryPattern { subject: Some(hash("s1")), ..pat() };
+        let quads = engine.query_quads_with_limit(&p, 3).unwrap();
+        assert_eq!(quads.len(), 3);
+    }
+
+    #[test]
+    fn query_page_offset_skips_results() {
+        let db = temp_db();
+        let dict = StringDictionary::new(&db);
+        let engine = QueryEngine::new(&db, &dict);
+
+        for i in 0..10 {
+            insert_quad(&dict, &db, "s1", &format!("p{i}"), &format!("o{i}"), &format!("g{i}"));
+        }
+
+        let p = QueryPattern { subject: Some(hash("s1")), ..pat() };
+        let page1 = engine.query_page(&p, 3, 0).unwrap();
+        let page2 = engine.query_page(&p, 3, 3).unwrap();
+        let page3 = engine.query_page(&p, 3, 6).unwrap();
+        let page4 = engine.query_page(&p, 3, 9).unwrap();
+
+        assert_eq!(page1.len(), 3);
+        assert_eq!(page2.len(), 3);
+        assert_eq!(page3.len(), 3);
+        assert_eq!(page4.len(), 1); // only 1 remaining
+
+        // Pages should not overlap
+        assert_ne!(page1[0].predicate, page2[0].predicate);
+    }
+
+    #[test]
+    fn query_page_offset_beyond_results() {
+        let db = temp_db();
+        let dict = StringDictionary::new(&db);
+        let engine = QueryEngine::new(&db, &dict);
+
+        insert_quad(&dict, &db, "s1", "p1", "o1", "g1");
+        let p = QueryPattern { subject: Some(hash("s1")), ..pat() };
+        let results = engine.query_page(&p, 10, 100).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn query_page_caps_at_max_limit() {
+        let db = temp_db();
+        let dict = StringDictionary::new(&db);
+        let engine = QueryEngine::new(&db, &dict);
+
+        insert_quad(&dict, &db, "s1", "p1", "o1", "g1");
+        let p = QueryPattern { subject: Some(hash("s1")), ..pat() };
+        // Request way more than MAX_QUERY_LIMIT — should still work
+        let results = engine.query_page(&p, 100_000, 0).unwrap();
+        assert_eq!(results.len(), 1); // only 1 quad exists
     }
 }

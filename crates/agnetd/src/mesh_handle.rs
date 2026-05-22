@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use neunode_feed::rate_limit::RateLimiter;
+
 use anyhow::Result;
 use libp2p::Multiaddr;
 use libp2p::PeerId;
@@ -152,6 +154,9 @@ async fn mesh_event_loop(
     db: Arc<NeunodeDb>,
     event_tx: mpsc::UnboundedSender<neunode_feed::event::FeedEvent>,
 ) {
+    // 10 events per DID per 60-second window
+    let mut rate_limiter = RateLimiter::new(10, 60);
+
     loop {
         tokio::select! {
             cmd = cmd_rx.recv() => {
@@ -207,6 +212,16 @@ async fn mesh_event_loop(
                                 if let Err(e) = feed_event.validate() {
                                     tracing::warn!("Invalid feed event from {:?}: {}", source, e);
                                 } else {
+                                    let now = chrono::Utc::now().timestamp() as u64;
+                                    let author_did = &feed_event.author.0;
+                                    if !rate_limiter.allow(author_did, now) {
+                                        tracing::warn!(
+                                            "Rate limited feed event from {} on {}",
+                                            author_did,
+                                            topic
+                                        );
+                                        continue;
+                                    }
                                     let stored = crate::feed_wire::feed_event_to_stored(&feed_event);
                                     let store = neunode_storage::feed_store::FeedStore::new(&db);
                                     let event_id = feed_event.id.to_string();

@@ -23,6 +23,7 @@ const DEFAULT_P7_CAP: f64 = 0.0;
 const GRAYLIST_THRESHOLD: f64 = -100.0;
 const PUBLISH_THRESHOLD: f64 = -1000.0;
 const GOSSIP_THRESHOLD: f64 = -500.0;
+const BAN_THRESHOLD: f64 = -500.0;
 
 const DECAY_INTERVAL_SECS: f64 = 1.0;
 const DECAY_TO_ZERO: f64 = 0.01;
@@ -47,6 +48,7 @@ pub struct PeerScoreParams {
     pub graylist_threshold: f64,
     pub publish_threshold: f64,
     pub gossip_threshold: f64,
+    pub ban_threshold: f64,
     pub decay_interval_secs: f64,
     pub decay_to_zero: f64,
     pub retain_score_secs: f64,
@@ -72,6 +74,7 @@ impl Default for PeerScoreParams {
             graylist_threshold: GRAYLIST_THRESHOLD,
             publish_threshold: PUBLISH_THRESHOLD,
             gossip_threshold: GOSSIP_THRESHOLD,
+            ban_threshold: BAN_THRESHOLD,
             decay_interval_secs: DECAY_INTERVAL_SECS,
             decay_to_zero: DECAY_TO_ZERO,
             retain_score_secs: 3600.0,
@@ -85,6 +88,7 @@ impl PeerScoreParams {
             ThresholdKind::Graylist => self.graylist_threshold,
             ThresholdKind::Publish => self.publish_threshold,
             ThresholdKind::Gossip => self.gossip_threshold,
+            ThresholdKind::Ban => self.ban_threshold,
         }
     }
 }
@@ -94,6 +98,7 @@ pub enum ThresholdKind {
     Graylist,
     Publish,
     Gossip,
+    Ban,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -168,16 +173,17 @@ impl PeerState {
 pub struct PeerScore {
     params: PeerScoreParams,
     peers: HashMap<String, PeerState>,
+    banned: HashMap<String, Instant>,
 }
 
 impl PeerScore {
     pub fn new(params: PeerScoreParams) -> Self {
-        Self { params, peers: HashMap::new() }
+        Self { params, peers: HashMap::new(), banned: HashMap::new() }
     }
 
     pub fn update_score(&mut self, peer_id: &PeerId, event: ScoreEvent) -> f64 {
         let key = peer_id.to_string();
-        let state = self.peers.entry(key).or_insert_with(PeerState::new);
+        let state = self.peers.entry(key.clone()).or_insert_with(PeerState::new);
         state.apply_decay(&self.params);
 
         match event {
@@ -208,7 +214,11 @@ impl PeerScore {
             }
         }
 
-        state.compute_score(&self.params)
+        let score = state.compute_score(&self.params);
+        if score < self.params.ban_threshold {
+            self.banned.insert(key, Instant::now());
+        }
+        score
     }
 
     pub fn get_score(&mut self, peer_id: &PeerId) -> f64 {
@@ -225,12 +235,34 @@ impl PeerScore {
         self.get_score(peer_id) < self.params.graylist_threshold
     }
 
+    /// Check if a peer is currently banned (auto-banned for dropping below threshold).
+    pub fn is_banned(&self, peer_id: &PeerId) -> bool {
+        self.banned.contains_key(&peer_id.to_string())
+    }
+
+    /// Check if a peer's score is below the ban threshold.
+    pub fn should_ban(&mut self, peer_id: &PeerId) -> bool {
+        self.get_score(peer_id) < self.params.ban_threshold
+    }
+
+    /// Remove a peer from the ban list, allowing reconnection.
+    pub fn unban(&mut self, peer_id: &PeerId) {
+        self.banned.remove(&peer_id.to_string());
+    }
+
+    /// Number of currently banned peers.
+    pub fn banned_count(&self) -> usize {
+        self.banned.len()
+    }
+
     pub fn peer_count(&self) -> usize {
         self.peers.len()
     }
 
     pub fn remove_peer(&mut self, peer_id: &PeerId) {
-        self.peers.remove(&peer_id.to_string());
+        let key = peer_id.to_string();
+        self.peers.remove(&key);
+        self.banned.remove(&key);
     }
 
     pub fn params(&self) -> &PeerScoreParams {
@@ -414,5 +446,62 @@ mod tests {
         scorer.update_score(&peer, ScoreEvent::PeerConnected);
         let score_connected = scorer.update_score(&peer, ScoreEvent::TimeInMeshTick);
         assert!(score_connected > score_disconnected);
+    }
+
+    #[test]
+    fn auto_ban_below_threshold() {
+        let mut scorer = PeerScore::new(PeerScoreParams::default());
+        let peer = random_peer_id();
+        assert!(!scorer.is_banned(&peer));
+
+        // Drive score below ban threshold
+        for _ in 0..100 {
+            scorer.update_score(&peer, ScoreEvent::MessageInvalid { penalty: 10.0 });
+        }
+        assert!(scorer.is_banned(&peer));
+        assert_eq!(scorer.banned_count(), 1);
+    }
+
+    #[test]
+    fn should_ban_checks_score() {
+        let mut scorer = PeerScore::new(PeerScoreParams::default());
+        let peer = random_peer_id();
+        assert!(!scorer.should_ban(&peer));
+        for _ in 0..100 {
+            scorer.update_score(&peer, ScoreEvent::MessageInvalid { penalty: 10.0 });
+        }
+        assert!(scorer.should_ban(&peer));
+    }
+
+    #[test]
+    fn unban_removes_from_ban_list() {
+        let mut scorer = PeerScore::new(PeerScoreParams::default());
+        let peer = random_peer_id();
+        for _ in 0..100 {
+            scorer.update_score(&peer, ScoreEvent::MessageInvalid { penalty: 10.0 });
+        }
+        assert!(scorer.is_banned(&peer));
+        scorer.unban(&peer);
+        assert!(!scorer.is_banned(&peer));
+        assert_eq!(scorer.banned_count(), 0);
+    }
+
+    #[test]
+    fn remove_peer_clears_ban() {
+        let mut scorer = PeerScore::new(PeerScoreParams::default());
+        let peer = random_peer_id();
+        for _ in 0..100 {
+            scorer.update_score(&peer, ScoreEvent::MessageInvalid { penalty: 10.0 });
+        }
+        assert!(scorer.is_banned(&peer));
+        scorer.remove_peer(&peer);
+        assert!(!scorer.is_banned(&peer));
+        assert_eq!(scorer.peer_count(), 0);
+    }
+
+    #[test]
+    fn ban_threshold_kind() {
+        let params = PeerScoreParams::default();
+        assert!(params.threshold_score(ThresholdKind::Ban) < 0.0);
     }
 }
