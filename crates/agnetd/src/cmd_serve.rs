@@ -27,18 +27,7 @@ pub struct ServerState {
     pub db: Arc<neunode_storage::db::NeunodeDb>,
     pub active_did: Option<String>,
     pub mesh_handle: Option<crate::mesh_handle::MeshHandle>,
-    pub feed_tx: tokio::sync::broadcast::Sender<FeedEventUpdate>,
-}
-
-#[derive(Clone, serde::Serialize, utoipa::ToSchema)]
-#[allow(dead_code)]
-pub struct FeedEventUpdate {
-    pub kind: u16,
-    pub author_did: String,
-    pub author_short: String,
-    pub kind_label: String,
-    pub preview: String,
-    pub time_ago: String,
+    pub feed_tx: tokio::sync::broadcast::Sender<crate::api::state::FeedEventUpdate>,
 }
 
 // ---------------------------------------------------------------------------
@@ -565,7 +554,7 @@ async fn feed_post_handler(
     feed_store.append(&stored).ok();
 
     // Broadcast to SSE subscribers
-    let _ = state.feed_tx.send(FeedEventUpdate {
+    let _ = state.feed_tx.send(crate::api::state::FeedEventUpdate {
         kind,
         author_did: did.clone(),
         author_short: truncate_did(&did),
@@ -1104,7 +1093,7 @@ async fn feed_sse_handler(
 #[derive(utoipa::OpenApi)]
 #[openapi(
     paths(feed_post_handler, bounty_create_handler),
-    components(schemas(FeedPostForm, BountyCreateForm, FeedEventUpdate)),
+    components(schemas(FeedPostForm, BountyCreateForm, crate::api::state::FeedEventUpdate)),
     tags(
         (name = "feed", description = "Feed event operations"),
         (name = "bounty", description = "Bounty management"),
@@ -1123,7 +1112,17 @@ pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) ->
         db: Arc::clone(&app_state.db),
         active_did: app_state.active_did.as_ref().map(|d| d.0.clone()),
         mesh_handle: app_state.mesh_handle.take(),
-        feed_tx,
+        feed_tx: feed_tx.clone(),
+    });
+
+    // Build REST API state (shared DB, identity, config)
+    let api_state = Arc::new(crate::api::state::ApiState {
+        db: Arc::clone(&app_state.db),
+        active_did: app_state.active_did.clone(),
+        active_keyring: std::sync::Mutex::new(app_state.active_keyring.take()).into(),
+        mesh_handle: tokio::sync::RwLock::new(None).into(),
+        config: app_state.config.clone(),
+        feed_tx: feed_tx.clone(),
     });
 
     let app = Router::new()
@@ -1140,7 +1139,7 @@ pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) ->
         .route("/partials/bounty-list", get(bounty_list_partial))
         .route("/partials/feed-events", get(feed_events_partial))
         .route("/partials/mesh-peers", get(mesh_peers_partial))
-        // API endpoints
+        // Legacy API endpoints (kept for backward compat)
         .route("/api/feed/post", post(feed_post_handler))
         .route("/api/bounties/create", post(bounty_create_handler))
         // SSE stream
@@ -1149,6 +1148,9 @@ pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) ->
         .route("/ws/feed", get(feed_ws_handler))
         .with_state(server_state.clone());
 
+    // Mount REST API v1
+    let app = app.merge(crate::api::build_api_router().with_state(api_state));
+
     let app = app.merge(
         utoipa_swagger_ui::SwaggerUi::new("/swagger-ui")
             .url("/api-docs/openapi.json", ApiDoc::openapi()),
@@ -1156,6 +1158,7 @@ pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) ->
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     println!("{}  neunode dashboard → http://127.0.0.1:{}", console::style("INFO").dim(), port);
+    println!("{}  REST API v1     → http://127.0.0.1:{}/api/v1/health", console::style("INFO").dim(), port);
     println!("{}  Press Ctrl+C to shut down gracefully", console::style("INFO").dim());
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

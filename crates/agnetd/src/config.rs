@@ -7,6 +7,7 @@ use neunode_core::config::AppConfig;
 const CONFIG_DIR_NAME: &str = ".agnetd";
 const CONFIG_FILE_NAME: &str = "config.toml";
 
+#[derive(Clone)]
 pub struct CliConfig {
     pub config_path: PathBuf,
     pub app_config: AppConfig,

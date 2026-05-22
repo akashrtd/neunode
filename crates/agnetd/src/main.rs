@@ -2,6 +2,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 
+mod api;
 mod cli;
 mod cmd_bounty;
 mod cmd_config;
