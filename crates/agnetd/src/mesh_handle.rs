@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use neunode_feed::rate_limit::RateLimiter;
@@ -119,8 +120,9 @@ pub fn spawn_mesh_task(
     bootstrap_peers: Vec<Multiaddr>,
     subscribe_all: bool,
     db: Arc<NeunodeDb>,
+    data_dir: PathBuf,
 ) -> Result<MeshHandle> {
-    let mut node = P2pNode::new(keypair, listen_addr.clone())?;
+    let mut node = P2pNode::new(keypair, listen_addr.clone(), &data_dir)?;
     node.start(listen_addr)?;
 
     if subscribe_all {
@@ -289,7 +291,15 @@ mod tests {
     fn spawn_test_node() -> MeshHandle {
         let keypair = libp2p::identity::Keypair::generate_ed25519();
         let db = Arc::new(temp_db());
-        spawn_mesh_task(keypair, test_listen_addr(), vec![], false, db).unwrap()
+        let data_dir = std::env::temp_dir().join(format!(
+            "mesh_node_data_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        spawn_mesh_task(keypair, test_listen_addr(), vec![], false, db, data_dir).unwrap()
     }
 
     #[tokio::test]
@@ -297,7 +307,15 @@ mod tests {
         let keypair = libp2p::identity::Keypair::generate_ed25519();
         let expected_peer_id = keypair.public().to_peer_id();
         let db = Arc::new(temp_db());
-        let handle = spawn_mesh_task(keypair, test_listen_addr(), vec![], false, db).unwrap();
+        let data_dir = std::env::temp_dir().join(format!(
+            "mesh_handle_test_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let handle = spawn_mesh_task(keypair, test_listen_addr(), vec![], false, db, data_dir).unwrap();
 
         assert_eq!(handle.local_peer_id, expected_peer_id);
 

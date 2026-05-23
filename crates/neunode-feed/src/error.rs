@@ -35,6 +35,9 @@ pub enum FeedError {
 
     #[error("unauthorized: {0}")]
     Unauthorized(String),
+
+    #[error("fork detected at sequence {seq}: local hash {local}, incoming hash {incoming}")]
+    ForkDetected { seq: u64, local: String, incoming: String },
 }
 
 pub type Result<T> = std::result::Result<T, FeedError>;

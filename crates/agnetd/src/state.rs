@@ -85,6 +85,10 @@ impl AppState {
         &self.db
     }
 
+    pub fn data_dir(&self) -> PathBuf {
+        expand_db_path(&self.config.app_config.storage.db_path)
+    }
+
     pub(crate) fn set_mesh_handle(&mut self, handle: crate::mesh_handle::MeshHandle) {
         self.mesh_handle = Some(handle);
     }

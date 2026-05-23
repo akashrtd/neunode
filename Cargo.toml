@@ -52,7 +52,7 @@ rocksdb = { version = "0.24", features = ["multi-threaded-cf"] }
 moka = { version = "0.12", features = ["sync"] }
 
 # P2P — CRITICAL: tokio feature, NOT async-std
-libp2p = { version = "0.56", features = ["tokio", "gossipsub", "kad", "identify", "ping", "relay", "autonat", "noise", "yamux", "tcp", "quic", "dns", "macros"] }
+libp2p = { version = "0.56", features = ["tokio", "gossipsub", "kad", "identify", "ping", "relay", "autonat", "dcutr", "noise", "yamux", "tcp", "quic", "dns", "macros"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

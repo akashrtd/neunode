@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::path::Path;
 
 use libp2p::futures::StreamExt;
 use libp2p::gossipsub::IdentTopic;
@@ -8,6 +9,7 @@ use libp2p::swarm::SwarmEvent;
 use libp2p::{Multiaddr, PeerId, Swarm};
 
 use crate::behaviour::{build_behaviour, NeunodeBehaviour, NeunodeEvent};
+use crate::catchup::{CatchupRequest, CatchupResponse, CATCHUP_TOPIC};
 use crate::error::{P2pError, Result};
 use crate::gossipsub::all_category_topics;
 
@@ -17,9 +19,10 @@ pub struct P2pNode {
 }
 
 impl P2pNode {
-    pub fn new(keypair: Keypair, _listen_addr: Multiaddr) -> Result<Self> {
+    pub fn new(keypair: Keypair, _listen_addr: Multiaddr, data_dir: &Path) -> Result<Self> {
         let peer_id = keypair.public().to_peer_id();
 
+        let data_dir_owned = data_dir.to_path_buf();
         let swarm = libp2p::SwarmBuilder::with_existing_identity(keypair.clone())
             .with_tokio()
             .with_tcp(
@@ -32,7 +35,7 @@ impl P2pNode {
             .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)
             .map_err(|e| P2pError::ConnectionFailed(format!("relay client failed: {e}")))?
             .with_behaviour(move |_, relay_behaviour| {
-                let mut inner = build_behaviour(&keypair, peer_id)?;
+                let mut inner = build_behaviour(&keypair, peer_id, &data_dir_owned)?;
                 inner.relay_client = relay_behaviour;
                 Ok(inner)
             })
@@ -152,6 +155,45 @@ impl P2pNode {
     pub fn listeners(&self) -> impl Iterator<Item = &Multiaddr> {
         self.swarm.listeners()
     }
+
+    /// Request catchup for a given agent's missed events.
+    /// Publishes a CatchupRequest on the catchup topic.
+    pub fn request_catchup(
+        &mut self,
+        author_did: String,
+        from_sequence: u64,
+        to_sequence: Option<u64>,
+    ) -> Result<()> {
+        let req = match to_sequence {
+            Some(to) => CatchupRequest::new(author_did, from_sequence).with_to_sequence(to),
+            None => CatchupRequest::new(author_did, from_sequence),
+        };
+        let topic = IdentTopic::new(CATCHUP_TOPIC);
+        self.swarm
+            .behaviour_mut()
+            .gossipsub
+            .publish(topic, req.serialize())
+            .map_err(|e| P2pError::PublishFailed(format!("catchup request failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Respond to a catchup request with stored events.
+    pub fn respond_catchup(
+        &mut self,
+        author_did: String,
+        events: Vec<Vec<u8>>,
+        from_sequence: u64,
+        to_sequence: u64,
+    ) -> Result<()> {
+        let resp = CatchupResponse::new(author_did, events, from_sequence, to_sequence);
+        let topic = IdentTopic::new(CATCHUP_TOPIC);
+        self.swarm
+            .behaviour_mut()
+            .gossipsub
+            .publish(topic, resp.serialize())
+            .map_err(|e| P2pError::PublishFailed(format!("catchup response failed: {e}")))?;
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -162,6 +204,9 @@ pub enum NodeEvent {
     IdentifyReceived { peer_id: PeerId, agent_version: String },
     PingResult { peer_id: PeerId, rtt_ms: u64 },
     KademliaEvent(libp2p::kad::Event),
+    NatStatusChanged(libp2p::autonat::NatStatus),
+    CatchupRequest { source: Option<PeerId>, request: CatchupRequest },
+    CatchupResponse { source: Option<PeerId>, response: CatchupResponse },
 }
 
 impl P2pNode {
@@ -186,6 +231,11 @@ impl P2pNode {
                 SwarmEvent::Behaviour(NeunodeEvent::Kademlia(kad_event)) => {
                     return NodeEvent::KademliaEvent(kad_event);
                 }
+                SwarmEvent::Behaviour(NeunodeEvent::Autonat(autonat_event)) => {
+                    if let Some(node_event) = convert_autonat_event(autonat_event) {
+                        return node_event;
+                    }
+                }
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                     return NodeEvent::PeerConnected(peer_id);
                 }
@@ -201,9 +251,25 @@ impl P2pNode {
 fn convert_gossipsub_event(event: libp2p::gossipsub::Event) -> Option<NodeEvent> {
     match event {
         libp2p::gossipsub::Event::Message { propagation_source, message, .. } => {
+            let topic = message.topic.to_string();
+            if topic == CATCHUP_TOPIC {
+                if let Some(req) = CatchupRequest::deserialize(&message.data) {
+                    return Some(NodeEvent::CatchupRequest {
+                        source: Some(propagation_source),
+                        request: req,
+                    });
+                }
+                if let Some(resp) = CatchupResponse::deserialize(&message.data) {
+                    return Some(NodeEvent::CatchupResponse {
+                        source: Some(propagation_source),
+                        response: resp,
+                    });
+                }
+                return None;
+            }
             Some(NodeEvent::GossipsubMessage {
                 source: Some(propagation_source),
-                topic: message.topic.to_string(),
+                topic,
                 data: message.data,
             })
         }
@@ -229,14 +295,38 @@ fn convert_ping_event(event: libp2p::ping::Event) -> Option<NodeEvent> {
     }
 }
 
+fn convert_autonat_event(event: libp2p::autonat::Event) -> Option<NodeEvent> {
+    match event {
+        libp2p::autonat::Event::StatusChanged { new, .. } => {
+            Some(NodeEvent::NatStatusChanged(new))
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_ID: AtomicU64 = AtomicU64::new(0);
+
+    fn temp_data_dir() -> std::path::PathBuf {
+        let id = TEST_ID.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "neunode_node_test_{:?}_{}",
+            std::process::id(),
+            id
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
 
     fn create_test_node() -> P2pNode {
         let keypair = Keypair::generate_ed25519();
         let listen_addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
-        P2pNode::new(keypair, listen_addr).expect("node creation should succeed")
+        let dir = temp_data_dir();
+        P2pNode::new(keypair, listen_addr, &dir).expect("node creation should succeed")
     }
 
     #[test]
@@ -250,7 +340,8 @@ mod tests {
         let keypair = Keypair::generate_ed25519();
         let expected = keypair.public().to_peer_id();
         let listen_addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
-        let node = P2pNode::new(keypair, listen_addr).unwrap();
+        let dir = temp_data_dir();
+        let node = P2pNode::new(keypair, listen_addr, &dir).unwrap();
         assert_eq!(node.local_peer_id(), expected);
     }
 

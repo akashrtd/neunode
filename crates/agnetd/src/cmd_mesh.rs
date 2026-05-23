@@ -67,6 +67,7 @@ async fn mesh_start(
         bootstrap_addrs,
         subscribe_all,
         state.db().clone(),
+        state.data_dir().to_path_buf(),
     )?;
 
     let peer_id = handle.local_peer_id.to_string();

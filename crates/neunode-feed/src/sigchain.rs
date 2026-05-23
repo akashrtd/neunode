@@ -143,8 +143,23 @@ impl SigChain {
         } else if event.sequence > expected_seq {
             // Buffer for later — predecessor hasn't arrived yet
             self.pending.insert(event.sequence, event);
+        } else {
+            // sequence < expected_seq — could be a duplicate or a fork
+            if self.detect_fork(&event) {
+                let local_hash = self
+                    .events
+                    .iter()
+                    .find(|e| e.sequence == event.sequence)
+                    .map(|e| e.prev_hash.0.clone())
+                    .unwrap_or_default();
+                return Err(FeedError::ForkDetected {
+                    seq: event.sequence,
+                    local: local_hash,
+                    incoming: event.prev_hash.0.clone(),
+                });
+            }
+            // Silently ignore exact duplicates
         }
-        // Silently ignore duplicates (sequence < expected)
 
         Ok(())
     }
@@ -170,6 +185,44 @@ impl SigChain {
     /// Number of events waiting in the buffer for their predecessor.
     pub fn pending_count(&self) -> usize {
         self.pending.len()
+    }
+
+    /// Returns sequence ranges that are missing between 0 and last_sequence.
+    /// Used by the catchup protocol to request missing events from peers.
+    pub fn sequence_gaps(&self) -> Vec<(u64, u64)> {
+        if self.events.is_empty() {
+            return Vec::new();
+        }
+        let mut gaps = Vec::new();
+        let mut expected = 0u64;
+        for event in &self.events {
+            if event.sequence > expected {
+                gaps.push((expected, event.sequence - 1));
+            }
+            expected = event.sequence + 1;
+        }
+        gaps
+    }
+
+    /// Detect if an incoming event represents a fork: same sequence but different hash.
+    /// Returns true if a fork is detected, along with the local and incoming prev_hashes.
+    pub fn detect_fork(&self, event: &FeedEvent) -> bool {
+        if let Some(local) = self.events.iter().find(|e| e.sequence == event.sequence) {
+            local.compute_hash().ok().as_ref() != event.compute_hash().ok().as_ref()
+                || local.prev_hash != event.prev_hash
+        } else {
+            false
+        }
+    }
+
+    /// Check if we're missing any sequences after the last received event.
+    /// Returns the next expected sequence number.
+    pub fn expected_next_sequence(&self) -> u64 {
+        if self.events.is_empty() {
+            0
+        } else {
+            self.last_sequence + 1
+        }
     }
 
     pub fn len(&self) -> usize {

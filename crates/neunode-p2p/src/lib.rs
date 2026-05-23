@@ -1,5 +1,7 @@
 pub mod behaviour;
+pub mod catchup;
 pub mod dht;
+pub mod dht_store;
 pub mod discovery;
 pub mod error;
 pub mod gossipsub;

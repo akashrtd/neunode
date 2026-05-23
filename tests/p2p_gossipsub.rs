@@ -25,7 +25,12 @@ const DRIVE_POLL_TIMEOUT: Duration = Duration::from_millis(50);
 async fn create_node() -> P2pNode {
     let keypair = Keypair::generate_ed25519();
     let listen_addr: Multiaddr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
-    let mut node = P2pNode::new(keypair, listen_addr.clone()).unwrap();
+    let data_dir = std::env::temp_dir().join(format!(
+        "neunode_p2p_test_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+    ));
+    let mut node = P2pNode::new(keypair, listen_addr.clone(), &data_dir).unwrap();
     node.start(listen_addr).unwrap();
     let _ = tokio::time::timeout(Duration::from_millis(300), node.next_event()).await;
     assert!(node.listeners().count() > 0, "node should have at least one listener after start");
