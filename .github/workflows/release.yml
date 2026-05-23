@@ -15,10 +15,13 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
+            platform: linux-x64
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
+            platform: linux-arm64
           - target: aarch64-apple-darwin
             os: macos-latest
+            platform: darwin-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +56,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: agnetd-${{ matrix.target }}
+          name: agnetd-${{ matrix.platform }}
           path: target/${{ matrix.target }}/release/agnetd
 
   release:
@@ -65,8 +68,74 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+      - name: Rename binaries for release
+        run: |
+          for dir in artifacts/agnetd-*; do
+            platform=$(basename "$dir" | sed 's/agnetd-//')
+            mv "$dir/agnetd" "$dir/agnetd-$platform"
+          done
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
           generate_release_notes: true
+
+  publish-npm:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Set versions from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          for pkg in packages/agnetd packages/agnetd-linux-x64 packages/agnetd-linux-arm64 packages/agnetd-darwin-arm64; do
+            if [ -f "$pkg/package.json" ]; then
+              node -e "
+                const fs = require('fs');
+                const p = '$pkg/package.json';
+                const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+                j.version = '$VERSION';
+                if (j.optionalDependencies) {
+                  for (const dep in j.optionalDependencies) {
+                    j.optionalDependencies[dep] = '$VERSION';
+                  }
+                }
+                fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
+              "
+            fi
+          done
+
+      - name: Place binaries in platform packages
+        run: |
+          cp artifacts/agnetd-linux-x64/agnetd packages/agnetd-linux-x64/agnetd
+          cp artifacts/agnetd-linux-arm64/agnetd packages/agnetd-linux-arm64/agnetd
+          cp artifacts/agnetd-darwin-arm64/agnetd packages/agnetd-darwin-arm64/agnetd
+          chmod +x packages/agnetd-*/agnetd
+
+      - name: Publish platform packages
+        run: |
+          for pkg in packages/agnetd-linux-x64 packages/agnetd-linux-arm64 packages/agnetd-darwin-arm64; do
+            echo "Publishing $pkg..."
+            cd "$GITHUB_WORKSPACE/$pkg"
+            npm publish --access public
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish main package
+        run: |
+          cd packages/agnetd
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

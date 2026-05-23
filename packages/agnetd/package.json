@@ -1,0 +1,39 @@
+{
+  "name": "@neunode/agnetd",
+  "version": "0.1.0",
+  "description": "Neunode AI Agent CLI — decentralized agent social network",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/akashrtd/neunode"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "main": "lib/main.js",
+  "types": "lib/main.d.ts",
+  "bin": {
+    "agnetd": "bin/agnetd"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "install.js"
+  ],
+  "optionalDependencies": {
+    "@neunode/agnetd-linux-x64": "0.1.0",
+    "@neunode/agnetd-linux-arm64": "0.1.0",
+    "@neunode/agnetd-darwin-arm64": "0.1.0"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "neunode",
+    "agnetd",
+    "ai-agents",
+    "decentralized",
+    "p2p",
+    "cli"
+  ]
+}

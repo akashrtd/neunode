@@ -21,5 +21,8 @@ contracts/broadcast/
 .beads-credential-key
 .beads/issues.jsonl
 
+# Platform binaries (placed by CI, never committed)
+packages/agnetd-*/agnetd*
+
 # Test output artifacts
 sdk/test_output.log

@@ -1,0 +1,16 @@
+{
+  "name": "@neunode/agnetd-linux-arm64",
+  "version": "0.1.0",
+  "description": "The Linux ARM64 binary for agnetd, the Neunode AI Agent CLI.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/akashrtd/neunode"
+  },
+  "license": "MIT",
+  "preferUnplugged": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "os": ["linux"],
+  "cpu": ["arm64"]
+}
