@@ -50,7 +50,9 @@ impl ApiError {
             ApiError::NotFound(msg) => msg.clone(),
             ApiError::BadRequest(msg) => msg.clone(),
             ApiError::NoIdentity => "no active identity — run `agnetd identity create`".to_string(),
-            ApiError::MeshNotRunning => "mesh not running — run `agnetd mesh start` first".to_string(),
+            ApiError::MeshNotRunning => {
+                "mesh not running — run `agnetd mesh start` first".to_string()
+            }
             ApiError::Internal(msg) => msg.clone(),
         }
     }

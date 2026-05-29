@@ -215,9 +215,7 @@ pub async fn request_inference(
         presence_penalty: None,
     };
 
-    request
-        .validate()
-        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    request.validate().map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
     let estimated_tokens = request.estimate_tokens();
 
@@ -407,21 +405,21 @@ pub async fn show_pricing(
     }
 
     let providers = load_all_providers(&state.db);
-    let model_info = providers
-        .iter()
-        .find_map(|p| p.find_model(&query.model))
-        .cloned()
-        .unwrap_or_else(|| ModelInfo {
-            id: query.model.clone(),
-            base_model: None,
-            context_length: 4096,
-            input_price_per_million: TokenAmount(100),
-            output_price_per_million: TokenAmount(200),
-            capabilities: vec!["chat".to_string()],
+    let model_info =
+        providers.iter().find_map(|p| p.find_model(&query.model)).cloned().unwrap_or_else(|| {
+            ModelInfo {
+                id: query.model.clone(),
+                base_model: None,
+                context_length: 4096,
+                input_price_per_million: TokenAmount(100),
+                output_price_per_million: TokenAmount(200),
+                capabilities: vec!["chat".to_string()],
+            }
         });
 
     let input_cost = (query.input_tokens as u64) * model_info.input_price_per_million.0 / 1_000_000;
-    let output_cost = (query.output_tokens as u64) * model_info.output_price_per_million.0 / 1_000_000;
+    let output_cost =
+        (query.output_tokens as u64) * model_info.output_price_per_million.0 / 1_000_000;
     let total = input_cost.saturating_add(output_cost);
     let total_cost = if total == 0 && (query.input_tokens > 0 || query.output_tokens > 0) {
         1u64

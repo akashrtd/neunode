@@ -227,10 +227,7 @@ mod tests {
         ];
         for i in 0..selectors.len() {
             for j in (i + 1)..selectors.len() {
-                assert_ne!(
-                    selectors[i], selectors[j],
-                    "Review event selectors must be unique"
-                );
+                assert_ne!(selectors[i], selectors[j], "Review event selectors must be unique");
             }
         }
     }
@@ -239,7 +236,8 @@ mod tests {
 
     #[test]
     fn error_types_constructible() {
-        let bounty_id = fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000001");
+        let bounty_id =
+            fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000001");
         let addr = address!("0000000000000000000000000000000000000001");
 
         let _ = CommitteeAlreadyAssigned { bountyId: bounty_id };
@@ -247,22 +245,13 @@ mod tests {
         let _ = DuplicateReviewer {};
         let _ = CommitteeNotAssigned { bountyId: bounty_id };
         let _ = CommitteeAlreadyResolved { bountyId: bounty_id };
-        let _ = AlreadyReviewed {
-            bountyId: bounty_id,
-            reviewer: addr,
-        };
-        let _ = NotReviewer {
-            bountyId: bounty_id,
-            caller: addr,
-        };
+        let _ = AlreadyReviewed { bountyId: bounty_id, reviewer: addr };
+        let _ = NotReviewer { bountyId: bounty_id, caller: addr };
         let _ = InvalidSignature {
             expected: addr,
             actual: address!("0000000000000000000000000000000000000002"),
         };
-        let _ = IndexOutOfBounds {
-            index: U256::from(5),
-            length: U256::from(3),
-        };
+        let _ = IndexOutOfBounds { index: U256::from(5), length: U256::from(3) };
     }
 
     #[test]

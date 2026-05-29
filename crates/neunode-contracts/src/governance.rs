@@ -231,7 +231,9 @@ mod tests {
             targets: vec![address!("0000000000000000000000000000000000000002")],
             values: vec![U256::ZERO],
             calldatas: vec![Bytes::new()],
-            descriptionHash: fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000001"),
+            descriptionHash: fixed_bytes!(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            ),
             voteStart: U256::from(100),
             voteEnd: U256::from(200),
             forVotes: U256::from(60),
@@ -280,20 +282,14 @@ mod tests {
 
     #[test]
     fn checkpoint_construction() {
-        let cp = Checkpoint {
-            fromBlock: U256::from(1000),
-            power: U256::from(500),
-        };
+        let cp = Checkpoint { fromBlock: U256::from(1000), power: U256::from(500) };
         assert_eq!(cp.fromBlock, U256::from(1000));
         assert_eq!(cp.power, U256::from(500));
     }
 
     #[test]
     fn checkpoint_zero() {
-        let cp = Checkpoint {
-            fromBlock: U256::ZERO,
-            power: U256::ZERO,
-        };
+        let cp = Checkpoint { fromBlock: U256::ZERO, power: U256::ZERO };
         assert_eq!(cp.fromBlock, U256::ZERO);
         assert_eq!(cp.power, U256::ZERO);
     }
@@ -342,10 +338,7 @@ mod tests {
         ];
         for i in 0..selectors.len() {
             for j in (i + 1)..selectors.len() {
-                assert_ne!(
-                    selectors[i], selectors[j],
-                    "Governance event selectors must be unique"
-                );
+                assert_ne!(selectors[i], selectors[j], "Governance event selectors must be unique");
             }
         }
     }

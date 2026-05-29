@@ -190,14 +190,16 @@ fn store_model(
     let key = format!("model:{}", model.id);
     let key_bytes =
         bincode::serialize(&key).map_err(|e| ApiError::Internal(format!("key: {e}")))?;
-    let value =
-        bincode::serialize(model).map_err(|e| ApiError::Internal(format!("serialize model: {e}")))?;
+    let value = bincode::serialize(model)
+        .map_err(|e| ApiError::Internal(format!("serialize model: {e}")))?;
     db.put_raw(neunode_storage::cf::CF_MODELS, &key_bytes, &value)
         .map_err(|e| ApiError::Internal(format!("store model: {e}")))?;
     Ok(())
 }
 
-fn load_all_models(db: &neunode_storage::db::NeunodeDb) -> Vec<neunode_inference::provider::ModelInfo> {
+fn load_all_models(
+    db: &neunode_storage::db::NeunodeDb,
+) -> Vec<neunode_inference::provider::ModelInfo> {
     let entries = match db.prefix_scan(neunode_storage::cf::CF_MODELS, &[]) {
         Ok(e) => e,
         Err(_) => return Vec::new(),
@@ -232,10 +234,7 @@ fn load_model(
     }
 }
 
-fn delete_model(
-    db: &neunode_storage::db::NeunodeDb,
-    model_id: &str,
-) -> Result<(), ApiError> {
+fn delete_model(db: &neunode_storage::db::NeunodeDb, model_id: &str) -> Result<(), ApiError> {
     let key = format!("model:{model_id}");
     let key_bytes =
         bincode::serialize(&key).map_err(|e| ApiError::Internal(format!("key: {e}")))?;

@@ -67,16 +67,15 @@ mod tests {
     fn did_document_construction() {
         let doc = DidDocument {
             controller: address!("0000000000000000000000000000000000000001"),
-            ed25519PublicKeyHash: fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000001"),
+            ed25519PublicKeyHash: fixed_bytes!(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            ),
             created: U256::from(1000),
             updated: U256::from(2000),
             active: true,
         };
         assert!(doc.active);
-        assert_eq!(
-            doc.controller,
-            address!("0000000000000000000000000000000000000001")
-        );
+        assert_eq!(doc.controller, address!("0000000000000000000000000000000000000001"));
         assert_eq!(
             doc.ed25519PublicKeyHash,
             fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000001")
@@ -158,22 +157,11 @@ mod tests {
 
     #[test]
     fn error_types_constructible() {
-        let _ = DidAlreadyExists {
-            didHash: FixedBytes::<32>::ZERO,
-        };
-        let _ = DidNotFound {
-            didHash: FixedBytes::<32>::ZERO,
-        };
-        let _ = DidNotActive {
-            didHash: FixedBytes::<32>::ZERO,
-        };
-        let _ = NotController {
-            didHash: FixedBytes::<32>::ZERO,
-            caller: Address::ZERO,
-        };
-        let _ = AddressAlreadyHasDid {
-            addr: Address::ZERO,
-        };
+        let _ = DidAlreadyExists { didHash: FixedBytes::<32>::ZERO };
+        let _ = DidNotFound { didHash: FixedBytes::<32>::ZERO };
+        let _ = DidNotActive { didHash: FixedBytes::<32>::ZERO };
+        let _ = NotController { didHash: FixedBytes::<32>::ZERO, caller: Address::ZERO };
+        let _ = AddressAlreadyHasDid { addr: Address::ZERO };
         let _ = InvalidPublicKeyHash {};
     }
 

@@ -165,8 +165,7 @@ pub async fn register_agent(
     let caps = parse_capabilities(&body.capabilities);
     let cap_refs: Vec<&str> = caps.iter().map(|s| s.as_str()).collect();
 
-    let payload =
-        neunode_knowledge::authorization::canonical_register_agent(&body.did, &cap_refs);
+    let payload = neunode_knowledge::authorization::canonical_register_agent(&body.did, &cap_refs);
     let auth = sign_mutation(&*keyring, &body.did, &payload)?;
 
     let db = &state.db;
@@ -249,8 +248,7 @@ pub async fn register_bounty(
     let caps = parse_capabilities(&body.capabilities);
     let cap_refs: Vec<&str> = caps.iter().map(|s| s.as_str()).collect();
 
-    let payload =
-        neunode_knowledge::authorization::canonical_register_bounty(&body.id, &cap_refs);
+    let payload = neunode_knowledge::authorization::canonical_register_bounty(&body.id, &cap_refs);
     let auth = sign_mutation(&*keyring, &active_did.0, &payload)?;
 
     let db = &state.db;

@@ -79,9 +79,7 @@ pub async fn list_feed(
     };
 
     let store = neunode_storage::feed_store::FeedStore::new(&state.db);
-    let events = store
-        .get_all(&did)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let events = store.get_all(&did).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let filtered: Vec<FeedEventResponse> = events
         .into_iter()
@@ -123,9 +121,8 @@ pub async fn post_feed(
     let _keyring = state.require_keyring()?;
 
     let store = neunode_storage::feed_store::FeedStore::new(&state.db);
-    let latest_seq = store
-        .latest_sequence(&did.0)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let latest_seq =
+        store.latest_sequence(&did.0).map_err(|e| ApiError::Internal(e.to_string()))?;
     let next_seq = if latest_seq == 0 { 1 } else { latest_seq + 1 };
 
     let now_ts = std::time::SystemTime::now()
@@ -142,11 +139,10 @@ pub async fn post_feed(
         payload: body.content.as_bytes().to_vec(),
         signature: vec![],
     };
-    store
-        .append(&stored)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    store.append(&stored).map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let event_id = format!("evt_{}_{}", hex::encode(&did.0.as_bytes()[..8.min(did.0.len())]), next_seq);
+    let event_id =
+        format!("evt_{}_{}", hex::encode(&did.0.as_bytes()[..8.min(did.0.len())]), next_seq);
 
     let resp = PostFeedResponse {
         event_id,
@@ -178,9 +174,7 @@ pub async fn show_feed_event(
     let did = state.require_did()?;
     let store = neunode_storage::feed_store::FeedStore::new(&state.db);
 
-    let events = store
-        .get_all(&did.0)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let events = store.get_all(&did.0).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let found = events.iter().find(|e| {
         let id_hex = hex::encode(&e.signature);
@@ -200,9 +194,7 @@ pub async fn show_feed_event(
             };
             Ok(types::ok(resp))
         }
-        None => Err(ApiError::NotFound(format!(
-            "event '{event_id}' not found"
-        ))),
+        None => Err(ApiError::NotFound(format!("event '{event_id}' not found"))),
     }
 }
 
@@ -244,8 +236,7 @@ mod tests {
 
     #[test]
     fn feed_list_query_defaults() {
-        let query: FeedListQuery =
-            serde_json::from_str(r#"{}"#).unwrap();
+        let query: FeedListQuery = serde_json::from_str(r#"{}"#).unwrap();
         assert_eq!(query.limit, 50);
         assert!(query.kind.is_none());
         assert!(query.author.is_none());

@@ -119,10 +119,7 @@ pub struct BountyPayResponse {
 // ---------------------------------------------------------------------------
 
 fn current_timestamp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
 }
 
 fn generate_bounty_id() -> String {
@@ -200,9 +197,7 @@ pub async fn list_bounties(
     Query(query): Query<BountyListQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
     let store = neunode_storage::bounty_store::BountyStore::new(&state.db);
-    let all = store
-        .list_all()
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let all = store.list_all().map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let state_filter = &query.state;
     let creator_filter = &query.creator;
@@ -210,15 +205,9 @@ pub async fn list_bounties(
     let filtered: Vec<BountyListItem> = all
         .iter()
         .filter(|b| {
-            state_filter
-                .as_ref()
-                .is_none_or(|sf| sf.to_lowercase() == b.state.to_lowercase())
+            state_filter.as_ref().is_none_or(|sf| sf.to_lowercase() == b.state.to_lowercase())
         })
-        .filter(|b| {
-            creator_filter
-                .as_ref()
-                .is_none_or(|cf| b.requester_did.contains(cf.as_str()))
-        })
+        .filter(|b| creator_filter.as_ref().is_none_or(|cf| b.requester_did.contains(cf.as_str())))
         .take(query.limit)
         .map(|b| BountyListItem {
             id: b.id.clone(),
@@ -287,9 +276,7 @@ pub async fn create_bounty(
     };
 
     let store = neunode_storage::bounty_store::BountyStore::new(&state.db);
-    store
-        .put(&bounty)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    store.put(&bounty).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let resp = bounty_data_to_response(&bounty);
     Ok(types::created(resp))
@@ -359,14 +346,9 @@ pub async fn claim_bounty(
     updated.provider_did = Some(claimant.0.clone());
     updated.bond = Some(body.stake);
 
-    store
-        .put(&updated)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    store.put(&updated).map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let resp = BountyActionResponse {
-        bounty_id: id,
-        state: "Claimed".to_string(),
-    };
+    let resp = BountyActionResponse { bounty_id: id, state: "Claimed".to_string() };
     Ok(types::ok(resp))
 }
 
@@ -409,14 +391,9 @@ pub async fn submit_bounty(
     updated.state = "Submitted".to_string();
     updated.artifact_hash = Some(body.artifact);
 
-    store
-        .put(&updated)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    store.put(&updated).map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let resp = BountyActionResponse {
-        bounty_id: id,
-        state: "Submitted".to_string(),
-    };
+    let resp = BountyActionResponse { bounty_id: id, state: "Submitted".to_string() };
     Ok(types::ok(resp))
 }
 
@@ -439,10 +416,7 @@ pub async fn review_bounty(
     Json(body): Json<ReviewBountyRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     if body.score > 100 {
-        return Err(ApiError::BadRequest(format!(
-            "invalid score: {} (must be 0-100)",
-            body.score
-        )));
+        return Err(ApiError::BadRequest(format!("invalid score: {} (must be 0-100)", body.score)));
     }
 
     let store = neunode_storage::bounty_store::BountyStore::new(&state.db);
@@ -472,14 +446,9 @@ pub async fn review_bounty(
         updated.state = "Rejected".to_string();
     }
 
-    store
-        .put(&updated)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    store.put(&updated).map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let resp = BountyActionResponse {
-        bounty_id: id,
-        state: updated.state,
-    };
+    let resp = BountyActionResponse { bounty_id: id, state: updated.state };
     Ok(types::ok(resp))
 }
 
@@ -520,9 +489,7 @@ pub async fn pay_bounty(
     let mut updated = bounty;
     updated.state = "Paid".to_string();
 
-    store
-        .put(&updated)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    store.put(&updated).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let resp = BountyPayResponse {
         bounty_id: id,
@@ -566,14 +533,9 @@ pub async fn cancel_bounty(
     let mut updated = bounty;
     updated.state = "Cancelled".to_string();
 
-    store
-        .put(&updated)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    store.put(&updated).map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let resp = BountyActionResponse {
-        bounty_id: id,
-        state: "Cancelled".to_string(),
-    };
+    let resp = BountyActionResponse { bounty_id: id, state: "Cancelled".to_string() };
     Ok(types::ok(resp))
 }
 
@@ -628,10 +590,8 @@ mod tests {
 
     #[test]
     fn submit_bounty_request_with_evidence() {
-        let req: SubmitBountyRequest = serde_json::from_str(
-            r#"{"artifact":"ipfs://QmX7b","evidence":"proof.txt"}"#,
-        )
-        .unwrap();
+        let req: SubmitBountyRequest =
+            serde_json::from_str(r#"{"artifact":"ipfs://QmX7b","evidence":"proof.txt"}"#).unwrap();
         assert_eq!(req.artifact, "ipfs://QmX7b");
         assert_eq!(req.evidence.as_deref(), Some("proof.txt"));
     }
@@ -674,22 +634,13 @@ mod tests {
 
     #[test]
     fn parse_token_type_all_variants() {
-        assert!(matches!(
-            parse_token_type("compute"),
-            Ok(neunode_core::types::TokenType::Compute)
-        ));
-        assert!(matches!(
-            parse_token_type("train"),
-            Ok(neunode_core::types::TokenType::Train)
-        ));
+        assert!(matches!(parse_token_type("compute"), Ok(neunode_core::types::TokenType::Compute)));
+        assert!(matches!(parse_token_type("train"), Ok(neunode_core::types::TokenType::Train)));
         assert!(matches!(
             parse_token_type("bandwidth"),
             Ok(neunode_core::types::TokenType::Bandwidth)
         ));
-        assert!(matches!(
-            parse_token_type("storage"),
-            Ok(neunode_core::types::TokenType::Storage)
-        ));
+        assert!(matches!(parse_token_type("storage"), Ok(neunode_core::types::TokenType::Storage)));
         assert!(parse_token_type("invalid").is_err());
     }
 

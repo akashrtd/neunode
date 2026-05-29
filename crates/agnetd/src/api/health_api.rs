@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use axum::response::IntoResponse;
 use axum::extract::State;
+use axum::response::IntoResponse;
 
 use super::state::ApiState;
 use super::types;
@@ -21,9 +21,7 @@ pub struct HealthResponse {
     ),
     tag = "system",
 )]
-pub async fn health_handler(
-    State(_state): State<Arc<ApiState>>,
-) -> impl IntoResponse {
+pub async fn health_handler(State(_state): State<Arc<ApiState>>) -> impl IntoResponse {
     types::ok(HealthResponse {
         status: "ok".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),

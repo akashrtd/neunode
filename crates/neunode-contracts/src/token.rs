@@ -153,14 +153,8 @@ mod tests {
         let caller = address!("0000000000000000000000000000000000000002");
 
         let _ = UnauthorizedActivityUpdate { caller, account: acct };
-        let _ = InsufficientBalance {
-            account: acct,
-            required: U256::from(1000),
-        };
-        let _ = InsufficientStake {
-            account: acct,
-            required: U256::from(500),
-        };
+        let _ = InsufficientBalance { account: acct, required: U256::from(1000) };
+        let _ = InsufficientStake { account: acct, required: U256::from(500) };
         let _ = CannotUnstakeSeed {};
     }
 
@@ -187,9 +181,9 @@ mod tests {
         // Verify the range logic is sensible at the parameter level
         let max_decay_bps = 5000u64; // 50%
         let activity_levels = [
-            (100, 0),    // 100% active -> 0% decay
-            (50, 2500),  // 50% active -> 25% decay
-            (0, 5000),   // 0% active -> 50% decay
+            (100, 0),   // 100% active -> 0% decay
+            (50, 2500), // 50% active -> 25% decay
+            (0, 5000),  // 0% active -> 50% decay
         ];
         for (activity, expected_bps) in activity_levels {
             let decay_bps = max_decay_bps * (100 - activity) / 100;

@@ -180,8 +180,10 @@ mod tests {
         ];
         for i in 0..variants.len() {
             for j in (i + 1)..variants.len() {
-                assert_ne!(variants[i] as u8, variants[j] as u8,
-                    "ContributionType variants must have distinct discriminants");
+                assert_ne!(
+                    variants[i] as u8, variants[j] as u8,
+                    "ContributionType variants must have distinct discriminants"
+                );
             }
         }
     }
@@ -247,11 +249,8 @@ mod tests {
 
     #[test]
     fn recipient_info_zero_fields() {
-        let info = RecipientInfo {
-            contributor: Address::ZERO,
-            weight: U256::ZERO,
-            depth: U256::ZERO,
-        };
+        let info =
+            RecipientInfo { contributor: Address::ZERO, weight: U256::ZERO, depth: U256::ZERO };
         assert_eq!(info.contributor, Address::ZERO);
         assert_eq!(info.weight, U256::ZERO);
         assert_eq!(info.depth, U256::ZERO);
@@ -305,10 +304,7 @@ mod tests {
         ];
         for i in 0..selectors.len() {
             for j in (i + 1)..selectors.len() {
-                assert_ne!(
-                    selectors[i], selectors[j],
-                    "Model event selectors must be unique"
-                );
+                assert_ne!(selectors[i], selectors[j], "Model event selectors must be unique");
             }
         }
     }
@@ -334,22 +330,11 @@ mod tests {
 
         let _ = NoLineage { cid };
         let _ = ZeroAmount {};
-        let _ = DistributionFailed {
-            recipient: addr,
-            amount: U256::from(100),
-        };
+        let _ = DistributionFailed { recipient: addr, amount: U256::from(100) };
         let _ = ZeroAddress {};
-        let _ = BpsExceedsMax {
-            bps: U256::from(10001),
-            max: U256::from(10000),
-        };
-        let _ = InvalidContributionType {
-            contributionType: 6,
-        };
-        let _ = LineageTooDeep {
-            nodes: U256::from(100),
-            max: U256::from(50),
-        };
+        let _ = BpsExceedsMax { bps: U256::from(10001), max: U256::from(10000) };
+        let _ = InvalidContributionType { contributionType: 6 };
+        let _ = LineageTooDeep { nodes: U256::from(100), max: U256::from(50) };
     }
 
     #[test]

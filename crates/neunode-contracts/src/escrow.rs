@@ -148,7 +148,9 @@ mod tests {
     #[test]
     fn escrow_construction() {
         let escrow = Escrow {
-            bountyId: fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000001"),
+            bountyId: fixed_bytes!(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            ),
             requester: address!("0000000000000000000000000000000000000001"),
             provider: address!("0000000000000000000000000000000000000002"),
             token: address!("0000000000000000000000000000000000000003"),
@@ -161,7 +163,10 @@ mod tests {
         assert_eq!(escrow.state, EscrowState::Created);
         assert_eq!(escrow.amount, U256::from(5000));
         assert_eq!(escrow.providerBond, U256::from(750));
-        assert_eq!(escrow.bountyId, fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000001"));
+        assert_eq!(
+            escrow.bountyId,
+            fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000001")
+        );
     }
 
     #[test]
@@ -234,10 +239,7 @@ mod tests {
         ];
         for i in 0..selectors.len() {
             for j in (i + 1)..selectors.len() {
-                assert_ne!(
-                    selectors[i], selectors[j],
-                    "Escrow event selectors must be unique"
-                );
+                assert_ne!(selectors[i], selectors[j], "Escrow event selectors must be unique");
             }
         }
     }
@@ -246,30 +248,21 @@ mod tests {
 
     #[test]
     fn error_types_constructible() {
-        let bounty_id = fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000001");
+        let bounty_id =
+            fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000001");
         let caller = address!("0000000000000000000000000000000000000001");
 
         let _ = EscrowNotFound { bountyId: bounty_id };
         let _ = EscrowAlreadyExists { bountyId: bounty_id };
         let _ = EscrowNotCreated { bountyId: bounty_id };
         let _ = EscrowNotFunded { bountyId: bounty_id };
-        let _ = NotRequester {
-            bountyId: bounty_id,
-            caller,
-        };
-        let _ = NotProvider {
-            bountyId: bounty_id,
-            caller,
-        };
+        let _ = NotRequester { bountyId: bounty_id, caller };
+        let _ = NotProvider { bountyId: bounty_id, caller };
         let _ = InvalidAmount {};
         let _ = InvalidToken {};
-        let _ = DeadlinePassed {
-            deadline: U256::from(100),
-        };
+        let _ = DeadlinePassed { deadline: U256::from(100) };
         let _ = Unauthorized {};
-        let _ = FeeBpsExceeds100Pct {
-            totalBps: U256::from(10100),
-        };
+        let _ = FeeBpsExceeds100Pct { totalBps: U256::from(10100) };
         let _ = ZeroAddressFeeRecipient {};
     }
 

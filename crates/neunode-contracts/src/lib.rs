@@ -149,50 +149,17 @@ mod tests {
 
     #[test]
     fn bounty_state_core_to_contract_individual() {
-        assert_eq!(
-            bounty::BountyState::Open,
-            neunode_core::BountyState::Open.into()
-        );
-        assert_eq!(
-            bounty::BountyState::Claimed,
-            neunode_core::BountyState::Claimed.into()
-        );
-        assert_eq!(
-            bounty::BountyState::Submitted,
-            neunode_core::BountyState::Submitted.into()
-        );
-        assert_eq!(
-            bounty::BountyState::UnderReview,
-            neunode_core::BountyState::UnderReview.into()
-        );
-        assert_eq!(
-            bounty::BountyState::Revision,
-            neunode_core::BountyState::Revision.into()
-        );
-        assert_eq!(
-            bounty::BountyState::Accepted,
-            neunode_core::BountyState::Accepted.into()
-        );
-        assert_eq!(
-            bounty::BountyState::Rejected,
-            neunode_core::BountyState::Rejected.into()
-        );
-        assert_eq!(
-            bounty::BountyState::Disputed,
-            neunode_core::BountyState::Disputed.into()
-        );
-        assert_eq!(
-            bounty::BountyState::Paid,
-            neunode_core::BountyState::Paid.into()
-        );
-        assert_eq!(
-            bounty::BountyState::Expired,
-            neunode_core::BountyState::Expired.into()
-        );
-        assert_eq!(
-            bounty::BountyState::Cancelled,
-            neunode_core::BountyState::Cancelled.into()
-        );
+        assert_eq!(bounty::BountyState::Open, neunode_core::BountyState::Open.into());
+        assert_eq!(bounty::BountyState::Claimed, neunode_core::BountyState::Claimed.into());
+        assert_eq!(bounty::BountyState::Submitted, neunode_core::BountyState::Submitted.into());
+        assert_eq!(bounty::BountyState::UnderReview, neunode_core::BountyState::UnderReview.into());
+        assert_eq!(bounty::BountyState::Revision, neunode_core::BountyState::Revision.into());
+        assert_eq!(bounty::BountyState::Accepted, neunode_core::BountyState::Accepted.into());
+        assert_eq!(bounty::BountyState::Rejected, neunode_core::BountyState::Rejected.into());
+        assert_eq!(bounty::BountyState::Disputed, neunode_core::BountyState::Disputed.into());
+        assert_eq!(bounty::BountyState::Paid, neunode_core::BountyState::Paid.into());
+        assert_eq!(bounty::BountyState::Expired, neunode_core::BountyState::Expired.into());
+        assert_eq!(bounty::BountyState::Cancelled, neunode_core::BountyState::Cancelled.into());
     }
 
     #[test]
@@ -200,43 +167,16 @@ mod tests {
         // Verify each variant converts back correctly
         let pairs: Vec<(bounty::BountyState, neunode_core::BountyState)> = vec![
             (bounty::BountyState::Open, neunode_core::BountyState::Open),
-            (
-                bounty::BountyState::Claimed,
-                neunode_core::BountyState::Claimed,
-            ),
-            (
-                bounty::BountyState::Submitted,
-                neunode_core::BountyState::Submitted,
-            ),
-            (
-                bounty::BountyState::UnderReview,
-                neunode_core::BountyState::UnderReview,
-            ),
-            (
-                bounty::BountyState::Revision,
-                neunode_core::BountyState::Revision,
-            ),
-            (
-                bounty::BountyState::Accepted,
-                neunode_core::BountyState::Accepted,
-            ),
-            (
-                bounty::BountyState::Rejected,
-                neunode_core::BountyState::Rejected,
-            ),
-            (
-                bounty::BountyState::Disputed,
-                neunode_core::BountyState::Disputed,
-            ),
+            (bounty::BountyState::Claimed, neunode_core::BountyState::Claimed),
+            (bounty::BountyState::Submitted, neunode_core::BountyState::Submitted),
+            (bounty::BountyState::UnderReview, neunode_core::BountyState::UnderReview),
+            (bounty::BountyState::Revision, neunode_core::BountyState::Revision),
+            (bounty::BountyState::Accepted, neunode_core::BountyState::Accepted),
+            (bounty::BountyState::Rejected, neunode_core::BountyState::Rejected),
+            (bounty::BountyState::Disputed, neunode_core::BountyState::Disputed),
             (bounty::BountyState::Paid, neunode_core::BountyState::Paid),
-            (
-                bounty::BountyState::Expired,
-                neunode_core::BountyState::Expired,
-            ),
-            (
-                bounty::BountyState::Cancelled,
-                neunode_core::BountyState::Cancelled,
-            ),
+            (bounty::BountyState::Expired, neunode_core::BountyState::Expired),
+            (bounty::BountyState::Cancelled, neunode_core::BountyState::Cancelled),
         ];
         for (contract, expected_core) in pairs {
             let converted: neunode_core::BountyState = contract.try_into().unwrap();
@@ -248,22 +188,10 @@ mod tests {
 
     #[test]
     fn token_type_to_contribution_type() {
-        assert_eq!(
-            model::ContributionType::Compute,
-            neunode_core::TokenType::Compute.into()
-        );
-        assert_eq!(
-            model::ContributionType::FineTune,
-            neunode_core::TokenType::Train.into()
-        );
-        assert_eq!(
-            model::ContributionType::Serving,
-            neunode_core::TokenType::Bandwidth.into()
-        );
-        assert_eq!(
-            model::ContributionType::Data,
-            neunode_core::TokenType::Storage.into()
-        );
+        assert_eq!(model::ContributionType::Compute, neunode_core::TokenType::Compute.into());
+        assert_eq!(model::ContributionType::FineTune, neunode_core::TokenType::Train.into());
+        assert_eq!(model::ContributionType::Serving, neunode_core::TokenType::Bandwidth.into());
+        assert_eq!(model::ContributionType::Data, neunode_core::TokenType::Storage.into());
     }
 
     #[test]
@@ -292,10 +220,7 @@ mod tests {
             let result: Result<neunode_core::TokenType, ConversionError> = variant.try_into();
             assert!(result.is_err());
             let err = result.unwrap_err();
-            assert!(matches!(
-                err,
-                ConversionError::UnknownContributionType(_)
-            ));
+            assert!(matches!(err, ConversionError::UnknownContributionType(_)));
         }
     }
 
@@ -322,10 +247,7 @@ mod tests {
     #[test]
     fn conversion_error_messages() {
         let err = ConversionError::InvalidBytes32Length(16);
-        assert_eq!(
-            err.to_string(),
-            "invalid bytes32 length: expected 32 bytes, got 16"
-        );
+        assert_eq!(err.to_string(), "invalid bytes32 length: expected 32 bytes, got 16");
 
         let err = ConversionError::InvalidAddress("bad format".to_string());
         assert_eq!(err.to_string(), "invalid address format: bad format");

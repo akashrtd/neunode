@@ -421,10 +421,7 @@ mod tests {
         ];
         for i in 0..selectors.len() {
             for j in (i + 1)..selectors.len() {
-                assert_ne!(
-                    selectors[i], selectors[j],
-                    "Bounty event selectors must be unique"
-                );
+                assert_ne!(selectors[i], selectors[j], "Bounty event selectors must be unique");
             }
         }
     }
@@ -438,28 +435,20 @@ mod tests {
 
         let _ = BountyNotFound { id };
         let _ = BountyAlreadyExists { id };
-        let _ = InvalidState {
-            id,
-            current: BountyState::Open,
-            required: BountyState::Claimed,
-        };
+        let _ = InvalidState { id, current: BountyState::Open, required: BountyState::Claimed };
         let _ = NotRequester { id, caller };
         let _ = NotProvider { id, caller };
         let _ = NotClaimer { id, caller };
         let _ = InvalidDeadline {};
         let _ = InvalidReward {};
-        let _ = DeadlinePassed {
-            deadline: U256::from(100),
-        };
+        let _ = DeadlinePassed { deadline: U256::from(100) };
         let _ = MaxRevisionsReached {};
         let _ = ReviewNotResolved { id };
         let _ = ReviewNotAccepted { id };
         let _ = InsufficientBond {};
         let _ = TotalFeesExceed100 {};
         let _ = NoPendingFeeChange {};
-        let _ = FeeChangeTimelockNotExpired {
-            expiresAt: U256::from(200),
-        };
+        let _ = FeeChangeTimelockNotExpired { expiresAt: U256::from(200) };
         let _ = AlreadyCommitted { bountyId: id };
         let _ = NotCommitted { bountyId: id };
         let _ = InvalidReveal { bountyId: id };

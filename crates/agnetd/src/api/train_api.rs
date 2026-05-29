@@ -146,8 +146,8 @@ fn train_db_key(job_id: &str) -> String {
 }
 
 fn store_job(db: &NeunodeDb, job: &TrainingJobMeta) -> Result<(), ApiError> {
-    let key_bytes =
-        bincode::serialize(&train_db_key(&job.job_id)).map_err(|e| ApiError::Internal(e.to_string()))?;
+    let key_bytes = bincode::serialize(&train_db_key(&job.job_id))
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
     let value = bincode::serialize(job).map_err(|e| ApiError::Internal(e.to_string()))?;
     db.put_raw(CF_TRAINING, &key_bytes, &value)?;
     Ok(())
@@ -322,8 +322,7 @@ pub async fn training_status(
         }
         None => {
             let jobs = load_all_jobs(&state.db);
-            let responses: Vec<TrainingJobResponse> =
-                jobs.iter().map(job_to_response).collect();
+            let responses: Vec<TrainingJobResponse> = jobs.iter().map(job_to_response).collect();
             Ok(types::ok(responses))
         }
     }
@@ -363,9 +362,7 @@ pub async fn stop_training(
     ),
     tag = "train",
 )]
-pub async fn list_jobs(
-    State(state): State<Arc<ApiState>>,
-) -> Result<impl IntoResponse, ApiError> {
+pub async fn list_jobs(State(state): State<Arc<ApiState>>) -> Result<impl IntoResponse, ApiError> {
     let jobs = load_all_jobs(&state.db);
     let responses: Vec<TrainingJobResponse> = jobs.iter().map(job_to_response).collect();
     Ok(types::ok(responses))
@@ -384,9 +381,8 @@ pub async fn register_worker(
     State(state): State<Arc<ApiState>>,
     Json(body): Json<WorkerRegisterRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
+    let now =
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
     let entropy = format!(
         "worker{}{}{}{}{}",
         now.as_nanos(),
@@ -415,9 +411,7 @@ pub async fn register_worker(
         last_heartbeat_ms: now.as_millis() as u64,
     };
     let mut registry = ProviderRegistry::new();
-    registry
-        .register(entry)
-        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    registry.register(entry).map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
     let worker = WorkerMeta {
         worker_id: worker_id.clone(),

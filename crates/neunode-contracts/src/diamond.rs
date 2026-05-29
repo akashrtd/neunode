@@ -109,10 +109,7 @@ mod tests {
         };
         assert_eq!(cut.action, FacetCutAction::Add);
         assert_eq!(cut.functionSelectors.len(), 2);
-        assert_eq!(
-            cut.facetAddress,
-            address!("0000000000000000000000000000000000000001")
-        );
+        assert_eq!(cut.facetAddress, address!("0000000000000000000000000000000000000001"));
     }
 
     #[test]
@@ -159,19 +156,13 @@ mod tests {
                 fixed_bytes!("deadbeef"),
             ],
         };
-        assert_eq!(
-            facet.facetAddress,
-            address!("0000000000000000000000000000000000000001")
-        );
+        assert_eq!(facet.facetAddress, address!("0000000000000000000000000000000000000001"));
         assert_eq!(facet.functionSelectors.len(), 3);
     }
 
     #[test]
     fn facet_empty_selectors() {
-        let facet = Facet {
-            facetAddress: Address::ZERO,
-            functionSelectors: vec![],
-        };
+        let facet = Facet { facetAddress: Address::ZERO, functionSelectors: vec![] };
         assert!(facet.functionSelectors.is_empty());
     }
 
@@ -248,10 +239,7 @@ mod tests {
         ];
         for i in 0..selectors.len() {
             for j in (i + 1)..selectors.len() {
-                assert_ne!(
-                    selectors[i], selectors[j],
-                    "Diamond error selectors must be unique"
-                );
+                assert_ne!(selectors[i], selectors[j], "Diamond error selectors must be unique");
             }
         }
     }
