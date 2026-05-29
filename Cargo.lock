@@ -160,6 +160,7 @@ dependencies = [
  "alloy-contract",
  "alloy-core",
  "alloy-eips",
+ "alloy-genesis",
  "alloy-network",
  "alloy-provider",
  "alloy-rpc-client",
@@ -355,6 +356,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "alloy-genesis"
+version = "1.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbf9480307b09d22876efb67d30cadd9013134c21f3a17ec9f93fd7536d38024"
+dependencies = [
+ "alloy-eips",
+ "alloy-primitives",
+ "alloy-serde",
+ "alloy-trie",
+ "serde",
+]
+
+[[package]]
 name = "alloy-json-abi"
 version = "1.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -461,6 +475,7 @@ dependencies = [
  "alloy-network-primitives",
  "alloy-primitives",
  "alloy-rpc-client",
+ "alloy-rpc-types-engine",
  "alloy-rpc-types-eth",
  "alloy-signer",
  "alloy-sol-types",
@@ -538,6 +553,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4faad925d3a669ffc15f43b3deec7fbdf2adeb28a4d6f9cf4bc661698c0f8f4b"
 dependencies = [
  "alloy-primitives",
+ "alloy-rpc-types-engine",
  "alloy-rpc-types-eth",
  "alloy-serde",
  "serde",
@@ -552,6 +568,23 @@ dependencies = [
  "alloy-consensus-any",
  "alloy-rpc-types-eth",
  "alloy-serde",
+]
+
+[[package]]
+name = "alloy-rpc-types-engine"
+version = "1.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb9b97b6e7965679ad22df297dda809b11cebc13405c1b537e5cffecc95834fa"
+dependencies = [
+ "alloy-consensus",
+ "alloy-eips",
+ "alloy-primitives",
+ "alloy-rlp",
+ "alloy-serde",
+ "derive_more",
+ "rand 0.8.5",
+ "serde",
+ "strum 0.27.2",
 ]
 
 [[package]]
@@ -3680,7 +3713,7 @@ dependencies = [
  "chrono",
  "futures",
  "hyper 1.8.1",
- "jsonwebtoken",
+ "jsonwebtoken 10.3.0",
  "once_cell",
  "prost 0.14.3",
  "prost-types 0.14.3",
@@ -4880,6 +4913,21 @@ dependencies = [
  "smallstr",
  "smallvec",
  "utf8-decode",
+]
+
+[[package]]
+name = "jsonwebtoken"
+version = "9.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a87cc7a48537badeae96744432de36f4be2b4a34a05a5ef32e9dd8a1c169dde"
+dependencies = [
+ "base64 0.22.1",
+ "js-sys",
+ "pem",
+ "ring 0.17.14",
+ "serde",
+ "serde_json",
+ "simple_asn1 0.6.4",
 ]
 
 [[package]]
@@ -6097,6 +6145,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "neunode-chain-spec"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "neunode-contracts"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "neunode-core",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "neunode-core"
 version = "0.1.0"
 dependencies = [
@@ -6140,6 +6207,23 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "ts-rs",
+]
+
+[[package]]
+name = "neunode-engine-api-client"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "base64 0.22.1",
+ "futures",
+ "hex",
+ "jsonwebtoken 9.3.1",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

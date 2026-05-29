@@ -65,7 +65,8 @@ export function createModelResource(client: NeunodeClient): ModelResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for model operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for model operations");
 			const args = ["model", "list"];
 			if (provider) args.push("--provider", provider);
 			return cli.execute<ModelListResult>(args);
@@ -78,7 +79,8 @@ export function createModelResource(client: NeunodeClient): ModelResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for model operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for model operations");
 			return cli.execute<ModelShowResult>([
 				"model",
 				"show",
@@ -92,7 +94,8 @@ export function createModelResource(client: NeunodeClient): ModelResource {
 				return client.http.post<ModelPushResult>("/api/v1/models", params);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for model operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for model operations");
 			return cli.execute<ModelPushResult>([
 				"model",
 				"push",
@@ -110,7 +113,8 @@ export function createModelResource(client: NeunodeClient): ModelResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for model operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for model operations");
 			return cli.execute<ModelRmResult>(["model", "rm", "--model-id", modelId]);
 		},
 	};

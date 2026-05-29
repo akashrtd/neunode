@@ -55,8 +55,14 @@ describe("createTokenResource", () => {
 	});
 
 	it("should throw if both transports are missing", async () => {
-		const resource = createTokenResource({ ...mockClient, cli: undefined, http: undefined });
-		await expect(resource.stakeStatus()).rejects.toThrow("HTTP or CLI transport required");
+		const resource = createTokenResource({
+			...mockClient,
+			cli: undefined,
+			http: undefined,
+		});
+		await expect(resource.stakeStatus()).rejects.toThrow(
+			"HTTP or CLI transport required",
+		);
 	});
 
 	describe("balance", () => {
@@ -65,10 +71,16 @@ describe("createTokenResource", () => {
 			const http = dualClient.http as unknown as {
 				get: ReturnType<typeof vi.fn>;
 			};
-			http.get.mockResolvedValue({ token: "nCompute", balance: "1000", staked: "100" });
+			http.get.mockResolvedValue({
+				token: "nCompute",
+				balance: "1000",
+				staked: "100",
+			});
 			const resource = createTokenResource(dualClient);
 			await resource.balance("nCompute");
-			expect(http.get).toHaveBeenCalledWith("/api/v1/tokens/balance?token=nCompute");
+			expect(http.get).toHaveBeenCalledWith(
+				"/api/v1/tokens/balance?token=nCompute",
+			);
 		});
 
 		it("should call execute with token balance (no token) via CLI", async () => {
@@ -103,7 +115,11 @@ describe("createTokenResource", () => {
 			};
 			http.post.mockResolvedValue({ state: "sent" });
 			const resource = createTokenResource(dualClient);
-			await resource.transfer({ to: "did:neunode:def", amount: 100, token: "nCompute" });
+			await resource.transfer({
+				to: "did:neunode:def",
+				amount: 100,
+				token: "nCompute",
+			});
 			expect(http.post).toHaveBeenCalledWith("/api/v1/tokens/transfer", {
 				to: "did:neunode:def",
 				amount: 100,
@@ -182,7 +198,9 @@ describe("createTokenResource", () => {
 			http.post.mockResolvedValue({ state: "unbonding" });
 			const resource = createTokenResource(dualClient);
 			await resource.unstake(200);
-			expect(http.post).toHaveBeenCalledWith("/api/v1/tokens/unstake", { amount: 200 });
+			expect(http.post).toHaveBeenCalledWith("/api/v1/tokens/unstake", {
+				amount: 200,
+			});
 		});
 
 		it("should call execute with token unstake --amount via CLI", async () => {

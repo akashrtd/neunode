@@ -583,8 +583,14 @@ mod tests {
         let (sk_bytes, vk_bytes) = test_keypair();
         let mut chain = SigChain::new(test_did(), vk_bytes);
 
-        let mut event =
-            FeedEvent::new(Kind::AgentMetadata, test_did(), 0, Hash256(GENESIS_PREV_HASH.to_string()), "bad".to_string()).unwrap();
+        let mut event = FeedEvent::new(
+            Kind::AgentMetadata,
+            test_did(),
+            0,
+            Hash256(GENESIS_PREV_HASH.to_string()),
+            "bad".to_string(),
+        )
+        .unwrap();
         // Sign with wrong key
         let wrong_seed = [77u8; 32];
         let (wrong_sk, _) = neunode_crypto::ed25519::keypair_from_seed(&wrong_seed);

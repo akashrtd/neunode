@@ -65,7 +65,10 @@ export function createTurboquantResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for turboquant operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for turboquant operations",
+				);
 			const args = [
 				"turboquant",
 				"compress",
@@ -101,7 +104,10 @@ export function createTurboquantResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for turboquant operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for turboquant operations",
+				);
 			const args = [
 				"turboquant",
 				"generate-codebook",

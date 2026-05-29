@@ -41,9 +41,7 @@ impl<'a> Deref for KeyringGuard<'a> {
 
 impl ApiState {
     pub fn require_did(&self) -> Result<&Did, super::error::ApiError> {
-        self.active_did
-            .as_ref()
-            .ok_or(super::error::ApiError::NoIdentity)
+        self.active_did.as_ref().ok_or(super::error::ApiError::NoIdentity)
     }
 
     /// Lock the keyring and return a guard that dereferences to `&Keyring`.

@@ -55,8 +55,14 @@ describe("createTurboquantResource", () => {
 	});
 
 	it("should throw if both transports are missing", async () => {
-		const resource = createTurboquantResource({ ...mockClient, cli: undefined, http: undefined });
-		await expect(resource.compress({ model: "test", strategy: "adaptive" } as any)).rejects.toThrow("HTTP or CLI transport required");
+		const resource = createTurboquantResource({
+			...mockClient,
+			cli: undefined,
+			http: undefined,
+		});
+		await expect(
+			resource.compress({ profile: "gradient", dimension: 512 }),
+		).rejects.toThrow("HTTP or CLI transport required");
 	});
 
 	describe("compress", () => {
@@ -151,7 +157,13 @@ describe("createTurboquantResource", () => {
 			const http = dualClient.http as unknown as {
 				post: ReturnType<typeof vi.fn>;
 			};
-			http.post.mockResolvedValue({ bits: 4, levels: [0.1, 0.2, 0.3, 0.4], dimension: 4096, iterations: 20, mse: 0.001 });
+			http.post.mockResolvedValue({
+				bits: 4,
+				levels: [0.1, 0.2, 0.3, 0.4],
+				dimension: 4096,
+				iterations: 20,
+				mse: 0.001,
+			});
 			const resource = createTurboquantResource(dualClient);
 			await resource.generateCodebook({ bits: 4, dimension: 4096 });
 			expect(http.post).toHaveBeenCalledWith("/api/v1/turboquant/codebook", {

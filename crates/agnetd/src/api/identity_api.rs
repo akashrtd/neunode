@@ -66,9 +66,8 @@ pub async fn show_identity(
     let did = state.require_did()?;
 
     let store = neunode_storage::identity_store::IdentityStore::new(&state.db);
-    let doc_json: Option<String> = store
-        .get(&did.0)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let doc_json: Option<String> =
+        store.get(&did.0).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     match doc_json {
         Some(json_str) => {
@@ -87,10 +86,7 @@ pub async fn show_identity(
             };
             Ok(types::ok(resp))
         }
-        None => Err(ApiError::NotFound(format!(
-            "identity '{}' not found in local store",
-            did.0
-        ))),
+        None => Err(ApiError::NotFound(format!("identity '{}' not found in local store", did.0))),
     }
 }
 
@@ -148,9 +144,7 @@ pub async fn create_identity(
     let doc_json = doc
         .to_json()
         .map_err(|e| ApiError::Internal(format!("failed to serialize DID document: {e}")))?;
-    store
-        .put(&did.to_string(), &doc_json)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    store.put(&did.to_string(), &doc_json).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let card_cid = card.to_cid();
 
@@ -188,10 +182,8 @@ pub async fn list_identities(
     for (_, value_bytes) in &entries {
         if let Ok(doc_json) = bincode::deserialize::<String>(value_bytes) {
             if let Ok(doc) = neunode_identity::document::DidDocument::from_json(&doc_json) {
-                identities.push(IdentityListItem {
-                    did: doc.id.clone(),
-                    status: "stored".to_string(),
-                });
+                identities
+                    .push(IdentityListItem { did: doc.id.clone(), status: "stored".to_string() });
             }
         }
     }
@@ -241,8 +233,11 @@ pub async fn register_onchain(
         let (ed, secp) = keyring.to_bytes();
         (ed, secp)
     };
-    let ed_arr: [u8; 32] = ed_bytes.try_into().map_err(|_| ApiError::Internal("ed25519 key size mismatch".into()))?;
-    let secp_arr: [u8; 32] = secp_bytes.try_into().map_err(|_| ApiError::Internal("secp256k1 key size mismatch".into()))?;
+    let ed_arr: [u8; 32] =
+        ed_bytes.try_into().map_err(|_| ApiError::Internal("ed25519 key size mismatch".into()))?;
+    let secp_arr: [u8; 32] = secp_bytes
+        .try_into()
+        .map_err(|_| ApiError::Internal("secp256k1 key size mismatch".into()))?;
     let kr = neunode_identity::keyring::Keyring::from_bytes(&ed_arr, &secp_arr)
         .map_err(|e| ApiError::Internal(format!("key reconstruction failed: {e}")))?;
 
@@ -267,10 +262,7 @@ pub fn router() -> axum::Router<Arc<ApiState>> {
     axum::Router::new()
         .route("/api/v1/identity/list", axum::routing::get(list_identities))
         .route("/api/v1/identity/register-onchain", axum::routing::post(register_onchain))
-        .route(
-            "/api/v1/identity",
-            axum::routing::get(show_identity).post(create_identity),
-        )
+        .route("/api/v1/identity", axum::routing::get(show_identity).post(create_identity))
 }
 
 // ---------------------------------------------------------------------------
@@ -283,8 +275,7 @@ mod tests {
 
     #[test]
     fn create_identity_request_default_method() {
-        let req: CreateIdentityRequest =
-            serde_json::from_str(r#"{"name": "test"}"#).unwrap();
+        let req: CreateIdentityRequest = serde_json::from_str(r#"{"name": "test"}"#).unwrap();
         assert_eq!(req.method, "key");
         assert_eq!(req.name, "test");
     }
@@ -313,10 +304,8 @@ mod tests {
 
     #[test]
     fn identity_list_item_serde_roundtrip() {
-        let item = IdentityListItem {
-            did: "did:neunode:0xDEF".to_string(),
-            status: "stored".to_string(),
-        };
+        let item =
+            IdentityListItem { did: "did:neunode:0xDEF".to_string(), status: "stored".to_string() };
         let json = serde_json::to_string(&item).unwrap();
         let back: IdentityListItem = serde_json::from_str(&json).unwrap();
         assert_eq!(item.did, back.did);

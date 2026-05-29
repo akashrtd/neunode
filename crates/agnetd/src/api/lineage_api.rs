@@ -120,18 +120,14 @@ fn validate_cid(cid: &str) -> Result<(), ApiError> {
         return Err(ApiError::BadRequest("CID cannot be empty".into()));
     }
     if !cid.starts_with("sha256:") {
-        return Err(ApiError::BadRequest(format!(
-            "CID must start with 'sha256:' (got '{cid}')"
-        )));
+        return Err(ApiError::BadRequest(format!("CID must start with 'sha256:' (got '{cid}')")));
     }
     let hex = &cid[7..];
     if hex.is_empty() {
         return Err(ApiError::BadRequest("CID hex portion cannot be empty".into()));
     }
     if !hex.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(ApiError::BadRequest(
-            "CID hex portion contains non-hex characters".into(),
-        ));
+        return Err(ApiError::BadRequest("CID hex portion contains non-hex characters".into()));
     }
     Ok(())
 }
@@ -209,8 +205,7 @@ fn rebuild_dag(db: &neunode_storage::db::NeunodeDb) -> Result<LineageDag, ApiErr
     nodes.sort_by_key(|n| n.created_at);
     let mut dag = LineageDag::new();
     for node in nodes {
-        dag.register(node)
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
+        dag.register(node).map_err(|e| ApiError::Internal(e.to_string()))?;
     }
     Ok(dag)
 }
@@ -272,8 +267,7 @@ pub async fn register_lineage(
 
     let db = &state.db;
     let mut dag = rebuild_dag(db)?;
-    dag.register(node.clone())
-        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    dag.register(node.clone()).map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
     store_model_node(db, &node)?;
 
@@ -331,9 +325,7 @@ pub async fn show_parents(
     validate_cid(&cid)?;
 
     let dag = rebuild_dag(&state.db)?;
-    let parents = dag
-        .parents(&cid)
-        .map_err(|e| ApiError::NotFound(e.to_string()))?;
+    let parents = dag.parents(&cid).map_err(|e| ApiError::NotFound(e.to_string()))?;
 
     let summaries: Vec<ModelSummary> = parents.iter().map(|n| model_node_to_summary(n)).collect();
     Ok(types::ok(summaries))
@@ -354,9 +346,7 @@ pub async fn show_children(
     validate_cid(&cid)?;
 
     let dag = rebuild_dag(&state.db)?;
-    let children = dag
-        .children(&cid)
-        .map_err(|e| ApiError::NotFound(e.to_string()))?;
+    let children = dag.children(&cid).map_err(|e| ApiError::NotFound(e.to_string()))?;
 
     let summaries: Vec<ModelSummary> = children.iter().map(|n| model_node_to_summary(n)).collect();
     Ok(types::ok(summaries))
@@ -377,9 +367,7 @@ pub async fn show_ancestors(
     validate_cid(&cid)?;
 
     let dag = rebuild_dag(&state.db)?;
-    let ancestors = dag
-        .ancestors(&cid)
-        .map_err(|e| ApiError::NotFound(e.to_string()))?;
+    let ancestors = dag.ancestors(&cid).map_err(|e| ApiError::NotFound(e.to_string()))?;
 
     let summaries: Vec<ModelSummary> = ancestors.iter().map(|n| model_node_to_summary(n)).collect();
     Ok(types::ok(summaries))
@@ -400,9 +388,7 @@ pub async fn show_depth(
     validate_cid(&cid)?;
 
     let dag = rebuild_dag(&state.db)?;
-    let depth = dag
-        .lineage_depth(&cid)
-        .map_err(|e| ApiError::NotFound(e.to_string()))?;
+    let depth = dag.lineage_depth(&cid).map_err(|e| ApiError::NotFound(e.to_string()))?;
 
     Ok(types::ok(DepthResponse { cid, lineage_depth: depth }))
 }
@@ -424,8 +410,8 @@ pub async fn compute_royalties(
     validate_cid(&cid)?;
 
     let dag = rebuild_dag(&state.db)?;
-    let allocs = calc_royalties(&dag, &cid, body.amount)
-        .map_err(|e| ApiError::NotFound(e.to_string()))?;
+    let allocs =
+        calc_royalties(&dag, &cid, body.amount).map_err(|e| ApiError::NotFound(e.to_string()))?;
 
     let results: Vec<RoyaltyAllocation> = allocs
         .iter()

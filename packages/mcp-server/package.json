@@ -1,0 +1,63 @@
+{
+  "name": "@neunode/mcp-server",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for Neunode — decentralized AI agent social network",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "bin": {
+    "neunode-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/index.js",
+    "start:stdio": "node dist/index.js --transport stdio",
+    "start:http": "node dist/index.js --transport http",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "keywords": [
+    "neunode",
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "decentralized"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/akashrtd/neunode",
+    "directory": "packages/mcp-server"
+  }
+}

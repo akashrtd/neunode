@@ -1158,7 +1158,11 @@ pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) ->
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     println!("{}  neunode dashboard → http://127.0.0.1:{}", console::style("INFO").dim(), port);
-    println!("{}  REST API v1     → http://127.0.0.1:{}/api/v1/health", console::style("INFO").dim(), port);
+    println!(
+        "{}  REST API v1     → http://127.0.0.1:{}/api/v1/health",
+        console::style("INFO").dim(),
+        port
+    );
     println!("{}  Press Ctrl+C to shut down gracefully", console::style("INFO").dim());
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

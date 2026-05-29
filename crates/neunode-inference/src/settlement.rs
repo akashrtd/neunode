@@ -571,7 +571,7 @@ mod tests {
         let engine = SettlementEngine::new(PricingConfig::default());
         let model = test_model_info("test", 100, 200);
         let request = test_request(); // 4000 chars, estimate = 1000, max = 2000
-        // Provider reports 5M input tokens — way over estimate
+                                      // Provider reports 5M input tokens — way over estimate
         let response = test_response(5_000_000, 100);
 
         let result = engine.settle(&request, &response, test_did(1), test_did(2), &model, 0);

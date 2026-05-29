@@ -55,8 +55,14 @@ describe("createDiscoveryResource", () => {
 	});
 
 	it("should throw if both transports are missing", async () => {
-		const resource = createDiscoveryResource({ ...mockClient, cli: undefined, http: undefined });
-		await expect(resource.gaps()).rejects.toThrow("HTTP or CLI transport required");
+		const resource = createDiscoveryResource({
+			...mockClient,
+			cli: undefined,
+			http: undefined,
+		});
+		await expect(resource.gaps()).rejects.toThrow(
+			"HTTP or CLI transport required",
+		);
 	});
 
 	describe("search", () => {
@@ -77,7 +83,9 @@ describe("createDiscoveryResource", () => {
 			expect(http.get).toHaveBeenCalled();
 			const callUrl = http.get.mock.calls[0]?.[0] as string;
 			expect(callUrl).toContain("/api/v1/discovery/search?");
-			expect(callUrl).toContain("capabilities=inference%3Allm%2Ctraining%3Alora");
+			expect(callUrl).toContain(
+				"capabilities=inference%3Allm%2Ctraining%3Alora",
+			);
 			expect(callUrl).toContain("minReputation=3");
 			expect(callUrl).toContain("maxCost=20");
 			expect(callUrl).toContain("onlineOnly=true");
@@ -203,9 +211,15 @@ describe("createDiscoveryResource", () => {
 			const http = dualClient.http as unknown as {
 				get: ReturnType<typeof vi.fn>;
 			};
-			http.get.mockResolvedValue({ did: "did:neunode:abc", final_score: "0.7500" });
+			http.get.mockResolvedValue({
+				did: "did:neunode:abc",
+				final_score: "0.7500",
+			});
 			const resource = createDiscoveryResource(dualClient);
-			await resource.score({ agent: "did:neunode:abc", capabilities: "inference:llm" });
+			await resource.score({
+				agent: "did:neunode:abc",
+				capabilities: "inference:llm",
+			});
 			expect(http.get).toHaveBeenCalled();
 			const callUrl = http.get.mock.calls[0]?.[0] as string;
 			expect(callUrl).toContain("/api/v1/discovery/score?");

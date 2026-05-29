@@ -56,8 +56,14 @@ describe("createModelResource", () => {
 	});
 
 	it("should throw if both transports are missing", async () => {
-		const resource = createModelResource({ ...mockClient, cli: undefined, http: undefined });
-		await expect(resource.list()).rejects.toThrow("HTTP or CLI transport required");
+		const resource = createModelResource({
+			...mockClient,
+			cli: undefined,
+			http: undefined,
+		});
+		await expect(resource.list()).rejects.toThrow(
+			"HTTP or CLI transport required",
+		);
 	});
 
 	describe("list", () => {
@@ -69,7 +75,9 @@ describe("createModelResource", () => {
 			http.get.mockResolvedValue({ data: [] });
 			const resource = createModelResource(dualClient);
 			await resource.list("provider-abc");
-			expect(http.get).toHaveBeenCalledWith("/api/v1/models?provider=provider-abc");
+			expect(http.get).toHaveBeenCalledWith(
+				"/api/v1/models?provider=provider-abc",
+			);
 		});
 
 		it("should call execute with model list (no provider) via CLI", async () => {
@@ -98,7 +106,10 @@ describe("createModelResource", () => {
 			const http = dualClient.http as unknown as {
 				get: ReturnType<typeof vi.fn>;
 			};
-			http.get.mockResolvedValue({ "Model ID": "llama-3b", "Base Model": "llama" });
+			http.get.mockResolvedValue({
+				"Model ID": "llama-3b",
+				"Base Model": "llama",
+			});
 			const resource = createModelResource(dualClient);
 			await resource.show("llama-3b");
 			expect(http.get).toHaveBeenCalledWith("/api/v1/models/llama-3b");
@@ -156,7 +167,11 @@ describe("createModelResource", () => {
 			const http = dualClient.http as unknown as {
 				delete: ReturnType<typeof vi.fn>;
 			};
-			http.delete.mockResolvedValue({ action: "rm", model_id: "my-model", status: "ok" });
+			http.delete.mockResolvedValue({
+				action: "rm",
+				model_id: "my-model",
+				status: "ok",
+			});
 			const resource = createModelResource(dualClient);
 			await resource.rm("my-model");
 			expect(http.delete).toHaveBeenCalledWith("/api/v1/models/my-model");

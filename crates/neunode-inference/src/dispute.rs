@@ -72,19 +72,13 @@ impl DisputeEngine {
         now: Timestamp,
     ) -> Result<InferenceDispute> {
         if !self.is_within_window(settlement_time, now) {
-            return Err(InferenceError::SettlementFailed(
-                "dispute window has expired".to_string(),
-            ));
+            return Err(InferenceError::SettlementFailed("dispute window has expired".to_string()));
         }
         if reason.is_empty() {
-            return Err(InferenceError::InvalidRequest(
-                "dispute reason is required".to_string(),
-            ));
+            return Err(InferenceError::InvalidRequest("dispute reason is required".to_string()));
         }
         if evidence_hash.0.is_empty() {
-            return Err(InferenceError::InvalidRequest(
-                "evidence hash is required".to_string(),
-            ));
+            return Err(InferenceError::InvalidRequest("evidence hash is required".to_string()));
         }
         let resolution_deadline = now + self.config.window_secs;
         Ok(InferenceDispute {
@@ -102,9 +96,7 @@ impl DisputeEngine {
     /// Resolve a dispute — marks it as resolved.
     pub fn resolve(dispute: &mut InferenceDispute, _now: Timestamp) -> Result<()> {
         if dispute.resolved {
-            return Err(InferenceError::SettlementFailed(
-                "dispute already resolved".to_string(),
-            ));
+            return Err(InferenceError::SettlementFailed("dispute already resolved".to_string()));
         }
         dispute.resolved = true;
         Ok(())

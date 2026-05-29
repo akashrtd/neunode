@@ -104,7 +104,10 @@ fn get_record(
     Ok(store.get(&key)?)
 }
 
-fn put_record(db: &neunode_storage::db::NeunodeDb, record: &LifecycleRecord) -> Result<(), ApiError> {
+fn put_record(
+    db: &neunode_storage::db::NeunodeDb,
+    record: &LifecycleRecord,
+) -> Result<(), ApiError> {
     let key = lifecycle_key(&record.did);
     let store = neunode_storage::identity_store::IdentityStore::new(db);
     store.put(&key, record)?;
@@ -112,10 +115,7 @@ fn put_record(db: &neunode_storage::db::NeunodeDb, record: &LifecycleRecord) -> 
 }
 
 fn now_ts() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
 }
 
 // Thresholds (Doc 16)
@@ -161,7 +161,8 @@ pub async fn lifecycle_status(
             }))
         }
         None => Ok(types::ok(NoRecordResponse {
-            message: "No lifecycle record. POST /api/v1/lifecycle/activate to register.".to_string(),
+            message: "No lifecycle record. POST /api/v1/lifecycle/activate to register."
+                .to_string(),
         })),
     }
 }
@@ -174,9 +175,7 @@ pub async fn lifecycle_status(
     ),
     tag = "lifecycle",
 )]
-pub async fn activate(
-    State(state): State<Arc<ApiState>>,
-) -> Result<impl IntoResponse, ApiError> {
+pub async fn activate(State(state): State<Arc<ApiState>>) -> Result<impl IntoResponse, ApiError> {
     let did = state.require_did()?;
     let now = now_ts();
 
@@ -206,10 +205,7 @@ pub async fn activate(
                 derived_from: None,
             };
             put_record(&state.db, &record)?;
-            Ok(types::ack(&format!(
-                "Agent {} activated (immunity period: 14 days)",
-                did.0
-            )))
+            Ok(types::ack(&format!("Agent {} activated (immunity period: 14 days)", did.0)))
         }
     }
 }
@@ -222,14 +218,13 @@ pub async fn activate(
     ),
     tag = "lifecycle",
 )]
-pub async fn hibernate(
-    State(state): State<Arc<ApiState>>,
-) -> Result<impl IntoResponse, ApiError> {
+pub async fn hibernate(State(state): State<Arc<ApiState>>) -> Result<impl IntoResponse, ApiError> {
     let did = state.require_did()?;
     let now = now_ts();
 
-    let mut record = get_record(&state.db, &did.0)?
-        .ok_or_else(|| ApiError::NotFound("no lifecycle record -- POST /api/v1/lifecycle/activate first".into()))?;
+    let mut record = get_record(&state.db, &did.0)?.ok_or_else(|| {
+        ApiError::NotFound("no lifecycle record -- POST /api/v1/lifecycle/activate first".into())
+    })?;
 
     if record.state != AgentState::Active {
         return Err(ApiError::BadRequest(format!(
@@ -253,14 +248,13 @@ pub async fn hibernate(
     ),
     tag = "lifecycle",
 )]
-pub async fn reactivate(
-    State(state): State<Arc<ApiState>>,
-) -> Result<impl IntoResponse, ApiError> {
+pub async fn reactivate(State(state): State<Arc<ApiState>>) -> Result<impl IntoResponse, ApiError> {
     let did = state.require_did()?;
     let now = now_ts();
 
-    let mut record = get_record(&state.db, &did.0)?
-        .ok_or_else(|| ApiError::NotFound("no lifecycle record -- POST /api/v1/lifecycle/activate first".into()))?;
+    let mut record = get_record(&state.db, &did.0)?.ok_or_else(|| {
+        ApiError::NotFound("no lifecycle record -- POST /api/v1/lifecycle/activate first".into())
+    })?;
 
     if record.state != AgentState::Hibernating {
         return Err(ApiError::BadRequest(format!(
@@ -317,9 +311,7 @@ pub async fn list_states(
     ),
     tag = "lifecycle",
 )]
-pub async fn reap(
-    State(state): State<Arc<ApiState>>,
-) -> Result<impl IntoResponse, ApiError> {
+pub async fn reap(State(state): State<Arc<ApiState>>) -> Result<impl IntoResponse, ApiError> {
     let db = &state.db;
     let now = now_ts();
 

@@ -60,10 +60,14 @@ impl RocksRecordStore {
     }
 
     fn extract_peer_from_provider_key(k: &[u8]) -> Option<PeerId> {
-        if k.len() < 6 { return None; } // "p:" + 2 byte len + at least 2 bytes
+        if k.len() < 6 {
+            return None;
+        } // "p:" + 2 byte len + at least 2 bytes
         let key_len = u16::from_be_bytes([k[2], k[3]]) as usize;
         let peer_start = 4 + key_len;
-        if peer_start >= k.len() { return None; }
+        if peer_start >= k.len() {
+            return None;
+        }
         PeerId::from_bytes(&k[peer_start..]).ok()
     }
 
@@ -75,7 +79,8 @@ impl RocksRecordStore {
     }
 
     fn evict_expired(&self) {
-        let iter = self.db.iterator(rocksdb::IteratorMode::From(b"m:", rocksdb::Direction::Forward));
+        let iter =
+            self.db.iterator(rocksdb::IteratorMode::From(b"m:", rocksdb::Direction::Forward));
         let mut expired = Vec::new();
         for item in iter {
             if let Ok((key, val)) = item {
@@ -99,10 +104,7 @@ impl RocksRecordStore {
 }
 
 fn now_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
 }
 
 fn u64_to_le(v: u64) -> [u8; 8] {
@@ -139,12 +141,7 @@ impl RecordStore for SharedRocksStore {
         let rk = RocksRecordStore::record_key(k.as_ref());
         let raw = store.db.get(&rk).ok()??;
         drop(store);
-        Some(Cow::Owned(Record {
-            key: k.clone(),
-            value: raw,
-            publisher: None,
-            expires: None,
-        }))
+        Some(Cow::Owned(Record { key: k.clone(), value: raw, publisher: None, expires: None }))
     }
 
     fn put(&mut self, r: Record) -> Result<()> {
@@ -171,7 +168,8 @@ impl RecordStore for SharedRocksStore {
     fn records(&self) -> Self::RecordsIter<'_> {
         let Ok(store) = self.0.lock() else { return Vec::new().into_iter() };
         store.evict_expired();
-        let iter = store.db.iterator(rocksdb::IteratorMode::From(b"r:", rocksdb::Direction::Forward));
+        let iter =
+            store.db.iterator(rocksdb::IteratorMode::From(b"r:", rocksdb::Direction::Forward));
         let mut records = Vec::new();
         for item in iter {
             if let Ok((key, value)) = item {
@@ -202,7 +200,8 @@ impl RecordStore for SharedRocksStore {
     fn providers(&self, key: &Key) -> Vec<ProviderRecord> {
         let Ok(store) = self.0.lock() else { return Vec::new() };
         let prefix = RocksRecordStore::provider_prefix(key);
-        let iter = store.db.iterator(rocksdb::IteratorMode::From(&prefix, rocksdb::Direction::Forward));
+        let iter =
+            store.db.iterator(rocksdb::IteratorMode::From(&prefix, rocksdb::Direction::Forward));
         let mut result = Vec::new();
         for item in iter {
             if let Ok((k, _val)) = item {
@@ -238,11 +237,8 @@ mod tests {
 
     fn temp_store() -> SharedRocksStore {
         let id = TEST_ID.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "neunode_dht_test_{:?}_{}",
-            std::process::id(),
-            id
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("neunode_dht_test_{:?}_{}", std::process::id(), id));
         let _ = std::fs::remove_dir_all(&dir);
         SharedRocksStore::open(&dir).expect("store open")
     }
@@ -278,12 +274,7 @@ mod tests {
         let mut store = temp_store();
         let key = Key::from(b"removeme".to_vec());
         store
-            .put(Record {
-                key: key.clone(),
-                value: b"v".to_vec(),
-                publisher: None,
-                expires: None,
-            })
+            .put(Record { key: key.clone(), value: b"v".to_vec(), publisher: None, expires: None })
             .unwrap();
         store.remove(&key);
         assert!(store.get(&key).is_none());
@@ -307,10 +298,8 @@ mod tests {
 
     #[test]
     fn persists_across_reopen() {
-        let dir = std::env::temp_dir().join(format!(
-            "neunode_dht_persist_test_{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("neunode_dht_persist_test_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
 
         {
@@ -336,12 +325,7 @@ mod tests {
         let mut store = temp_store();
         let key = Key::from(b"shared".to_vec());
         store
-            .put(Record {
-                key: key.clone(),
-                value: b"v".to_vec(),
-                publisher: None,
-                expires: None,
-            })
+            .put(Record { key: key.clone(), value: b"v".to_vec(), publisher: None, expires: None })
             .unwrap();
         let cloned = store.clone();
         assert!(cloned.get(&key).is_some());

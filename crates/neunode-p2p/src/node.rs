@@ -297,9 +297,7 @@ fn convert_ping_event(event: libp2p::ping::Event) -> Option<NodeEvent> {
 
 fn convert_autonat_event(event: libp2p::autonat::Event) -> Option<NodeEvent> {
     match event {
-        libp2p::autonat::Event::StatusChanged { new, .. } => {
-            Some(NodeEvent::NatStatusChanged(new))
-        }
+        libp2p::autonat::Event::StatusChanged { new, .. } => Some(NodeEvent::NatStatusChanged(new)),
         _ => None,
     }
 }
@@ -313,11 +311,8 @@ mod tests {
 
     fn temp_data_dir() -> std::path::PathBuf {
         let id = TEST_ID.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "neunode_node_test_{:?}_{}",
-            std::process::id(),
-            id
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("neunode_node_test_{:?}_{}", std::process::id(), id));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }

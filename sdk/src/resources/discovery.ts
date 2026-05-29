@@ -118,7 +118,10 @@ export function createDiscoveryResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for discovery operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for discovery operations",
+				);
 			const args = [
 				"discover",
 				"search",
@@ -152,7 +155,10 @@ export function createDiscoveryResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for discovery operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for discovery operations",
+				);
 			const args = [
 				"discover",
 				"complement",
@@ -170,7 +176,10 @@ export function createDiscoveryResource(
 				return client.http.get<DiscoveryGapsResult>("/api/v1/discovery/gaps");
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for discovery operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for discovery operations",
+				);
 			return cli.execute<DiscoveryGapsResult>(["discover", "gaps"]);
 		},
 
@@ -184,7 +193,10 @@ export function createDiscoveryResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for discovery operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for discovery operations",
+				);
 			const args = [
 				"discover",
 				"score",
@@ -203,7 +215,10 @@ export function createDiscoveryResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for discovery operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for discovery operations",
+				);
 			return cli.execute<DiscoveryWeightsResult>(["discover", "weights"]);
 		},
 	};

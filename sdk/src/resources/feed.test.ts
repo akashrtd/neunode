@@ -56,7 +56,11 @@ describe("createFeedResource", () => {
 	});
 
 	it("should throw if both transports are missing", async () => {
-		const resource = createFeedResource({ ...mockClient, cli: undefined, http: undefined });
+		const resource = createFeedResource({
+			...mockClient,
+			cli: undefined,
+			http: undefined,
+		});
 		await expect(resource.list()).rejects.toThrow(
 			"HTTP or CLI transport required",
 		);

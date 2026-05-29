@@ -55,7 +55,11 @@ describe("createMeshResource", () => {
 	});
 
 	it("should throw if both transports are missing", async () => {
-		const resource = createMeshResource({ ...mockClient, cli: undefined, http: undefined });
+		const resource = createMeshResource({
+			...mockClient,
+			cli: undefined,
+			http: undefined,
+		});
 		await expect(resource.status()).rejects.toThrow(
 			"HTTP or CLI transport required",
 		);

@@ -25,7 +25,8 @@ export function createConfigResource(client: NeunodeClient): ConfigResource {
 				return;
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for config operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for config operations");
 			await cli.execute(["config", "set", params.key, params.value]);
 		},
 
@@ -37,7 +38,8 @@ export function createConfigResource(client: NeunodeClient): ConfigResource {
 				return result[key] ?? "";
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for config operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for config operations");
 			const result = await cli.execute<Record<string, string>>([
 				"config",
 				"get",
@@ -51,7 +53,8 @@ export function createConfigResource(client: NeunodeClient): ConfigResource {
 				return client.http.get<Record<string, string>>("/api/v1/config");
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for config operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for config operations");
 			return cli.execute<Record<string, string>>(["config", "list"]);
 		},
 
@@ -63,7 +66,8 @@ export function createConfigResource(client: NeunodeClient): ConfigResource {
 				return result["Config path"] ?? "";
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for config operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for config operations");
 			const result = await cli.execute<Record<string, string>>([
 				"config",
 				"path",

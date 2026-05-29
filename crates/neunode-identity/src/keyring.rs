@@ -156,11 +156,7 @@ impl Keyring {
 
     /// Create a signed key rotation message from old keyring to new keyring.
     /// Both old and new keyrings must sign the transition.
-    pub fn create_rotation(
-        old: &Keyring,
-        new: &Keyring,
-        timestamp: u64,
-    ) -> Result<KeyRotation> {
+    pub fn create_rotation(old: &Keyring, new: &Keyring, timestamp: u64) -> Result<KeyRotation> {
         let new_pub = new.export_public();
         let message = format!(
             "{}:{}:{}:{}:{timestamp}",
@@ -170,10 +166,7 @@ impl Keyring {
             bytes_to_hex(&new_pub.secp256k1),
         );
         let ed_sig = old.sign_ed25519(message.as_bytes()).to_bytes().to_vec();
-        let secp_sig = old
-            .sign_secp256k1(message.as_bytes())
-            .to_bytes()
-            .to_vec();
+        let secp_sig = old.sign_secp256k1(message.as_bytes()).to_bytes().to_vec();
         Ok(KeyRotation {
             old_did: old.to_did(),
             new_did: new.to_did(),
@@ -226,7 +219,7 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
 }
 
 fn hex_to_bytes(hex: &str) -> std::result::Result<Vec<u8>, String> {
-    if hex.len() % 2 != 0 {
+    if !hex.len().is_multiple_of(2) {
         return Err("odd length".to_string());
     }
     (0..hex.len())

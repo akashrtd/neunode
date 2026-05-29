@@ -294,10 +294,7 @@ mod tests {
         let data_dir = std::env::temp_dir().join(format!(
             "mesh_node_data_{}_{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
         ));
         spawn_mesh_task(keypair, test_listen_addr(), vec![], false, db, data_dir).unwrap()
     }
@@ -310,12 +307,10 @@ mod tests {
         let data_dir = std::env::temp_dir().join(format!(
             "mesh_handle_test_{}_{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
         ));
-        let handle = spawn_mesh_task(keypair, test_listen_addr(), vec![], false, db, data_dir).unwrap();
+        let handle =
+            spawn_mesh_task(keypair, test_listen_addr(), vec![], false, db, data_dir).unwrap();
 
         assert_eq!(handle.local_peer_id, expected_peer_id);
 

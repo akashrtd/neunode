@@ -42,9 +42,7 @@ pub struct ConfigPathResponse {
     ),
     tag = "config",
 )]
-pub async fn get_config(
-    State(state): State<Arc<ApiState>>,
-) -> Result<impl IntoResponse, ApiError> {
+pub async fn get_config(State(state): State<Arc<ApiState>>) -> Result<impl IntoResponse, ApiError> {
     let all = state.config.list_all();
     let entries: Vec<ConfigEntry> =
         all.into_iter().map(|(key, value)| ConfigEntry { key, value }).collect();
@@ -72,9 +70,7 @@ pub async fn set_config(
     // directly (not behind Arc<RwLock>), we use interior mutability via
     // the config's own save path. For the HTTP API we clone, mutate, save.
     let mut config = state.config.clone();
-    config
-        .set(&body.key, &body.value)
-        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    config.set(&body.key, &body.value).map_err(|e| ApiError::BadRequest(e.to_string()))?;
     config.save().map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(types::ack(&format!("Set {} = {}", body.key, body.value)))

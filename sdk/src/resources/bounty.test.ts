@@ -55,8 +55,14 @@ describe("createBountyResource", () => {
 	});
 
 	it("should throw if both transports are missing", async () => {
-		const resource = createBountyResource({ ...mockClient, cli: undefined, http: undefined });
-		await expect(resource.list()).rejects.toThrow("HTTP or CLI transport required");
+		const resource = createBountyResource({
+			...mockClient,
+			cli: undefined,
+			http: undefined,
+		});
+		await expect(resource.list()).rejects.toThrow(
+			"HTTP or CLI transport required",
+		);
 	});
 
 	describe("create", () => {
@@ -176,7 +182,10 @@ describe("createBountyResource", () => {
 			const http = dualClient.http as unknown as {
 				post: ReturnType<typeof vi.fn>;
 			};
-			http.post.mockResolvedValue({ bounty_id: "bnty_123", state: "Submitted" });
+			http.post.mockResolvedValue({
+				bounty_id: "bnty_123",
+				state: "Submitted",
+			});
 			const resource = createBountyResource(dualClient);
 			await resource.submit({ id: "bnty_123", artifact: "ipfs://QmX7b" });
 			expect(http.post).toHaveBeenCalledWith(
@@ -228,7 +237,11 @@ describe("createBountyResource", () => {
 			};
 			http.post.mockResolvedValue({ bounty_id: "bnty_123", score: 9 });
 			const resource = createBountyResource(dualClient);
-			await resource.review({ id: "bnty_123", score: 9, feedback: "Great work" });
+			await resource.review({
+				id: "bnty_123",
+				score: 9,
+				feedback: "Great work",
+			});
 			expect(http.post).toHaveBeenCalledWith(
 				"/api/v1/bounties/bnty_123/review",
 				{ id: "bnty_123", score: 9, feedback: "Great work" },
@@ -353,7 +366,10 @@ describe("createBountyResource", () => {
 			const http = dualClient.http as unknown as {
 				post: ReturnType<typeof vi.fn>;
 			};
-			http.post.mockResolvedValue({ bounty_id: "bnty_123", state: "Cancelled" });
+			http.post.mockResolvedValue({
+				bounty_id: "bnty_123",
+				state: "Cancelled",
+			});
 			const resource = createBountyResource(dualClient);
 			await resource.cancel("bnty_123", "no longer needed");
 			expect(http.post).toHaveBeenCalledWith(

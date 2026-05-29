@@ -59,7 +59,9 @@ describe("createIdentityResource", () => {
 	it("should throw if both cli and http transports are missing", async () => {
 		const noTransports = { ...mockClient, cli: undefined, http: undefined };
 		const resource = createIdentityResource(noTransports);
-		await expect(resource.list()).rejects.toThrow("HTTP or CLI transport required");
+		await expect(resource.list()).rejects.toThrow(
+			"HTTP or CLI transport required",
+		);
 	});
 
 	describe("create", () => {
@@ -155,7 +157,9 @@ describe("createIdentityResource", () => {
 			http.get.mockResolvedValue(expected);
 			const resource = createIdentityResource(dualClient);
 			const result = await resource.show("did:neunode:http");
-			expect(http.get).toHaveBeenCalledWith("/api/v1/identity?did=did%3Aneunode%3Ahttp");
+			expect(http.get).toHaveBeenCalledWith(
+				"/api/v1/identity?did=did%3Aneunode%3Ahttp",
+			);
 			expect(result).toEqual(expected);
 		});
 
@@ -248,9 +252,9 @@ describe("createIdentityResource", () => {
 		it("should throw if CLI is not available", async () => {
 			const httpOnly = makeMockClient({ withHttp: true, withCli: false });
 			const resource = createIdentityResource(httpOnly);
-			await expect(resource.export({ file: "/tmp/export.json" })).rejects.toThrow(
-				"CLI transport required",
-			);
+			await expect(
+				resource.export({ file: "/tmp/export.json" }),
+			).rejects.toThrow("CLI transport required");
 		});
 	});
 });

@@ -93,7 +93,8 @@ export function createTokenResource(client: NeunodeClient): TokenResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for token operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for token operations");
 			const args = ["token", "balance"];
 			if (token) args.push("--token", token);
 			return cli.execute<TokenBalanceResult | TokenAllBalancesResult>(args);
@@ -107,7 +108,8 @@ export function createTokenResource(client: NeunodeClient): TokenResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for token operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for token operations");
 			return cli.execute<TokenTransferResult>([
 				"token",
 				"transfer",
@@ -128,7 +130,8 @@ export function createTokenResource(client: NeunodeClient): TokenResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for token operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for token operations");
 			return cli.execute<TokenStakeResult>([
 				"token",
 				"stake",
@@ -141,13 +144,13 @@ export function createTokenResource(client: NeunodeClient): TokenResource {
 
 		async unstake(amount: number): Promise<TokenUnstakeResult> {
 			if (client.http) {
-				return client.http.post<TokenUnstakeResult>(
-					"/api/v1/tokens/unstake",
-					{ amount },
-				);
+				return client.http.post<TokenUnstakeResult>("/api/v1/tokens/unstake", {
+					amount,
+				});
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for token operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for token operations");
 			return cli.execute<TokenUnstakeResult>([
 				"token",
 				"unstake",
@@ -163,7 +166,8 @@ export function createTokenResource(client: NeunodeClient): TokenResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for token operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for token operations");
 			return cli.execute<TokenStakeStatusResult>(["token", "stake-status"]);
 		},
 
@@ -174,7 +178,8 @@ export function createTokenResource(client: NeunodeClient): TokenResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for token operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for token operations");
 			return cli.execute<TokenDecayInfoResult>(["token", "decay-info"]);
 		},
 	};

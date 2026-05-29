@@ -109,22 +109,12 @@ pub fn build_behaviour(
 
     let (_relay_transport, relay_client) = client::new(local_peer_id);
 
-    let autonat = libp2p::autonat::Behaviour::new(
-        local_peer_id,
-        libp2p::autonat::Config::default(),
-    );
+    let autonat =
+        libp2p::autonat::Behaviour::new(local_peer_id, libp2p::autonat::Config::default());
 
     let dcutr = libp2p::dcutr::Behaviour::new(local_peer_id);
 
-    Ok(NeunodeBehaviour {
-        gossipsub,
-        kademlia,
-        identify,
-        ping,
-        relay_client,
-        autonat,
-        dcutr,
-    })
+    Ok(NeunodeBehaviour { gossipsub, kademlia, identify, ping, relay_client, autonat, dcutr })
 }
 
 #[cfg(test)]
@@ -201,16 +191,23 @@ mod tests {
 
         {
             let mut behaviour = build_behaviour(&keypair, peer_id, &dir).unwrap();
-            behaviour.kademlia.store_mut().put(libp2p::kad::Record {
-                key: libp2p::kad::RecordKey::from(b"persist-test".to_vec()),
-                value: b"hello".to_vec(),
-                publisher: None,
-                expires: None,
-            }).unwrap();
+            behaviour
+                .kademlia
+                .store_mut()
+                .put(libp2p::kad::Record {
+                    key: libp2p::kad::RecordKey::from(b"persist-test".to_vec()),
+                    value: b"hello".to_vec(),
+                    publisher: None,
+                    expires: None,
+                })
+                .unwrap();
         }
 
         let mut behaviour = build_behaviour(&keypair, peer_id, &dir).unwrap();
-        let got = behaviour.kademlia.store_mut().get(&libp2p::kad::RecordKey::from(b"persist-test".to_vec()));
+        let got = behaviour
+            .kademlia
+            .store_mut()
+            .get(&libp2p::kad::RecordKey::from(b"persist-test".to_vec()));
         assert!(got.is_some());
         assert_eq!(got.unwrap().value, b"hello");
     }

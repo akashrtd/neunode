@@ -5,7 +5,10 @@ use axum::response::IntoResponse;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use neunode_core::constants::token::{DECAY_BURN_PCT, DECAY_DEV_FUND_PCT, DECAY_STAKING_REWARDS_PCT, DECAY_TREASURY_PCT, MIN_STAKE, UNBONDING_PERIOD_SECS};
+use neunode_core::constants::token::{
+    DECAY_BURN_PCT, DECAY_DEV_FUND_PCT, DECAY_STAKING_REWARDS_PCT, DECAY_TREASURY_PCT, MIN_STAKE,
+    UNBONDING_PERIOD_SECS,
+};
 use neunode_core::types::{ActivityLevel, TokenType};
 use neunode_storage::token_store::{
     TokenBalance, TokenStore, TOKEN_BANDWIDTH, TOKEN_COMPUTE, TOKEN_STORAGE, TOKEN_TRAINING,
@@ -180,9 +183,8 @@ pub async fn token_balance(
     if let Some(token_str) = query.token {
         let tt = parse_token_type(&token_str)?;
         let token_byte = token_type_to_u8(&tt);
-        let bal = store
-            .get_balance(&did.0, token_byte)
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
+        let bal =
+            store.get_balance(&did.0, token_byte).map_err(|e| ApiError::Internal(e.to_string()))?;
 
         Ok(types::ok(BalanceResponse {
             token: token_type_display(&tt).to_string(),
@@ -190,12 +192,8 @@ pub async fn token_balance(
             staked: bal.staked,
         }))
     } else {
-        let all_tokens = [
-            TokenType::Compute,
-            TokenType::Train,
-            TokenType::Bandwidth,
-            TokenType::Storage,
-        ];
+        let all_tokens =
+            [TokenType::Compute, TokenType::Train, TokenType::Bandwidth, TokenType::Storage];
         let mut balances = Vec::new();
         for tt in &all_tokens {
             let token_byte = token_type_to_u8(tt);
@@ -283,9 +281,8 @@ pub async fn stake(
     let token_name = token_type_display(&tt).to_string();
 
     let store = TokenStore::new(&state.db);
-    let mut bal = store
-        .get_balance(&did.0, token_byte)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let mut bal =
+        store.get_balance(&did.0, token_byte).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     if bal.balance < body.amount as u128 {
         return Err(ApiError::BadRequest(format!(
@@ -296,9 +293,7 @@ pub async fn stake(
 
     bal.balance -= body.amount as u128;
     bal.staked += body.amount as u128;
-    store
-        .set_balance(&did.0, token_byte, &bal)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    store.set_balance(&did.0, token_byte, &bal).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(types::ok(StakeResponse {
         amount: body.amount,
@@ -337,9 +332,8 @@ pub async fn unstake(
 
     let mut found = None;
     for (tt, byte) in &token_types {
-        let bal = store
-            .get_balance(&did.0, *byte)
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
+        let bal =
+            store.get_balance(&did.0, *byte).map_err(|e| ApiError::Internal(e.to_string()))?;
         if bal.staked >= body.amount as u128 {
             found = Some((*tt, *byte, bal));
             break;
@@ -355,9 +349,7 @@ pub async fn unstake(
 
     bal.staked -= body.amount as u128;
     bal.balance += body.amount as u128;
-    store
-        .set_balance(&did.0, token_byte, &bal)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    store.set_balance(&did.0, token_byte, &bal).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let unbond_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -399,9 +391,8 @@ pub async fn stake_status(
     let mut entries = Vec::new();
 
     for (tt, byte) in &token_types {
-        let bal = store
-            .get_balance(&did.0, *byte)
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
+        let bal =
+            store.get_balance(&did.0, *byte).map_err(|e| ApiError::Internal(e.to_string()))?;
         if bal.staked > 0 {
             total_staked += bal.staked;
             entries.push(StakeEntry {
@@ -449,8 +440,5 @@ pub async fn decay_info(
         dev_fund_pct: DECAY_DEV_FUND_PCT,
     };
 
-    Ok(types::ok(DecayInfoResponse {
-        levels: decay_levels,
-        redistribution,
-    }))
+    Ok(types::ok(DecayInfoResponse { levels: decay_levels, redistribution }))
 }

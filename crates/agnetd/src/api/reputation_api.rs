@@ -173,10 +173,7 @@ pub async fn attest_agent(
         return Err(ApiError::BadRequest("target must be a valid DID (did:...)".into()));
     }
     if body.score > 100 {
-        return Err(ApiError::BadRequest(format!(
-            "invalid score: {} (must be 0-100)",
-            body.score
-        )));
+        return Err(ApiError::BadRequest(format!("invalid score: {} (must be 0-100)", body.score)));
     }
 
     let keyring = state.require_keyring()?;
@@ -247,10 +244,8 @@ pub async fn leaderboard(
         }
     }
 
-    let mut ranked: Vec<(String, f64)> = agent_scores
-        .into_iter()
-        .map(|(did, (sum, count))| (did, sum / count as f64))
-        .collect();
+    let mut ranked: Vec<(String, f64)> =
+        agent_scores.into_iter().map(|(did, (sum, count))| (did, sum / count as f64)).collect();
     ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     let leaderboard: Vec<LeaderboardEntry> = ranked
@@ -313,11 +308,31 @@ pub async fn show_factors(
     let score = neunode_reputation::score::ReputationScore::compute(&weights, &inputs);
 
     let factors = vec![
-        FactorDetail { name: "Stake".into(), weight: format!("{:.0}%", weights.stake), value: score.stake_factor },
-        FactorDetail { name: "Attestation".into(), weight: format!("{:.0}%", weights.attest), value: score.attest_factor },
-        FactorDetail { name: "Activity".into(), weight: format!("{:.0}%", weights.activity), value: score.activity_factor },
-        FactorDetail { name: "Verification".into(), weight: format!("{:.0}%", weights.verify), value: score.verify_factor },
-        FactorDetail { name: "Tenure".into(), weight: format!("{:.0}%", weights.tenure), value: score.tenure_factor },
+        FactorDetail {
+            name: "Stake".into(),
+            weight: format!("{:.0}%", weights.stake),
+            value: score.stake_factor,
+        },
+        FactorDetail {
+            name: "Attestation".into(),
+            weight: format!("{:.0}%", weights.attest),
+            value: score.attest_factor,
+        },
+        FactorDetail {
+            name: "Activity".into(),
+            weight: format!("{:.0}%", weights.activity),
+            value: score.activity_factor,
+        },
+        FactorDetail {
+            name: "Verification".into(),
+            weight: format!("{:.0}%", weights.verify),
+            value: score.verify_factor,
+        },
+        FactorDetail {
+            name: "Tenure".into(),
+            weight: format!("{:.0}%", weights.tenure),
+            value: score.tenure_factor,
+        },
     ];
 
     Ok(types::ok(FactorBreakdown {
@@ -337,8 +352,8 @@ fn persist_attestation(
     attestation: &neunode_reputation::attestation::Attestation,
 ) -> Result<(), ApiError> {
     let key = format!("att_{}_{}", attestation.attester.0, attestation.timestamp);
-    let key_bytes =
-        bincode::serialize(&key).map_err(|e| ApiError::Internal(format!("key serialization: {e}")))?;
+    let key_bytes = bincode::serialize(&key)
+        .map_err(|e| ApiError::Internal(format!("key serialization: {e}")))?;
     let value_bytes = bincode::serialize(attestation)
         .map_err(|e| ApiError::Internal(format!("value serialization: {e}")))?;
     db.put_raw(neunode_storage::cf::CF_REPUTATION, &key_bytes, &value_bytes)
@@ -356,7 +371,9 @@ fn load_attestations_for(
     };
     entries
         .iter()
-        .filter_map(|(_, v)| bincode::deserialize::<neunode_reputation::attestation::Attestation>(v).ok())
+        .filter_map(|(_, v)| {
+            bincode::deserialize::<neunode_reputation::attestation::Attestation>(v).ok()
+        })
         .filter(|a| a.target.0 == did)
         .collect()
 }

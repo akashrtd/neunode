@@ -118,11 +118,16 @@ export function createKnowledgeResource(
 				if (params?.limit) qs.set("limit", String(params.limit));
 				const query = qs.toString();
 				return client.http.get<KnowledgeQueryListResult>(
-					query ? `/api/v1/knowledge/query?${query}` : "/api/v1/knowledge/query",
+					query
+						? `/api/v1/knowledge/query?${query}`
+						: "/api/v1/knowledge/query",
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for knowledge operations",
+				);
 			const args = ["knowledge", "query"];
 			if (params?.subject) args.push("--subject", params.subject);
 			if (params?.predicate) args.push("--predicate", params.predicate);
@@ -142,7 +147,10 @@ export function createKnowledgeResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for knowledge operations",
+				);
 			const args = [
 				"knowledge",
 				"register-agent",
@@ -164,7 +172,10 @@ export function createKnowledgeResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for knowledge operations",
+				);
 			const args = [
 				"knowledge",
 				"register-model",
@@ -187,7 +198,10 @@ export function createKnowledgeResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for knowledge operations",
+				);
 			const args = [
 				"knowledge",
 				"register-bounty",
@@ -209,7 +223,10 @@ export function createKnowledgeResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for knowledge operations",
+				);
 			const args = [
 				"knowledge",
 				"join-job",
@@ -228,7 +245,10 @@ export function createKnowledgeResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for knowledge operations",
+				);
 			return cli.execute<KnowledgeListClassesResult>([
 				"knowledge",
 				"list-classes",
@@ -242,7 +262,10 @@ export function createKnowledgeResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for knowledge operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for knowledge operations",
+				);
 			return cli.execute<KnowledgeListPredicatesResult>([
 				"knowledge",
 				"list-predicates",

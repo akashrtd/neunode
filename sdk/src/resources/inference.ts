@@ -90,7 +90,10 @@ export function createInferenceResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for inference operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for inference operations",
+				);
 			const args = [
 				"inference",
 				"request",
@@ -112,11 +115,16 @@ export function createInferenceResource(
 				if (provider) qs.set("provider", provider);
 				const query = qs.toString();
 				return client.http.get<InferenceListModelsResult>(
-					query ? `/api/v1/inference/models?${query}` : "/api/v1/inference/models",
+					query
+						? `/api/v1/inference/models?${query}`
+						: "/api/v1/inference/models",
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for inference operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for inference operations",
+				);
 			const args = ["inference", "list-models"];
 			if (provider) args.push("--provider", provider);
 			return cli.execute<InferenceListModelsResult>(args);
@@ -128,11 +136,16 @@ export function createInferenceResource(
 				if (model) qs.set("model", model);
 				const query = qs.toString();
 				return client.http.get<InferenceProvidersResult>(
-					query ? `/api/v1/inference/providers?${query}` : "/api/v1/inference/providers",
+					query
+						? `/api/v1/inference/providers?${query}`
+						: "/api/v1/inference/providers",
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for inference operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for inference operations",
+				);
 			const args = ["inference", "providers"];
 			if (model) args.push("--model", model);
 			return cli.execute<InferenceProvidersResult>(args);
@@ -151,7 +164,10 @@ export function createInferenceResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for inference operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for inference operations",
+				);
 			const args = [
 				"inference",
 				"route",
@@ -178,7 +194,10 @@ export function createInferenceResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for inference operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for inference operations",
+				);
 			return cli.execute<InferencePricingResult>([
 				"inference",
 				"pricing",
