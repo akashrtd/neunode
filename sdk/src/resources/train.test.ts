@@ -55,20 +55,33 @@ describe("createTrainResource", () => {
 	});
 
 	it("should throw if both transports are missing", async () => {
-		const resource = createTrainResource({ ...mockClient, cli: undefined, http: undefined });
-		await expect(resource.list()).rejects.toThrow("HTTP or CLI transport required");
+		const resource = createTrainResource({
+			...mockClient,
+			cli: undefined,
+			http: undefined,
+		});
+		await expect(resource.list()).rejects.toThrow(
+			"HTTP or CLI transport required",
+		);
 	});
 
 	describe("start", () => {
 		it("should use HTTP transport when available", async () => {
-			const expected = { "Job ID": "job_http", Model: "llama-3b", Status: "Running" };
+			const expected = {
+				"Job ID": "job_http",
+				Model: "llama-3b",
+				Status: "Running",
+			};
 			const dualClient = makeMockClient({ withHttp: true, withCli: true });
 			const http = dualClient.http as unknown as {
 				post: ReturnType<typeof vi.fn>;
 			};
 			http.post.mockResolvedValue(expected);
 			const resource = createTrainResource(dualClient);
-			const result = await resource.start({ model: "llama-3b", dataset: "medical-data" });
+			const result = await resource.start({
+				model: "llama-3b",
+				dataset: "medical-data",
+			});
 			expect(http.post).toHaveBeenCalledWith("/api/v1/train/start", {
 				model: "llama-3b",
 				dataset: "medical-data",
@@ -124,7 +137,9 @@ describe("createTrainResource", () => {
 			http.get.mockResolvedValue({ job_id: "job_123", status: "Running" });
 			const resource = createTrainResource(dualClient);
 			await resource.status("job_123");
-			expect(http.get).toHaveBeenCalledWith("/api/v1/train/status?jobId=job_123");
+			expect(http.get).toHaveBeenCalledWith(
+				"/api/v1/train/status?jobId=job_123",
+			);
 		});
 
 		it("should call execute with train status (no jobId) via CLI", async () => {
@@ -156,7 +171,9 @@ describe("createTrainResource", () => {
 			http.post.mockResolvedValue({ job_id: "job_123", status: "Stopped" });
 			const resource = createTrainResource(dualClient);
 			await resource.stop("job_123");
-			expect(http.post).toHaveBeenCalledWith("/api/v1/train/stop", { jobId: "job_123" });
+			expect(http.post).toHaveBeenCalledWith("/api/v1/train/stop", {
+				jobId: "job_123",
+			});
 		});
 
 		it("should call execute with train stop --job-id via CLI", async () => {
@@ -204,7 +221,11 @@ describe("createTrainResource", () => {
 			};
 			http.post.mockResolvedValue({ worker_id: "w_001", status: "available" });
 			const resource = createTrainResource(dualClient);
-			await resource.registerWorker({ gpuCount: 4, gpuMemoryGb: 80, maxModelParams: 7 });
+			await resource.registerWorker({
+				gpuCount: 4,
+				gpuMemoryGb: 80,
+				maxModelParams: 7,
+			});
 			expect(http.post).toHaveBeenCalledWith("/api/v1/train/worker-register", {
 				gpuCount: 4,
 				gpuMemoryGb: 80,
@@ -318,7 +339,9 @@ describe("createTrainResource", () => {
 			http.get.mockResolvedValue({ job_id: "job_abc", status: "Running" });
 			const resource = createTrainResource(dualClient);
 			await resource.coordinatorStatus({ jobId: "job_abc" });
-			expect(http.get).toHaveBeenCalledWith("/api/v1/train/coordinator-status?jobId=job_abc");
+			expect(http.get).toHaveBeenCalledWith(
+				"/api/v1/train/coordinator-status?jobId=job_abc",
+			);
 		});
 
 		it("should pass job ID via CLI", async () => {

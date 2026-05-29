@@ -68,7 +68,10 @@ export function createIdentityResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for identity operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for identity operations",
+				);
 			const args = ["identity", "create", "--name", params.name];
 			if (params.method) args.push("--method", params.method);
 			if (params.outputDir) args.push("--output-dir", params.outputDir);
@@ -85,7 +88,10 @@ export function createIdentityResource(
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for identity operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for identity operations",
+				);
 			const args = ["identity", "show"];
 			if (did) args.push("--did", did);
 			return cli.execute<IdentityShowResult>(args);
@@ -96,14 +102,20 @@ export function createIdentityResource(
 				return client.http.get<IdentityListResult>("/api/v1/identity/list");
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for identity operations");
+			if (!cli)
+				throw new Error(
+					"HTTP or CLI transport required for identity operations",
+				);
 			return cli.execute<IdentityListResult>(["identity", "list"]);
 		},
 
 		async export(params: IdentityExportParams): Promise<IdentityExportResult> {
 			// File operation — CLI only
 			const cli = client.cli;
-			if (!cli) throw new Error("CLI transport required for identity export (file operation)");
+			if (!cli)
+				throw new Error(
+					"CLI transport required for identity export (file operation)",
+				);
 			const args = ["identity", "export", "--file", params.file];
 			if (params.did) args.push("--did", params.did);
 			return cli.execute<IdentityExportResult>(args);

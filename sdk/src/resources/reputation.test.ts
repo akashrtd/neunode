@@ -55,8 +55,14 @@ describe("createReputationResource", () => {
 	});
 
 	it("should throw if both transports are missing", async () => {
-		const resource = createReputationResource({ ...mockClient, cli: undefined, http: undefined });
-		await expect(resource.leaderboard()).rejects.toThrow("HTTP or CLI transport required");
+		const resource = createReputationResource({
+			...mockClient,
+			cli: undefined,
+			http: undefined,
+		});
+		await expect(resource.leaderboard()).rejects.toThrow(
+			"HTTP or CLI transport required",
+		);
 	});
 
 	describe("show", () => {
@@ -69,7 +75,9 @@ describe("createReputationResource", () => {
 			http.get.mockResolvedValue(expected);
 			const resource = createReputationResource(dualClient);
 			const result = await resource.show("did:neunode:http");
-			expect(http.get).toHaveBeenCalledWith("/api/v1/reputation?agent=did%3Aneunode%3Ahttp");
+			expect(http.get).toHaveBeenCalledWith(
+				"/api/v1/reputation?agent=did%3Aneunode%3Ahttp",
+			);
 			expect(result).toEqual(expected);
 		});
 
@@ -103,7 +111,12 @@ describe("createReputationResource", () => {
 			const http = dualClient.http as unknown as {
 				post: ReturnType<typeof vi.fn>;
 			};
-			http.post.mockResolvedValue({ attester: "me", target: "them", score: 8, signed: true });
+			http.post.mockResolvedValue({
+				attester: "me",
+				target: "them",
+				score: 8,
+				signed: true,
+			});
 			const resource = createReputationResource(dualClient);
 			await resource.attest({ to: "did:neunode:them", score: 8 });
 			expect(http.post).toHaveBeenCalledWith("/api/v1/reputation/attest", {
@@ -166,7 +179,9 @@ describe("createReputationResource", () => {
 			http.get.mockResolvedValue({ data: [] });
 			const resource = createReputationResource(dualClient);
 			await resource.leaderboard(10);
-			expect(http.get).toHaveBeenCalledWith("/api/v1/reputation/leaderboard?limit=10");
+			expect(http.get).toHaveBeenCalledWith(
+				"/api/v1/reputation/leaderboard?limit=10",
+			);
 		});
 
 		it("should call execute with reputation leaderboard (no limit) via CLI", async () => {
@@ -198,7 +213,9 @@ describe("createReputationResource", () => {
 			http.get.mockResolvedValue({ agent: "me", total_score: "85", data: [] });
 			const resource = createReputationResource(dualClient);
 			await resource.factors("did:neunode:abc");
-			expect(http.get).toHaveBeenCalledWith("/api/v1/reputation/factors?agent=did%3Aneunode%3Aabc");
+			expect(http.get).toHaveBeenCalledWith(
+				"/api/v1/reputation/factors?agent=did%3Aneunode%3Aabc",
+			);
 		});
 
 		it("should call execute with reputation factors (no agent) via CLI", async () => {

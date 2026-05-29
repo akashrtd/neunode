@@ -91,13 +91,17 @@ export class HttpTransport {
 		return this.request<T>("DELETE", path);
 	}
 
-	private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+	private async request<T>(
+		method: string,
+		path: string,
+		body?: unknown,
+	): Promise<T> {
 		const url = `${this.baseUrl}${path}`;
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
 		};
 		if (this.apiKey) {
-			headers["Authorization"] = `Bearer ${this.apiKey}`;
+			headers.Authorization = `Bearer ${this.apiKey}`;
 		}
 
 		const controller = new AbortController();
@@ -126,21 +130,33 @@ export class HttpTransport {
 					);
 				}
 				if (!envelope.success) {
-					throw new HttpTransportError(envelope.error.message, envelope.error.code);
+					throw new HttpTransportError(
+						envelope.error.message,
+						envelope.error.code,
+					);
 				}
-				throw new HttpTransportError(`HTTP ${response.status}`, `HTTP_${response.status}`);
+				throw new HttpTransportError(
+					`HTTP ${response.status}`,
+					`HTTP_${response.status}`,
+				);
 			}
 
 			const text = await response.text();
 			const envelope = JSON.parse(text) as ApiEnvelope<T>;
 			if (!envelope.success) {
-				throw new HttpTransportError(envelope.error.message, envelope.error.code);
+				throw new HttpTransportError(
+					envelope.error.message,
+					envelope.error.code,
+				);
 			}
 			return envelope.data;
 		} catch (err) {
 			if (err instanceof HttpTransportError) throw err;
 			if (err instanceof DOMException && err.name === "AbortError") {
-				throw new HttpTransportError(`request timed out after ${this.timeout}ms`, "TIMEOUT");
+				throw new HttpTransportError(
+					`request timed out after ${this.timeout}ms`,
+					"TIMEOUT",
+				);
 			}
 			throw new HttpTransportError(
 				err instanceof Error ? err.message : String(err),

@@ -43,7 +43,8 @@ export function createMeshResource(client: NeunodeClient): MeshResource {
 				return client.http.get<MeshStatusResult>("/api/v1/mesh/status");
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for mesh operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for mesh operations");
 			return cli.execute<MeshStatusResult>(["mesh", "status"]);
 		},
 
@@ -57,7 +58,8 @@ export function createMeshResource(client: NeunodeClient): MeshResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for mesh operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for mesh operations");
 			const args = ["mesh", "peers"];
 			if (verbose) args.push("--verbose");
 			return cli.execute<MeshPeersResult>(args);
@@ -70,7 +72,8 @@ export function createMeshResource(client: NeunodeClient): MeshResource {
 				});
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for mesh operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for mesh operations");
 			return cli.execute<MeshConnectResult>([
 				"mesh",
 				"connect",
@@ -87,7 +90,8 @@ export function createMeshResource(client: NeunodeClient): MeshResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for mesh operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for mesh operations");
 			return cli.execute<MeshDisconnectResult>([
 				"mesh",
 				"disconnect",

@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 pub struct EngineApiClaims {
     /// Required: issued-at timestamp (seconds since epoch).
     pub iat: u64,
+    /// Expiration timestamp. Set to iat + 60s per Engine API spec.
+    pub exp: u64,
     /// Optional: unique CL client identifier.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
@@ -67,14 +69,16 @@ impl JwtAuth {
         self
     }
 
-    /// Generate a new JWT token valid for the current time.
+    /// Generate a new JWT token valid for 60 seconds per Engine API spec.
     pub fn generate_token(&self) -> Result<String, EngineApiError> {
         let key = EncodingKey::from_secret(&self.secret);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs();
         let claims = EngineApiClaims {
-            iat: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("time went backwards")
-                .as_secs(),
+            iat: now,
+            exp: now + 60,
             id: self.client_id.clone(),
             clv: self.client_version.clone(),
         };
@@ -142,9 +146,8 @@ mod tests {
 
         let key = DecodingKey::from_secret(&[42u8; 32]);
         let mut validation = Validation::new(Algorithm::HS256);
-        // Engine API only uses iat, not exp
         validation.validate_exp = false;
-        validation.set_required_spec_claims::<String>(&[]);
+        validation.set_required_spec_claims::<String>(&["iat".to_string(), "exp".to_string()]);
 
         let token_data = decode::<EngineApiClaims>(&token, &key, &validation).unwrap();
         let now =
@@ -152,6 +155,8 @@ mod tests {
         // Token iat should be within 2 seconds of now
         assert!(token_data.claims.iat <= now);
         assert!(token_data.claims.iat >= now - 2);
+        // exp should be iat + 60
+        assert_eq!(token_data.claims.exp, token_data.claims.iat + 60);
     }
 
     #[test]

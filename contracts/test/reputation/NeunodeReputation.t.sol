@@ -107,7 +107,9 @@ contract NeunodeReputationTest is Test {
 
     function testRevert_updateFactorScore_outOfBounds() public {
         vm.prank(stakeOracle);
-        vm.expectRevert(abi.encodeWithSelector(NeunodeReputation.ScoreOutOfBounds.selector, uint16(10001)));
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeReputation.ScoreOutOfBounds.selector, uint16(10001))
+        );
         rep.updateFactorScore(alice, 0, 10001);
     }
 
@@ -363,11 +365,7 @@ contract NeunodeReputationTest is Test {
 
     function test_setFactorWeights() public {
         NeunodeReputation.FactorWeights memory newWeights = NeunodeReputation.FactorWeights({
-            stake: 5000,
-            attest: 2000,
-            activity: 1000,
-            verify: 1000,
-            tenure: 1000
+            stake: 5000, attest: 2000, activity: 1000, verify: 1000, tenure: 1000
         });
 
         vm.prank(admin);
@@ -385,11 +383,7 @@ contract NeunodeReputationTest is Test {
     function testRevert_setFactorWeights_invalidSum() public {
         // Test with sum != 10000
         NeunodeReputation.FactorWeights memory invalidWeights = NeunodeReputation.FactorWeights({
-            stake: 4000,
-            attest: 3000,
-            activity: 2000,
-            verify: 1000,
-            tenure: 500
+            stake: 4000, attest: 3000, activity: 2000, verify: 1000, tenure: 500
         }); // sum = 10500
 
         vm.prank(admin);
@@ -399,11 +393,7 @@ contract NeunodeReputationTest is Test {
 
     function testRevert_setFactorWeights_unauthorized() public {
         NeunodeReputation.FactorWeights memory newWeights = NeunodeReputation.FactorWeights({
-            stake: 5000,
-            attest: 2000,
-            activity: 1000,
-            verify: 1000,
-            tenure: 1000
+            stake: 5000, attest: 2000, activity: 1000, verify: 1000, tenure: 1000
         });
 
         vm.prank(makeAddr("random"));

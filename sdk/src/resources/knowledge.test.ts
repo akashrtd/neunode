@@ -55,8 +55,14 @@ describe("createKnowledgeResource", () => {
 	});
 
 	it("should throw if both transports are missing", async () => {
-		const resource = createKnowledgeResource({ ...mockClient, cli: undefined, http: undefined });
-		await expect(resource.listClasses()).rejects.toThrow("HTTP or CLI transport required");
+		const resource = createKnowledgeResource({
+			...mockClient,
+			cli: undefined,
+			http: undefined,
+		});
+		await expect(resource.listClasses()).rejects.toThrow(
+			"HTTP or CLI transport required",
+		);
 	});
 
 	describe("query", () => {
@@ -115,13 +121,22 @@ describe("createKnowledgeResource", () => {
 			const http = dualClient.http as unknown as {
 				post: ReturnType<typeof vi.fn>;
 			};
-			http.post.mockResolvedValue({ did: "did:neunode:test", triples_inserted: 3 });
+			http.post.mockResolvedValue({
+				did: "did:neunode:test",
+				triples_inserted: 3,
+			});
 			const resource = createKnowledgeResource(dualClient);
-			await resource.registerAgent({ did: "did:neunode:test", capabilities: "NLP,Vision" });
-			expect(http.post).toHaveBeenCalledWith("/api/v1/knowledge/register-agent", {
+			await resource.registerAgent({
 				did: "did:neunode:test",
 				capabilities: "NLP,Vision",
 			});
+			expect(http.post).toHaveBeenCalledWith(
+				"/api/v1/knowledge/register-agent",
+				{
+					did: "did:neunode:test",
+					capabilities: "NLP,Vision",
+				},
+			);
 		});
 
 		it("should call execute with knowledge register-agent args via CLI", async () => {
@@ -152,13 +167,22 @@ describe("createKnowledgeResource", () => {
 			const http = dualClient.http as unknown as {
 				post: ReturnType<typeof vi.fn>;
 			};
-			http.post.mockResolvedValue({ owner: "did:neunode:dev", cid: "ipfs://QmModel" });
+			http.post.mockResolvedValue({
+				owner: "did:neunode:dev",
+				cid: "ipfs://QmModel",
+			});
 			const resource = createKnowledgeResource(dualClient);
-			await resource.registerModel({ did: "did:neunode:dev", cid: "ipfs://QmModel" });
-			expect(http.post).toHaveBeenCalledWith("/api/v1/knowledge/register-model", {
+			await resource.registerModel({
 				did: "did:neunode:dev",
 				cid: "ipfs://QmModel",
 			});
+			expect(http.post).toHaveBeenCalledWith(
+				"/api/v1/knowledge/register-model",
+				{
+					did: "did:neunode:dev",
+					cid: "ipfs://QmModel",
+				},
+			);
 		});
 
 		it("should call execute with knowledge register-model args via CLI", async () => {
@@ -216,11 +240,17 @@ describe("createKnowledgeResource", () => {
 			};
 			http.post.mockResolvedValue({ id: "bounty:42", triples_inserted: 3 });
 			const resource = createKnowledgeResource(dualClient);
-			await resource.registerBounty({ id: "bounty:42", capabilities: "NLP,RLHF" });
-			expect(http.post).toHaveBeenCalledWith("/api/v1/knowledge/register-bounty", {
+			await resource.registerBounty({
 				id: "bounty:42",
 				capabilities: "NLP,RLHF",
 			});
+			expect(http.post).toHaveBeenCalledWith(
+				"/api/v1/knowledge/register-bounty",
+				{
+					id: "bounty:42",
+					capabilities: "NLP,RLHF",
+				},
+			);
 		});
 
 		it("should call execute with knowledge register-bounty args via CLI", async () => {
@@ -251,7 +281,11 @@ describe("createKnowledgeResource", () => {
 			const http = dualClient.http as unknown as {
 				post: ReturnType<typeof vi.fn>;
 			};
-			http.post.mockResolvedValue({ agent: "did:neunode:worker", job: "job:101", triples_inserted: 1 });
+			http.post.mockResolvedValue({
+				agent: "did:neunode:worker",
+				job: "job:101",
+				triples_inserted: 1,
+			});
 			const resource = createKnowledgeResource(dualClient);
 			await resource.joinJob({ did: "did:neunode:worker", jobId: "job:101" });
 			expect(http.post).toHaveBeenCalledWith("/api/v1/knowledge/join-job", {

@@ -55,8 +55,14 @@ describe("createInferenceResource", () => {
 	});
 
 	it("should throw if both transports are missing", async () => {
-		const resource = createInferenceResource({ ...mockClient, cli: undefined, http: undefined });
-		await expect(resource.listModels()).rejects.toThrow("HTTP or CLI transport required");
+		const resource = createInferenceResource({
+			...mockClient,
+			cli: undefined,
+			http: undefined,
+		});
+		await expect(resource.listModels()).rejects.toThrow(
+			"HTTP or CLI transport required",
+		);
 	});
 
 	describe("request", () => {
@@ -162,7 +168,9 @@ describe("createInferenceResource", () => {
 			http.get.mockResolvedValue({ data: [] });
 			const resource = createInferenceResource(dualClient);
 			await resource.listModels("provider-abc");
-			expect(http.get).toHaveBeenCalledWith("/api/v1/inference/models?provider=provider-abc");
+			expect(http.get).toHaveBeenCalledWith(
+				"/api/v1/inference/models?provider=provider-abc",
+			);
 		});
 
 		it("should call execute with inference list-models (no provider) via CLI", async () => {
@@ -194,7 +202,9 @@ describe("createInferenceResource", () => {
 			http.get.mockResolvedValue({ data: [] });
 			const resource = createInferenceResource(dualClient);
 			await resource.providers("llama-3b");
-			expect(http.get).toHaveBeenCalledWith("/api/v1/inference/providers?model=llama-3b");
+			expect(http.get).toHaveBeenCalledWith(
+				"/api/v1/inference/providers?model=llama-3b",
+			);
 		});
 
 		it("should call execute with inference providers (no model) via CLI", async () => {

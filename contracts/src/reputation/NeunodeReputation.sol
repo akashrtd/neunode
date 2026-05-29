@@ -116,7 +116,8 @@ contract NeunodeReputation is AccessControl {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(REPUTATION_ADMIN_ROLE, msg.sender);
 
-        weights = FactorWeights({stake: 3000, attest: 2500, activity: 2000, verify: 1500, tenure: 1000});
+        weights =
+            FactorWeights({stake: 3000, attest: 2500, activity: 2000, verify: 1500, tenure: 1000});
 
         minReputationBps = MIN_REPUTATION_BPS;
         maxValidators = MAX_VALIDATORS;
@@ -124,9 +125,7 @@ contract NeunodeReputation is AccessControl {
 
         // Genesis epoch
         _epochs[1] = EpochInfo({
-            startBlock: block.number,
-            endBlock: block.number + EPOCH_SIZE,
-            isFinalized: false
+            startBlock: block.number, endBlock: block.number + EPOCH_SIZE, isFinalized: false
         });
     }
 
@@ -298,8 +297,9 @@ contract NeunodeReputation is AccessControl {
         // Start next epoch
         uint256 nextEpoch = currentEpoch + 1;
         currentEpoch = nextEpoch;
-        _epochs[nextEpoch] =
-            EpochInfo({startBlock: block.number, endBlock: block.number + EPOCH_SIZE, isFinalized: false});
+        _epochs[nextEpoch] = EpochInfo({
+            startBlock: block.number, endBlock: block.number + EPOCH_SIZE, isFinalized: false
+        });
     }
 
     /// @notice Get the current epoch number
@@ -332,7 +332,10 @@ contract NeunodeReputation is AccessControl {
 
     /// @notice Update factor weights (must sum to 10000)
     /// @param newWeights The new weight configuration
-    function setFactorWeights(FactorWeights calldata newWeights) external onlyRole(REPUTATION_ADMIN_ROLE) {
+    function setFactorWeights(FactorWeights calldata newWeights)
+        external
+        onlyRole(REPUTATION_ADMIN_ROLE)
+    {
         uint256 sum = uint256(newWeights.stake) + newWeights.attest + newWeights.activity
             + newWeights.verify + newWeights.tenure;
         if (sum != MAX_BPS) revert InvalidWeightSum(sum);
@@ -419,11 +422,17 @@ contract NeunodeReputation is AccessControl {
         ReputationEntry storage entry = _entries[agent];
 
         // Weighted sum of factor scores
-        uint256 composite = (uint256(entry.scores.stake) * weights.stake
-            + uint256(entry.scores.attest) * weights.attest
-            + uint256(entry.scores.activity) * weights.activity
-            + uint256(entry.scores.verify) * weights.verify
-            + uint256(entry.scores.tenure) * weights.tenure) / MAX_BPS;
+        uint256 composite =
+            (uint256(entry.scores.stake)
+                    * weights.stake
+                    + uint256(entry.scores.attest)
+                    * weights.attest
+                    + uint256(entry.scores.activity)
+                    * weights.activity
+                    + uint256(entry.scores.verify)
+                    * weights.verify
+                    + uint256(entry.scores.tenure)
+                    * weights.tenure) / MAX_BPS;
 
         // Subtract effective penalty with decay
         uint256 effectivePenalty = _effectivePenalty(entry);

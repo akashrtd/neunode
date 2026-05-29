@@ -112,13 +112,11 @@ export function createBountyResource(client: NeunodeClient): BountyResource {
 	return {
 		async create(params: BountyCreateParams): Promise<BountyCreateResult> {
 			if (client.http) {
-				return client.http.post<BountyCreateResult>(
-					"/api/v1/bounties",
-					params,
-				);
+				return client.http.post<BountyCreateResult>("/api/v1/bounties", params);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for bounty operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for bounty operations");
 			const args = [
 				"bounty",
 				"create",
@@ -146,7 +144,8 @@ export function createBountyResource(client: NeunodeClient): BountyResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for bounty operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for bounty operations");
 			return cli.execute<BountyClaimResult>([
 				"bounty",
 				"claim",
@@ -165,7 +164,8 @@ export function createBountyResource(client: NeunodeClient): BountyResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for bounty operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for bounty operations");
 			const args = [
 				"bounty",
 				"submit",
@@ -186,7 +186,8 @@ export function createBountyResource(client: NeunodeClient): BountyResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for bounty operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for bounty operations");
 			return cli.execute<BountyReviewResult>([
 				"bounty",
 				"review",
@@ -211,7 +212,8 @@ export function createBountyResource(client: NeunodeClient): BountyResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for bounty operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for bounty operations");
 			const args = ["bounty", "list"];
 			if (params?.state) args.push("--state", params.state);
 			if (params?.creator) args.push("--creator", params.creator);
@@ -226,7 +228,8 @@ export function createBountyResource(client: NeunodeClient): BountyResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for bounty operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for bounty operations");
 			return cli.execute<BountyShowResult>(["bounty", "show", "--id", id]);
 		},
 
@@ -238,7 +241,8 @@ export function createBountyResource(client: NeunodeClient): BountyResource {
 				);
 			}
 			const cli = client.cli;
-			if (!cli) throw new Error("HTTP or CLI transport required for bounty operations");
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for bounty operations");
 			const args = ["bounty", "cancel", "--id", id];
 			if (reason) args.push("--reason", reason);
 			return cli.execute<BountyCancelResult>(args);
