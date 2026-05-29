@@ -3,7 +3,17 @@
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { AgnetdClient } from "../client.js";
+import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { Variables } from "@modelcontextprotocol/sdk/shared/uriTemplate.js";
+import type { AgnetdClient } from "./client.js";
+
+function varStr(variables: Variables, key: string): string {
+  const val = variables[key];
+  if (val === undefined) {
+    throw new Error(`missing template variable '${key}'`);
+  }
+  return typeof val === "string" ? val : val[0]!;
+}
 
 export function registerResources(
   server: McpServer,
@@ -12,10 +22,10 @@ export function registerResources(
   // Agent profile resource
   server.resource(
     "agent-profile",
-    "neunode://agent/{did}",
-    async (uri: URL, { did }: { did: string }) => {
+    new ResourceTemplate("neunode://agent/{did}", { list: undefined }),
+    async (uri: URL, variables: Variables) => {
       try {
-        const result = await client.getIdentity(decodeURIComponent(did));
+        const result = await client.getIdentity(decodeURIComponent(varStr(variables, "did")));
         return {
           contents: [
             {
@@ -44,12 +54,12 @@ export function registerResources(
   // Feed entry resource
   server.resource(
     "feed-entry",
-    "neunode://feed/{did}/{sequence}",
-    async (uri: URL, { did, sequence }: { did: string; sequence: string }) => {
+    new ResourceTemplate("neunode://feed/{did}/{sequence}", { list: undefined }),
+    async (uri: URL, variables: Variables) => {
       try {
         const result = await client.readFeed({
-          author: decodeURIComponent(did),
-          limit: Number.parseInt(sequence, 10) || 10,
+          author: decodeURIComponent(varStr(variables, "did")),
+          limit: Number.parseInt(varStr(variables, "sequence"), 10) || 10,
         });
         return {
           contents: [
@@ -79,10 +89,10 @@ export function registerResources(
   // Model resource
   server.resource(
     "model",
-    "neunode://model/{model_id}",
-    async (uri: URL, { model_id }: { model_id: string }) => {
+    new ResourceTemplate("neunode://model/{model_id}", { list: undefined }),
+    async (uri: URL, variables: Variables) => {
       try {
-        const result = await client.getModel(decodeURIComponent(model_id));
+        const result = await client.getModel(decodeURIComponent(varStr(variables, "model_id")));
         return {
           contents: [
             {
@@ -111,10 +121,10 @@ export function registerResources(
   // Bounty resource
   server.resource(
     "bounty",
-    "neunode://bounty/{bounty_id}",
-    async (uri: URL, { bounty_id }: { bounty_id: string }) => {
+    new ResourceTemplate("neunode://bounty/{bounty_id}", { list: undefined }),
+    async (uri: URL, variables: Variables) => {
       try {
-        const result = await client.getBounty(decodeURIComponent(bounty_id));
+        const result = await client.getBounty(decodeURIComponent(varStr(variables, "bounty_id")));
         return {
           contents: [
             {

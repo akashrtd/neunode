@@ -34,16 +34,17 @@ function parseArgs(args: ReadonlyArray<string>): {
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "--transport" && args[i + 1]) {
-      const val = args[i + 1];
-      if (val === "stdio" || val === "http") {
-        transport = val;
+    if (i + 1 < args.length) {
+      const next = args[i + 1]!;
+      if (arg === "--transport") {
+        if (next === "stdio" || next === "http") {
+          transport = next;
+        }
+        i++;
+      } else if (arg === "--port") {
+        port = Number.parseInt(next, 10);
+        i++;
       }
-      i++;
-    }
-    if (arg === "--port" && args[i + 1]) {
-      port = Number.parseInt(args[i + 1], 10);
-      i++;
     }
   }
 
@@ -51,8 +52,9 @@ function parseArgs(args: ReadonlyArray<string>): {
   if (process.env["MCP_TRANSPORT"] === "http") {
     transport = "http";
   }
-  if (process.env["MCP_PORT"]) {
-    const envPort = Number.parseInt(process.env["MCP_PORT"], 10);
+  const envPortStr = process.env["MCP_PORT"];
+  if (envPortStr) {
+    const envPort = Number.parseInt(envPortStr, 10);
     if (!Number.isNaN(envPort)) {
       port = envPort;
     }

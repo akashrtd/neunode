@@ -15,7 +15,9 @@ members = [
     "crates/neunode-turboquant",
     "crates/neunode-knowledge",
     "crates/neunode-lineage",
+    "crates/neunode-chain-spec",
     "crates/neunode-contracts",
+    "crates/neunode-engine-api-client",
     "crates/neunode-verification",
     "crates/neunode-discovery",
     "crates/agnetd",
@@ -43,7 +45,7 @@ multihash = "0.19"
 k256 = "0.13"
 
 # Blockchain — CRITICAL: default-features=false, reqwest-rustls-tls ONLY
-alloy = { version = "1.8", default-features = false, features = ["reqwest-rustls-tls", "contract", "provider-http", "rpc-types", "signer-local", "eip712", "sol-types", "json-abi"] }
+alloy = { version = "1.8", default-features = false, features = ["reqwest-rustls-tls", "contract", "provider-http", "rpc-types", "rpc-types-engine", "signer-local", "eip712", "sol-types", "json-abi"] }
 
 # Identity
 ssi = { version = "0.15", features = ["ring", "secp256k1", "eip712"] }
