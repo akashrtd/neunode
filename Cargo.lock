@@ -6097,6 +6097,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "neunode-contracts"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "neunode-core",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "neunode-core"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,10 @@
+[package]
+name = "neunode-contracts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+alloy = { workspace = true }
+neunode-core = { path = "../neunode-core" }
+thiserror = { workspace = true }
