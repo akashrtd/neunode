@@ -1,0 +1,178 @@
+# =============================================================================
+# Neunode L1 Node Configuration (Reth EL + Malachite CL)
+# -----------------------------------------------------------------------------
+# This file defines the core operational parameters for a single Neunode
+# validator node. It is consumed by the `neunode` binary which orchestrates
+# the execution layer (Reth), consensus layer (Malachite/CometBFT), and the
+# reputation-weighted validator selection engine.
+#
+# Modify this template to match your deployment environment (paths, ports,
+# peers, and reputation weights).
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# [node] – General node metadata and data directory
+# ---------------------------------------------------------------------------
+[node]
+# Human-readable name for this node (used in logging and peer discovery)
+name = "neunode-l1-validator"
+
+# Chain identifier; must match the genesis block hash/chain ID
+chain_id = "neunode-evm-1"
+
+# Base directory for all runtime data (database, state, logs, keys)
+data_dir = "/var/lib/neunode/data"
+
+# Log level: one of "debug", "info", "warn", "error", "fatal"
+log_level = "info"
+
+# ---------------------------------------------------------------------------
+# [network] – P2P and JSON-RPC endpoint configuration
+# ---------------------------------------------------------------------------
+[network]
+
+# External address advertised to peers for P2P connectivity.
+# Format: "<ip>:<port>" or "<dns>:<port>". Use "0.0.0.0:26656" to bind all.
+p2p_listen_address = "0.0.0.0:26656"
+
+# External address that other nodes use to reach this node; should be
+# the publicly routable IP or DNS name and the P2P port.
+# For local development, use the same as p2p_listen_address.
+p2p_external_address = "127.0.0.1:26656"
+
+# Listening port for the JSON‑RPC HTTP endpoint (standard Ethereum API)
+jsonrpc_http_port = 8545
+
+# Listening port for the JSON‑RPC WebSocket endpoint
+jsonrpc_ws_port = 8546
+
+# Listening port for the Engine API (CL→EL communication)
+engine_api_port = 8551
+
+# Comma-separated list of bootstrap peers that help this node discover the
+# network. Each entry is "<node-id>@<host>:<p2p-port>".
+# Node IDs are hex representations of the peer’s Ed25519 public key.
+bootstrap_peers = [
+    # "abc123def456@boot1.neunode.io:26656",
+    # "7890abcdef12@boot2.neunode.io:26656",
+]
+
+# Maximum number of P2P connections to maintain
+max_peers = 50
+
+# ---------------------------------------------------------------------------
+# [validator] – Validator identity and key material
+# ---------------------------------------------------------------------------
+[validator]
+
+# Path to the private validator key file (Ed25519 for CometBFT consensus).
+# The file should contain a JSON object with fields:
+#   "address", "pub_key", "priv_key"
+priv_validator_key_file = "/var/lib/neunode/config/priv_validator_key.json"
+
+# Path to the validator state file (keeps track of last signed block height)
+priv_validator_state_file = "/var/lib/neunode/data/priv_validator_state.json"
+
+# Voting power scaling factor – internal; not normally changed.
+voting_power_scaling = 1.0
+
+# ---------------------------------------------------------------------------
+# [consensus] – Malachite (CometBFT) consensus parameters
+# ---------------------------------------------------------------------------
+[consensus]
+
+# Timeout values for consensus rounds (Go duration strings)
+timeout_propose = "3s"
+timeout_prevote  = "1s"
+timeout_precommit = "1s"
+timeout_commit   = "1s"
+
+# Epoch length measured in number of blocks. After `epoch_blocks` number of
+# consecutive blocks, the validator set is updated using the on-chain
+# governance and reputation module.
+epoch_blocks = 1000
+
+# Block time (target interval between block proposals)
+block_time = "2s"
+
+# Maximum number of transactions per block
+max_tx_per_block = 1000
+
+# Maximum bytes in a block (0 = unlimited)
+max_block_bytes = 1048576  # 1 MB
+
+# ---------------------------------------------------------------------------
+# [reputation] – 5‑factor reputation weights for validator selection
+# ---------------------------------------------------------------------------
+[reputation]
+
+# Factor weights (must sum to 1.0).
+# These values are used by the reputation engine to compute a composite score
+# for each validator candidate. The score is then normalized to determine
+# voting power in consensus.
+weight_stake        = 0.30
+weight_attestations = 0.25
+weight_activity     = 0.20
+weight_verifications = 0.15
+weight_tenure       = 0.10
+
+# Optional: factor decay rates (per epoch) to encourage recency
+decay_stake        = 0.99
+decay_attestations = 0.95
+decay_activity     = 0.97
+decay_verifications = 0.98
+decay_tenure       = 0.999
+
+# Minimum reputation score required for a validator to remain in the active set
+min_reputation_score = 0.1
+
+# ---------------------------------------------------------------------------
+# [genesis] – Genesis block reference (must match the chain genesis file)
+# ---------------------------------------------------------------------------
+[genesis]
+# Hash of the genesis block (hex, with 0x prefix). Used for chain verification.
+# genesis_hash = "0xabcdef0123456789..."
+
+# Path to the genesis file (JSON) containing initial state distribution,
+# initial validator set, and chain parameters.
+genesis_file = "/var/lib/neunode/config/genesis.json"
+
+# ---------------------------------------------------------------------------
+# [gas] – Default gas parameters for the `neu` token
+# ---------------------------------------------------------------------------
+[gas]
+# Native gas token symbol
+coin_denom = "neu"
+
+# Minimum gas price accepted by this node (in neu per gas unit)
+minimum_gas_price = "1000000000"  # 1 gneu (assuming 1 neu = 1e18 wei)
+
+# ---------------------------------------------------------------------------
+# [monitoring] – Metrics and health endpoints
+# ---------------------------------------------------------------------------
+[monitoring]
+# Prometheus metrics endpoint
+prometheus_listen_addr = "0.0.0.0:26660"
+
+# Health check HTTP endpoint (e.g., /health)
+health_listen_addr = "0.0.0.0:26661"
+
+# ---------------------------------------------------------------------------
+# [experimental] – Feature flags for future phases
+# ---------------------------------------------------------------------------
+[experimental]
+# Enable slashing simulation (Phase 3+)
+enable_slashing = false
+
+# Use the reputation module to recalculate voting power at every epoch boundary
+reputation_based_voting = true
+
+# ---------------------------------------------------------------------------
+# [store] – Database backend options
+# ---------------------------------------------------------------------------
+[store]
+# Database engine: "pebble" (default), "leveldb", "memdb" (for tests)
+db_engine = "pebble"
+
+# Path to the database directory (overrides <data_dir>/db if set)
+# db_path = "/var/lib/neunode/db"
