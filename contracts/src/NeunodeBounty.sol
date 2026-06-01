@@ -154,6 +154,7 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
     error AlreadyRevealed(bytes32 bountyId);
     error SubmissionNotRevealed(bytes32 bountyId);
     error NotSubmitter(bytes32 bountyId, address caller);
+    error ReviewContractNotSet();
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
@@ -778,7 +779,7 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
         }
 
         // Check review contract resolution
-        if (address(reviewContract) == address(0)) revert("no review contract set");
+        if (address(reviewContract) == address(0)) revert ReviewContractNotSet();
         if (address(reviewContract) != address(0)) {
             if (!IBountyReview(reviewContract).isResolved(id)) revert ReviewNotResolved(id);
 

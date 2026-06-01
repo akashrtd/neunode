@@ -51,6 +51,7 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
     error BpsExceedsMax(uint256 bps, uint256 max);
     error InvalidContributionType(uint8 contributionType);
     error LineageTooDeep(uint256 nodes, uint256 max);
+    error MaxLineageDepthZero();
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
@@ -96,7 +97,7 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
 
     /// @notice Update max lineage depth for BFS traversal
     function setMaxLineageDepth(uint256 newMax) external onlyRole(ADMIN_ROLE) {
-        require(newMax > 0, "max lineage depth must be > 0");
+        if (newMax == 0) revert MaxLineageDepthZero();
         maxLineageDepth = newMax;
     }
 
