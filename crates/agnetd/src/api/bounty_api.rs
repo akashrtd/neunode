@@ -9,6 +9,8 @@ use utoipa::ToSchema;
 use crate::api::error::ApiError;
 use crate::api::state::ApiState;
 use crate::api::types;
+use neunode_storage::error::StorageError;
+use neunode_storage::token_store::TokenStore;
 
 // ---------------------------------------------------------------------------
 // Request / Response types
@@ -155,6 +157,15 @@ fn token_type_to_u8(t: &neunode_core::types::TokenType) -> u8 {
     }
 }
 
+fn map_token_transfer_error(err: StorageError) -> ApiError {
+    match err {
+        StorageError::InsufficientBalance { required, available } => ApiError::BadRequest(format!(
+            "insufficient balance: required {required}, available {available}"
+        )),
+        other => ApiError::Internal(other.to_string()),
+    }
+}
+
 fn bounty_data_to_response(data: &neunode_storage::bounty_store::BountyData) -> BountyResponse {
     BountyResponse {
         id: data.id.clone(),
@@ -251,6 +262,14 @@ pub async fn create_bounty(
     let now = current_timestamp();
     let creator = state.require_did()?;
     let bounty_id = generate_bounty_id();
+    let token_byte = token_type_to_u8(&token_type);
+    let creator_did = creator.0.clone();
+    let escrow_did = format!("escrow:{bounty_id}");
+
+    let token_store = TokenStore::new(&state.db);
+    token_store
+        .transfer(&creator_did, &escrow_did, token_byte, body.reward as u128)
+        .map_err(map_token_transfer_error)?;
 
     let claim_deadline_ts = now.saturating_add(body.claim_deadline * 3600);
     let work_deadline_ts = now.saturating_add(body.work_deadline * 3600);
@@ -259,10 +278,10 @@ pub async fn create_bounty(
     let bounty = neunode_storage::bounty_store::BountyData {
         id: bounty_id.clone(),
         state: "Open".to_string(),
-        requester_did: creator.0.clone(),
+        requester_did: creator_did.clone(),
         provider_did: None,
         reward_amount: body.reward,
-        reward_token_type: token_type_to_u8(&token_type),
+        reward_token_type: token_byte,
         deadline: work_deadline_ts,
         created_at: now,
         escrow_deposited: body.reward,
@@ -276,7 +295,17 @@ pub async fn create_bounty(
     };
 
     let store = neunode_storage::bounty_store::BountyStore::new(&state.db);
-    store.put(&bounty).map_err(|e| ApiError::Internal(e.to_string()))?;
+    if let Err(err) = store.put(&bounty) {
+        if let Err(refund_err) =
+            token_store.transfer(&escrow_did, &creator_did, token_byte, body.reward as u128)
+        {
+            tracing::error!(
+                "escrow rollback failed after bounty persistence error: {}",
+                refund_err
+            );
+        }
+        return Err(ApiError::Internal(err.to_string()));
+    }
 
     let resp = bounty_data_to_response(&bounty);
     Ok(types::created(resp))
@@ -561,6 +590,36 @@ pub fn router() -> axum::Router<Arc<ApiState>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
+
+    fn test_api_state() -> Arc<ApiState> {
+        let state = crate::testutil::test_state();
+        let (feed_tx, _) = tokio::sync::broadcast::channel(16);
+        Arc::new(ApiState {
+            db: state.db.clone(),
+            active_did: state.active_did.clone(),
+            active_keyring: Arc::new(Mutex::new(state.active_keyring.clone())),
+            mesh_handle: Arc::new(tokio::sync::RwLock::new(None)),
+            config: state.config.clone(),
+            feed_tx,
+        })
+    }
+
+    fn seed_api_token_balance(state: &ApiState, token_byte: u8, balance: u128) {
+        let did = state.active_did.as_ref().unwrap();
+        let store = TokenStore::new(&state.db);
+        store
+            .set_balance(
+                &did.0,
+                token_byte,
+                &neunode_storage::token_store::TokenBalance {
+                    balance,
+                    staked: 0,
+                    last_decay_epoch: 0,
+                },
+            )
+            .unwrap();
+    }
 
     #[test]
     fn create_bounty_request_defaults() {
@@ -669,5 +728,56 @@ mod tests {
         assert_eq!(resp.state, "Open");
         assert_eq!(resp.reward, 1000);
         assert!(resp.claimant.is_none());
+    }
+
+    #[tokio::test]
+    async fn create_bounty_escrows_tokens_before_persisting() {
+        let state = test_api_state();
+        seed_api_token_balance(&state, 0x01, 5_000);
+        let did = state.active_did.as_ref().unwrap().0.clone();
+
+        let req = CreateBountyRequest {
+            title: "Escrowed API bounty".to_string(),
+            description: "Desc".to_string(),
+            reward: 1_000,
+            token: "compute".to_string(),
+            claim_deadline: 72,
+            work_deadline: 168,
+        };
+        create_bounty(State(state.clone()), Json(req)).await.unwrap();
+
+        let bounties =
+            neunode_storage::bounty_store::BountyStore::new(&state.db).list_all().unwrap();
+        assert_eq!(bounties.len(), 1);
+        let bounty_id = &bounties[0].id;
+
+        let token_store = TokenStore::new(&state.db);
+        let escrow_balance = token_store.get_balance(&format!("escrow:{bounty_id}"), 0x01).unwrap();
+        assert_eq!(escrow_balance.balance, 1_000);
+
+        let creator_balance = token_store.get_balance(&did, 0x01).unwrap();
+        assert_eq!(creator_balance.balance, 4_000);
+    }
+
+    #[tokio::test]
+    async fn create_bounty_insufficient_balance_does_not_persist() {
+        let state = test_api_state();
+        let req = CreateBountyRequest {
+            title: "No funds".to_string(),
+            description: "Desc".to_string(),
+            reward: 1_000,
+            token: "compute".to_string(),
+            claim_deadline: 72,
+            work_deadline: 168,
+        };
+
+        let result = create_bounty(State(state.clone()), Json(req)).await;
+
+        assert!(
+            matches!(result, Err(ApiError::BadRequest(message)) if message.contains("insufficient balance"))
+        );
+        let bounties =
+            neunode_storage::bounty_store::BountyStore::new(&state.db).list_all().unwrap();
+        assert!(bounties.is_empty());
     }
 }
