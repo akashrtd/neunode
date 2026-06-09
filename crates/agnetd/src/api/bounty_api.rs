@@ -251,6 +251,25 @@ pub async fn create_bounty(
     let now = current_timestamp();
     let creator = state.require_did()?;
     let bounty_id = generate_bounty_id();
+    let token_byte = token_type_to_u8(&token_type);
+    let creator_did = creator.0.clone();
+    let escrow_did = format!("escrow:{bounty_id}");
+
+    // Atomically validate + lock escrow tokens before creating bounty
+    use neunode_storage::token_store::TokenStore;
+    let token_store = TokenStore::new(&state.db);
+    if let Err(err) = token_store.transfer(&creator_did, &escrow_did, token_byte, body.reward as u128) {
+        use neunode_storage::error::StorageError;
+        return Err(match err {
+            StorageError::InsufficientBalance { required, available } => {
+                ApiError::BadRequest(format!(
+                    "insufficient {} balance: required {}, available {}",
+                    body.token, required, available
+                ))
+            }
+            other => ApiError::Internal(other.to_string()),
+        });
+    }
 
     let claim_deadline_ts = now.saturating_add(body.claim_deadline * 3600);
     let work_deadline_ts = now.saturating_add(body.work_deadline * 3600);
@@ -259,10 +278,10 @@ pub async fn create_bounty(
     let bounty = neunode_storage::bounty_store::BountyData {
         id: bounty_id.clone(),
         state: "Open".to_string(),
-        requester_did: creator.0.clone(),
+        requester_did: creator_did.clone(),
         provider_did: None,
         reward_amount: body.reward,
-        reward_token_type: token_type_to_u8(&token_type),
+        reward_token_type: token_byte,
         deadline: work_deadline_ts,
         created_at: now,
         escrow_deposited: body.reward,
