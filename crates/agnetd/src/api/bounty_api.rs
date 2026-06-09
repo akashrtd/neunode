@@ -255,11 +255,13 @@ pub async fn create_bounty(
     let creator_did = creator.0.clone();
     let escrow_did = format!("escrow:{bounty_id}");
 
-    // Atomically validate + lock escrow tokens before creating bounty
+    // Atomically validate + lock escrow tokens before creating bounty.
+    // Transfers tokens to escrow DID first, then persists the bounty.
+    // On persistence failure, rolls back the token transfer.
     use neunode_storage::token_store::TokenStore;
+    use neunode_storage::error::StorageError;
     let token_store = TokenStore::new(&state.db);
     if let Err(err) = token_store.transfer(&creator_did, &escrow_did, token_byte, body.reward as u128) {
-        use neunode_storage::error::StorageError;
         return Err(match err {
             StorageError::InsufficientBalance { required, available } => {
                 ApiError::BadRequest(format!(
@@ -295,7 +297,11 @@ pub async fn create_bounty(
     };
 
     let store = neunode_storage::bounty_store::BountyStore::new(&state.db);
-    store.put(&bounty).map_err(|e| ApiError::Internal(e.to_string()))?;
+    if let Err(err) = store.put(&bounty) {
+        // Rollback escrow on persistence failure
+        let _ = token_store.transfer(&escrow_did, &creator_did, token_byte, body.reward as u128);
+        return Err(ApiError::Internal(err.to_string()));
+    }
 
     let resp = bounty_data_to_response(&bounty);
     Ok(types::created(resp))
