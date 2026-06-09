@@ -139,6 +139,7 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
     error NotProvider(bytes32 id, address caller);
     error NotClaimer(bytes32 id, address caller);
     error InvalidDeadline();
+    error InsufficientBalance(uint256 required, uint256 available);
     error InvalidReward();
     error DeadlinePassed(uint256 deadline);
     error MaxRevisionsReached();
@@ -296,6 +297,10 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
         if (claimDeadline <= block.timestamp) revert InvalidDeadline();
         if (workDeadline <= claimDeadline) revert InvalidDeadline();
         if (bounties[id].created != 0) revert BountyAlreadyExists(id);
+
+        // Validate creator has sufficient token balance before transfer
+        uint256 creatorBalance = IERC20(rewardToken).balanceOf(msg.sender);
+        if (creatorBalance < reward) revert InsufficientBalance(reward, creatorBalance);
 
         // Transfer reward tokens to this contract
         IERC20(rewardToken).safeTransferFrom(msg.sender, address(this), reward);
