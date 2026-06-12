@@ -7,6 +7,91 @@ use neunode_core::config::AppConfig;
 const CONFIG_DIR_NAME: &str = ".agnetd";
 const CONFIG_FILE_NAME: &str = "config.toml";
 
+/// Type-safe config key enum — replaces stringly-typed key matching.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConfigKey {
+    AgentName,
+    AgentDidMethod,
+    AgentDataDir,
+    AgentLogLevel,
+    NetworkListenAddr,
+    NetworkMeshDegree,
+    NetworkEnableMdns,
+    NetworkEnableRelay,
+    NetworkBootstrapPeers,
+    StorageDbPath,
+    StorageCacheSize,
+    StorageCacheTtlSecs,
+    TokensDecayCheckIntervalSecs,
+    TokensUnbondingPeriodSecs,
+    ContractsEthRpcUrl,
+    ContractsIdentityContractAddress,
+}
+
+impl ConfigKey {
+    pub fn from_dot_path(key: &str) -> Option<Self> {
+        match key {
+            "agent.name" => Some(Self::AgentName),
+            "agent.did_method" => Some(Self::AgentDidMethod),
+            "agent.data_dir" => Some(Self::AgentDataDir),
+            "agent.log_level" => Some(Self::AgentLogLevel),
+            "network.listen_addr" => Some(Self::NetworkListenAddr),
+            "network.mesh_degree" => Some(Self::NetworkMeshDegree),
+            "network.enable_mdns" => Some(Self::NetworkEnableMdns),
+            "network.enable_relay" => Some(Self::NetworkEnableRelay),
+            "network.bootstrap_peers" => Some(Self::NetworkBootstrapPeers),
+            "storage.db_path" => Some(Self::StorageDbPath),
+            "storage.cache_size" => Some(Self::StorageCacheSize),
+            "storage.cache_ttl_secs" => Some(Self::StorageCacheTtlSecs),
+            "tokens.decay_check_interval_secs" => Some(Self::TokensDecayCheckIntervalSecs),
+            "tokens.unbonding_period_secs" => Some(Self::TokensUnbondingPeriodSecs),
+            "contracts.eth_rpc_url" => Some(Self::ContractsEthRpcUrl),
+            "contracts.identity_contract_address" => Some(Self::ContractsIdentityContractAddress),
+            _ => None,
+        }
+    }
+
+    pub fn to_dot_path(self) -> &'static str {
+        match self {
+            Self::AgentName => "agent.name",
+            Self::AgentDidMethod => "agent.did_method",
+            Self::AgentDataDir => "agent.data_dir",
+            Self::AgentLogLevel => "agent.log_level",
+            Self::NetworkListenAddr => "network.listen_addr",
+            Self::NetworkMeshDegree => "network.mesh_degree",
+            Self::NetworkEnableMdns => "network.enable_mdns",
+            Self::NetworkEnableRelay => "network.enable_relay",
+            Self::NetworkBootstrapPeers => "network.bootstrap_peers",
+            Self::StorageDbPath => "storage.db_path",
+            Self::StorageCacheSize => "storage.cache_size",
+            Self::StorageCacheTtlSecs => "storage.cache_ttl_secs",
+            Self::TokensDecayCheckIntervalSecs => "tokens.decay_check_interval_secs",
+            Self::TokensUnbondingPeriodSecs => "tokens.unbonding_period_secs",
+            Self::ContractsEthRpcUrl => "contracts.eth_rpc_url",
+            Self::ContractsIdentityContractAddress => "contracts.identity_contract_address",
+        }
+    }
+
+    pub const ALL: [Self; 16] = [
+        Self::AgentName,
+        Self::AgentDidMethod,
+        Self::AgentDataDir,
+        Self::AgentLogLevel,
+        Self::NetworkListenAddr,
+        Self::NetworkMeshDegree,
+        Self::NetworkEnableMdns,
+        Self::NetworkEnableRelay,
+        Self::NetworkBootstrapPeers,
+        Self::StorageDbPath,
+        Self::StorageCacheSize,
+        Self::StorageCacheTtlSecs,
+        Self::TokensDecayCheckIntervalSecs,
+        Self::TokensUnbondingPeriodSecs,
+        Self::ContractsEthRpcUrl,
+        Self::ContractsIdentityContractAddress,
+    ];
+}
+
 #[derive(Clone)]
 pub struct CliConfig {
     pub config_path: PathBuf,
@@ -65,127 +150,106 @@ impl CliConfig {
             .join(CONFIG_FILE_NAME)
     }
 
-    // TODO: Replace string key matching with a ConfigKey enum for type safety
     pub fn set(&mut self, key: &str, value: &str) -> Result<()> {
-        let parts: Vec<&str> = key.split('.').collect();
-        match parts.as_slice() {
-            ["agent", "name"] => self.app_config.agent.name = value.to_string(),
-            ["agent", "did_method"] => self.app_config.agent.did_method = value.to_string(),
-            ["agent", "data_dir"] => self.app_config.agent.data_dir = value.to_string(),
-            ["agent", "log_level"] => self.app_config.agent.log_level = value.to_string(),
-            ["network", "listen_addr"] => self.app_config.network.listen_addr = value.to_string(),
-            ["network", "mesh_degree"] => {
+        let ck = ConfigKey::from_dot_path(key)
+            .ok_or_else(|| anyhow::anyhow!("unknown config key: {key}"))?;
+        self.set_typed(ck, value)
+    }
+
+    pub fn set_typed(&mut self, key: ConfigKey, value: &str) -> Result<()> {
+        match key {
+            ConfigKey::AgentName => self.app_config.agent.name = value.to_string(),
+            ConfigKey::AgentDidMethod => self.app_config.agent.did_method = value.to_string(),
+            ConfigKey::AgentDataDir => self.app_config.agent.data_dir = value.to_string(),
+            ConfigKey::AgentLogLevel => self.app_config.agent.log_level = value.to_string(),
+            ConfigKey::NetworkListenAddr => {
+                self.app_config.network.listen_addr = value.to_string()
+            }
+            ConfigKey::NetworkMeshDegree => {
                 self.app_config.network.mesh_degree =
                     value.parse().with_context(|| format!("invalid integer: {value}"))?;
             }
-            ["network", "enable_mdns"] => {
+            ConfigKey::NetworkEnableMdns => {
                 self.app_config.network.enable_mdns =
                     value.parse().with_context(|| format!("invalid boolean: {value}"))?;
             }
-            ["network", "enable_relay"] => {
+            ConfigKey::NetworkEnableRelay => {
                 self.app_config.network.enable_relay =
                     value.parse().with_context(|| format!("invalid boolean: {value}"))?;
             }
-            ["network", "bootstrap_peers"] => {
+            ConfigKey::NetworkBootstrapPeers => {
                 self.app_config.network.bootstrap_peers = if value.is_empty() {
                     Vec::new()
                 } else {
                     value.split(',').map(|s| s.trim().to_string()).collect()
                 };
             }
-            ["storage", "db_path"] => self.app_config.storage.db_path = value.to_string(),
-            ["storage", "cache_size"] => {
+            ConfigKey::StorageDbPath => self.app_config.storage.db_path = value.to_string(),
+            ConfigKey::StorageCacheSize => {
                 self.app_config.storage.cache_size =
                     value.parse().with_context(|| format!("invalid integer: {value}"))?;
             }
-            ["storage", "cache_ttl_secs"] => {
+            ConfigKey::StorageCacheTtlSecs => {
                 self.app_config.storage.cache_ttl_secs =
                     value.parse().with_context(|| format!("invalid integer: {value}"))?;
             }
-            ["tokens", "decay_check_interval_secs"] => {
+            ConfigKey::TokensDecayCheckIntervalSecs => {
                 self.app_config.tokens.decay_check_interval_secs =
                     value.parse().with_context(|| format!("invalid integer: {value}"))?;
             }
-            ["tokens", "unbonding_period_secs"] => {
+            ConfigKey::TokensUnbondingPeriodSecs => {
                 self.app_config.tokens.unbonding_period_secs =
                     value.parse().with_context(|| format!("invalid integer: {value}"))?;
             }
-            ["contracts", "eth_rpc_url"] => {
+            ConfigKey::ContractsEthRpcUrl => {
                 self.app_config.contracts.eth_rpc_url = Some(value.to_string());
             }
-            ["contracts", "identity_contract_address"] => {
+            ConfigKey::ContractsIdentityContractAddress => {
                 self.app_config.contracts.identity_contract_address = Some(value.to_string());
             }
-            _ => anyhow::bail!("unknown config key: {key}"),
         }
         Ok(())
     }
 
-    // TODO: Replace string key matching with a ConfigKey enum for type safety
     pub fn get(&self, key: &str) -> Option<String> {
-        let parts: Vec<&str> = key.split('.').collect();
-        match parts.as_slice() {
-            ["agent", "name"] => Some(self.app_config.agent.name.clone()),
-            ["agent", "did_method"] => Some(self.app_config.agent.did_method.clone()),
-            ["agent", "data_dir"] => Some(self.app_config.agent.data_dir.clone()),
-            ["agent", "log_level"] => Some(self.app_config.agent.log_level.clone()),
-            ["network", "listen_addr"] => Some(self.app_config.network.listen_addr.clone()),
-            ["network", "mesh_degree"] => Some(self.app_config.network.mesh_degree.to_string()),
-            ["network", "enable_mdns"] => Some(self.app_config.network.enable_mdns.to_string()),
-            ["network", "enable_relay"] => Some(self.app_config.network.enable_relay.to_string()),
-            ["network", "bootstrap_peers"] => {
-                Some(self.app_config.network.bootstrap_peers.join(", "))
+        ConfigKey::from_dot_path(key).map(|ck| self.get_typed(ck))
+    }
+
+    pub fn get_typed(&self, key: ConfigKey) -> String {
+        match key {
+            ConfigKey::AgentName => self.app_config.agent.name.clone(),
+            ConfigKey::AgentDidMethod => self.app_config.agent.did_method.clone(),
+            ConfigKey::AgentDataDir => self.app_config.agent.data_dir.clone(),
+            ConfigKey::AgentLogLevel => self.app_config.agent.log_level.clone(),
+            ConfigKey::NetworkListenAddr => self.app_config.network.listen_addr.clone(),
+            ConfigKey::NetworkMeshDegree => self.app_config.network.mesh_degree.to_string(),
+            ConfigKey::NetworkEnableMdns => self.app_config.network.enable_mdns.to_string(),
+            ConfigKey::NetworkEnableRelay => self.app_config.network.enable_relay.to_string(),
+            ConfigKey::NetworkBootstrapPeers => {
+                self.app_config.network.bootstrap_peers.join(", ")
             }
-            ["storage", "db_path"] => Some(self.app_config.storage.db_path.clone()),
-            ["storage", "cache_size"] => Some(self.app_config.storage.cache_size.to_string()),
-            ["storage", "cache_ttl_secs"] => {
-                Some(self.app_config.storage.cache_ttl_secs.to_string())
+            ConfigKey::StorageDbPath => self.app_config.storage.db_path.clone(),
+            ConfigKey::StorageCacheSize => self.app_config.storage.cache_size.to_string(),
+            ConfigKey::StorageCacheTtlSecs => self.app_config.storage.cache_ttl_secs.to_string(),
+            ConfigKey::TokensDecayCheckIntervalSecs => {
+                self.app_config.tokens.decay_check_interval_secs.to_string()
             }
-            ["tokens", "decay_check_interval_secs"] => {
-                Some(self.app_config.tokens.decay_check_interval_secs.to_string())
+            ConfigKey::TokensUnbondingPeriodSecs => {
+                self.app_config.tokens.unbonding_period_secs.to_string()
             }
-            ["tokens", "unbonding_period_secs"] => {
-                Some(self.app_config.tokens.unbonding_period_secs.to_string())
+            ConfigKey::ContractsEthRpcUrl => {
+                self.app_config.contracts.eth_rpc_url.clone().unwrap_or_default()
             }
-            ["contracts", "eth_rpc_url"] => self.app_config.contracts.eth_rpc_url.clone(),
-            ["contracts", "identity_contract_address"] => {
-                self.app_config.contracts.identity_contract_address.clone()
+            ConfigKey::ContractsIdentityContractAddress => {
+                self.app_config.contracts.identity_contract_address.clone().unwrap_or_default()
             }
-            _ => None,
         }
     }
 
     pub fn list_all(&self) -> Vec<(String, String)> {
-        vec![
-            ("agent.name".into(), self.app_config.agent.name.clone()),
-            ("agent.did_method".into(), self.app_config.agent.did_method.clone()),
-            ("agent.data_dir".into(), self.app_config.agent.data_dir.clone()),
-            ("agent.log_level".into(), self.app_config.agent.log_level.clone()),
-            ("network.listen_addr".into(), self.app_config.network.listen_addr.clone()),
-            ("network.mesh_degree".into(), self.app_config.network.mesh_degree.to_string()),
-            ("network.enable_mdns".into(), self.app_config.network.enable_mdns.to_string()),
-            ("network.enable_relay".into(), self.app_config.network.enable_relay.to_string()),
-            ("network.bootstrap_peers".into(), self.app_config.network.bootstrap_peers.join(", ")),
-            ("storage.db_path".into(), self.app_config.storage.db_path.clone()),
-            ("storage.cache_size".into(), self.app_config.storage.cache_size.to_string()),
-            ("storage.cache_ttl_secs".into(), self.app_config.storage.cache_ttl_secs.to_string()),
-            (
-                "tokens.decay_check_interval_secs".into(),
-                self.app_config.tokens.decay_check_interval_secs.to_string(),
-            ),
-            (
-                "tokens.unbonding_period_secs".into(),
-                self.app_config.tokens.unbonding_period_secs.to_string(),
-            ),
-            (
-                "contracts.eth_rpc_url".into(),
-                self.app_config.contracts.eth_rpc_url.clone().unwrap_or_default(),
-            ),
-            (
-                "contracts.identity_contract_address".into(),
-                self.app_config.contracts.identity_contract_address.clone().unwrap_or_default(),
-            ),
-        ]
+        ConfigKey::ALL
+            .map(|ck| (ck.to_dot_path().to_string(), self.get_typed(ck)))
+            .to_vec()
     }
 
     fn default_app_config() -> AppConfig {
@@ -341,6 +405,30 @@ mod tests {
         assert_eq!(config.app_config.agent.did_method, "neunode");
         assert_eq!(config.app_config.agent.data_dir, "/tmp/test");
         assert_eq!(config.app_config.agent.log_level, "debug");
+        cleanup(&path);
+    }
+
+    #[test]
+    fn config_key_from_dot_path_roundtrip() {
+        for ck in ConfigKey::ALL {
+            let path = ck.to_dot_path();
+            assert_eq!(ConfigKey::from_dot_path(path), Some(ck));
+        }
+    }
+
+    #[test]
+    fn config_key_all_count() {
+        assert_eq!(ConfigKey::ALL.len(), 16);
+    }
+
+    #[test]
+    fn set_typed_equivalent_to_set() {
+        let path = temp_config_path();
+        cleanup(&path);
+        let mut config = CliConfig::load(Some(path.to_str().unwrap())).expect("load");
+        config.set_typed(ConfigKey::AgentName, "typed-test").unwrap();
+        assert_eq!(config.get_typed(ConfigKey::AgentName), "typed-test");
+        assert_eq!(config.get("agent.name"), Some("typed-test".to_string()));
         cleanup(&path);
     }
 }
