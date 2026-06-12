@@ -593,12 +593,12 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     fn test_api_state() -> Arc<ApiState> {
-        let state = crate::testutil::test_state();
+        let mut state = crate::testutil::test_state();
         let (feed_tx, _) = tokio::sync::broadcast::channel(16);
         Arc::new(ApiState {
             db: state.db.clone(),
             active_did: state.active_did.clone(),
-            active_keyring: Arc::new(Mutex::new(state.active_keyring.clone())),
+            active_keyring: Arc::new(Mutex::new(state.active_keyring.take())),
             mesh_handle: Arc::new(tokio::sync::RwLock::new(None)),
             config: state.config.clone(),
             feed_tx,
