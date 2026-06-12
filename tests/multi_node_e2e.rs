@@ -24,12 +24,16 @@ const TOPIC: &str = "neunode/bounty";
 // P2P helpers (copied from p2p_gossipsub.rs — same patterns, no import)
 // ---------------------------------------------------------------------------
 
+static NODE_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 async fn create_node() -> P2pNode {
     let keypair = Keypair::generate_ed25519();
     let listen_addr: Multiaddr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
+    let id = NODE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let data_dir = std::env::temp_dir().join(format!(
-        "neunode_e2e_test_{}_{}",
+        "neunode_e2e_test_{}_{}_{}",
         std::process::id(),
+        id,
         std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
     ));
     let mut node = P2pNode::new(keypair, listen_addr.clone(), &data_dir).unwrap();

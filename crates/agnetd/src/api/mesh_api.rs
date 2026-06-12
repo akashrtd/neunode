@@ -21,6 +21,7 @@ pub struct DisconnectRequest {
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub struct PeersQuery {
+    #[allow(dead_code)]
     pub verbose: Option<bool>,
 }
 

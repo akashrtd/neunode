@@ -1,8 +1,20 @@
-use neunode_core::types::{Did, Hash256, Timestamp, TokenAmount};
+use neunode_core::types::{Did, Hash256, Timestamp};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::error::{InferenceError, Result};
+
+/// Parameters for opening a dispute challenge.
+#[derive(Debug, Clone)]
+pub struct ChallengeParams {
+    pub settlement_hash: Hash256,
+    pub requester_did: Did,
+    pub provider_did: Did,
+    pub reason: String,
+    pub evidence_hash: Hash256,
+    pub settlement_time: Timestamp,
+    pub now: Timestamp,
+}
 
 /// Default dispute window in seconds (1 hour).
 pub const DEFAULT_DISPUTE_WINDOW_SECS: u64 = 3600;
@@ -61,33 +73,24 @@ impl DisputeEngine {
     }
 
     /// Open a dispute for a settlement. Returns the dispute record.
-    pub fn challenge(
-        &self,
-        settlement_hash: Hash256,
-        requester_did: Did,
-        provider_did: Did,
-        reason: String,
-        evidence_hash: Hash256,
-        settlement_time: Timestamp,
-        now: Timestamp,
-    ) -> Result<InferenceDispute> {
-        if !self.is_within_window(settlement_time, now) {
+    pub fn challenge(&self, params: ChallengeParams) -> Result<InferenceDispute> {
+        if !self.is_within_window(params.settlement_time, params.now) {
             return Err(InferenceError::SettlementFailed("dispute window has expired".to_string()));
         }
-        if reason.is_empty() {
+        if params.reason.is_empty() {
             return Err(InferenceError::InvalidRequest("dispute reason is required".to_string()));
         }
-        if evidence_hash.0.is_empty() {
+        if params.evidence_hash.0.is_empty() {
             return Err(InferenceError::InvalidRequest("evidence hash is required".to_string()));
         }
-        let resolution_deadline = now + self.config.window_secs;
+        let resolution_deadline = params.now + self.config.window_secs;
         Ok(InferenceDispute {
-            settlement_hash,
-            requester_did,
-            provider_did,
-            reason,
-            evidence_hash,
-            challenge_time: now,
+            settlement_hash: params.settlement_hash,
+            requester_did: params.requester_did,
+            provider_did: params.provider_did,
+            reason: params.reason,
+            evidence_hash: params.evidence_hash,
+            challenge_time: params.now,
             resolution_deadline,
             resolved: false,
         })
@@ -113,6 +116,26 @@ mod tests {
 
     fn test_hash(n: u8) -> Hash256 {
         Hash256(hex::encode([n; 32]))
+    }
+
+    fn test_challenge(
+        n_hash: u8,
+        n_req: u32,
+        n_prov: u32,
+        reason: &str,
+        n_evidence: u8,
+        settlement_time: Timestamp,
+        now: Timestamp,
+    ) -> ChallengeParams {
+        ChallengeParams {
+            settlement_hash: test_hash(n_hash),
+            requester_did: test_did(n_req),
+            provider_did: test_did(n_prov),
+            reason: reason.to_string(),
+            evidence_hash: test_hash(n_evidence),
+            settlement_time,
+            now,
+        }
     }
 
     #[test]
@@ -142,17 +165,9 @@ mod tests {
     #[test]
     fn challenge_succeeds_within_window() {
         let engine = DisputeEngine::new(DisputeConfig::default());
-        let dispute = engine
-            .challenge(
-                test_hash(1),
-                test_did(1),
-                test_did(2),
-                "provider returned gibberish".to_string(),
-                test_hash(2),
-                1000,
-                2000,
-            )
-            .unwrap();
+        let dispute =
+            engine.challenge(test_challenge(1, 1, 2, "provider returned gibberish", 2, 1000, 2000))
+                .unwrap();
         assert!(!dispute.resolved);
         assert_eq!(dispute.requester_did, test_did(1));
         assert_eq!(dispute.provider_did, test_did(2));
@@ -161,47 +176,22 @@ mod tests {
     #[test]
     fn challenge_fails_after_window() {
         let engine = DisputeEngine::new(DisputeConfig { window_secs: 60 });
-        let result = engine.challenge(
-            test_hash(1),
-            test_did(1),
-            test_did(2),
-            "bad output".to_string(),
-            test_hash(2),
-            0,
-            61,
-        );
+        let result = engine.challenge(test_challenge(1, 1, 2, "bad output", 2, 0, 61));
         assert!(result.is_err());
     }
 
     #[test]
     fn challenge_fails_empty_reason() {
         let engine = DisputeEngine::new(DisputeConfig::default());
-        let result = engine.challenge(
-            test_hash(1),
-            test_did(1),
-            test_did(2),
-            "".to_string(),
-            test_hash(2),
-            1000,
-            2000,
-        );
+        let result = engine.challenge(test_challenge(1, 1, 2, "", 2, 1000, 2000));
         assert!(result.is_err());
     }
 
     #[test]
     fn resolve_dispute() {
         let engine = DisputeEngine::new(DisputeConfig::default());
-        let mut dispute = engine
-            .challenge(
-                test_hash(1),
-                test_did(1),
-                test_did(2),
-                "garbage output".to_string(),
-                test_hash(2),
-                1000,
-                2000,
-            )
-            .unwrap();
+        let mut dispute =
+            engine.challenge(test_challenge(1, 1, 2, "garbage output", 2, 1000, 2000)).unwrap();
         DisputeEngine::resolve(&mut dispute, 3000).unwrap();
         assert!(dispute.resolved);
     }
@@ -209,17 +199,8 @@ mod tests {
     #[test]
     fn resolve_already_resolved_fails() {
         let engine = DisputeEngine::new(DisputeConfig::default());
-        let mut dispute = engine
-            .challenge(
-                test_hash(1),
-                test_did(1),
-                test_did(2),
-                "bad".to_string(),
-                test_hash(2),
-                0,
-                0,
-            )
-            .unwrap();
+        let mut dispute =
+            engine.challenge(test_challenge(1, 1, 2, "bad", 2, 0, 0)).unwrap();
         DisputeEngine::resolve(&mut dispute, 1).unwrap();
         let result = DisputeEngine::resolve(&mut dispute, 2);
         assert!(result.is_err());
@@ -243,17 +224,8 @@ mod tests {
     #[test]
     fn inference_dispute_serde_roundtrip() {
         let engine = DisputeEngine::new(DisputeConfig::default());
-        let dispute = engine
-            .challenge(
-                test_hash(1),
-                test_did(1),
-                test_did(2),
-                "test dispute".to_string(),
-                test_hash(3),
-                100,
-                200,
-            )
-            .unwrap();
+        let dispute =
+            engine.challenge(test_challenge(1, 1, 2, "test dispute", 3, 100, 200)).unwrap();
         let json = serde_json::to_string(&dispute).unwrap();
         let back: InferenceDispute = serde_json::from_str(&json).unwrap();
         assert_eq!(dispute, back);

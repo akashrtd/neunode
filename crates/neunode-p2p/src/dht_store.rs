@@ -21,7 +21,11 @@ impl RocksRecordStore {
     pub fn open(path: &Path) -> Result<Self> {
         let mut opts = Options::default();
         opts.create_if_missing(true);
-        let db = DB::open(&opts, path).map_err(|_| Error::MaxRecords)?;
+        opts.create_missing_column_families(true);
+        let db = DB::open(&opts, path).map_err(|e| {
+            tracing::warn!("RocksDB open failed at {}: {e}", path.display());
+            Error::MaxRecords
+        })?;
         Ok(Self { db })
     }
 
@@ -83,15 +87,13 @@ impl RocksRecordStore {
             self.db.iterator(rocksdb::IteratorMode::From(b"m:", rocksdb::Direction::Forward));
         let mut expired = Vec::new();
         for item in iter {
-            if let Ok((key, val)) = item {
-                if !key.starts_with(b"m:") {
-                    break;
-                }
-                let expires = u64_from_le(&val);
-                if expires > 0 && expires <= now_secs() {
-                    // Strip "m:" prefix to get the raw key
-                    expired.push(key.to_vec());
-                }
+            let Ok((key, val)) = item else { continue };
+            if !key.starts_with(b"m:") {
+                break;
+            }
+            let expires = u64_from_le(&val);
+            if expires > 0 && expires <= now_secs() {
+                expired.push(key.to_vec());
             }
         }
         for mk in &expired {
@@ -172,18 +174,17 @@ impl RecordStore for SharedRocksStore {
             store.db.iterator(rocksdb::IteratorMode::From(b"r:", rocksdb::Direction::Forward));
         let mut records = Vec::new();
         for item in iter {
-            if let Ok((key, value)) = item {
-                if !key.starts_with(b"r:") {
-                    break;
-                }
-                let raw_key = key[2..].to_vec();
-                records.push(Cow::Owned(Record {
-                    key: Key::from(raw_key),
-                    value: value.to_vec(),
-                    publisher: None,
-                    expires: None,
-                }));
+            let Ok((key, value)) = item else { continue };
+            if !key.starts_with(b"r:") {
+                break;
             }
+            let raw_key = key[2..].to_vec();
+            records.push(Cow::Owned(Record {
+                key: Key::from(raw_key),
+                value: value.to_vec(),
+                publisher: None,
+                expires: None,
+            }));
         }
         drop(store);
         records.into_iter()
@@ -204,14 +205,13 @@ impl RecordStore for SharedRocksStore {
             store.db.iterator(rocksdb::IteratorMode::From(&prefix, rocksdb::Direction::Forward));
         let mut result = Vec::new();
         for item in iter {
-            if let Ok((k, _val)) = item {
-                if !k.starts_with(&prefix) {
-                    break;
-                }
-                if let Some(peer_id) = RocksRecordStore::extract_peer_from_provider_key(&k) {
-                    let record = ProviderRecord::new(key.clone(), peer_id, Vec::new());
-                    result.push(record);
-                }
+            let Ok((k, _val)) = item else { continue };
+            if !k.starts_with(&prefix) {
+                break;
+            }
+            if let Some(peer_id) = RocksRecordStore::extract_peer_from_provider_key(&k) {
+                let record = ProviderRecord::new(key.clone(), peer_id, Vec::new());
+                result.push(record);
             }
         }
         result

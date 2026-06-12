@@ -540,21 +540,6 @@ pub async fn cancel_bounty(
 }
 
 // ---------------------------------------------------------------------------
-// Router
-// ---------------------------------------------------------------------------
-
-pub fn router() -> axum::Router<Arc<ApiState>> {
-    axum::Router::new()
-        .route("/api/v1/bounties", axum::routing::get(list_bounties).post(create_bounty))
-        .route("/api/v1/bounties/{id}/claim", axum::routing::post(claim_bounty))
-        .route("/api/v1/bounties/{id}/submit", axum::routing::post(submit_bounty))
-        .route("/api/v1/bounties/{id}/review", axum::routing::post(review_bounty))
-        .route("/api/v1/bounties/{id}/pay", axum::routing::post(pay_bounty))
-        .route("/api/v1/bounties/{id}/cancel", axum::routing::post(cancel_bounty))
-        .route("/api/v1/bounties/{id}", axum::routing::get(show_bounty))
-}
-
-// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

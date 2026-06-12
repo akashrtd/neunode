@@ -16,6 +16,7 @@ pub struct ApiState {
     pub active_keyring: Arc<Mutex<Option<Keyring>>>,
     pub mesh_handle: Arc<tokio::sync::RwLock<Option<MeshHandle>>>,
     pub config: CliConfig,
+    #[allow(dead_code)]
     pub feed_tx: tokio::sync::broadcast::Sender<FeedEventUpdate>,
 }
 
