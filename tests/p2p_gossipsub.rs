@@ -22,12 +22,16 @@ const DRIVE_POLL_TIMEOUT: Duration = Duration::from_millis(50);
 /// address is available via `listeners()`.  The `NewListenAddr` swarm event
 /// is consumed internally by `next_event()` (it doesn't surface as a
 /// `NodeEvent`), so we must poll at least once after `start()`.
+static NODE_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 async fn create_node() -> P2pNode {
     let keypair = Keypair::generate_ed25519();
     let listen_addr: Multiaddr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
+    let id = NODE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let data_dir = std::env::temp_dir().join(format!(
-        "neunode_p2p_test_{}_{}",
+        "neunode_p2p_test_{}_{}_{}",
         std::process::id(),
+        id,
         std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
     ));
     let mut node = P2pNode::new(keypair, listen_addr.clone(), &data_dir).unwrap();

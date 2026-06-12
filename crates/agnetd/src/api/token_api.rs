@@ -11,7 +11,7 @@ use neunode_core::constants::token::{
 };
 use neunode_core::types::{ActivityLevel, TokenType};
 use neunode_storage::token_store::{
-    TokenBalance, TokenStore, TOKEN_BANDWIDTH, TOKEN_COMPUTE, TOKEN_STORAGE, TOKEN_TRAINING,
+    TokenStore, TOKEN_BANDWIDTH, TOKEN_COMPUTE, TOKEN_STORAGE, TOKEN_TRAINING,
 };
 use neunode_token::decay::DecayCalculator;
 

@@ -20,7 +20,15 @@ impl PeerAuth {
     pub fn new() -> Self {
         Self { verified: HashMap::new(), authenticated: HashSet::new() }
     }
+}
 
+impl Default for PeerAuth {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PeerAuth {
     /// Verify a peer by checking that their claimed DID matches the expected
     /// identity derived from their PeerId.
     ///

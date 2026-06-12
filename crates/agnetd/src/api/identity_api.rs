@@ -76,7 +76,7 @@ pub async fn show_identity(
             let resp = IdentityResponse {
                 did: doc.id.clone(),
                 method: "persisted".to_string(),
-                name: did.0.split(':').last().unwrap_or(&did.0).to_string(),
+                name: did.0.split(':').next_back().unwrap_or(&did.0).to_string(),
                 ethereum: doc
                     .verification_method
                     .first()
@@ -131,13 +131,13 @@ pub async fn create_identity(
 
     let card = neunode_identity::agent_card::AgentCard::new(
         &body.name,
-        &*keyring,
+        &keyring,
         capabilities,
         std::collections::HashMap::new(),
     )
     .map_err(|e| ApiError::Internal(format!("failed to create agent card: {e}")))?;
 
-    let doc = neunode_identity::document::DidDocument::from_keyring(&*keyring)
+    let doc = neunode_identity::document::DidDocument::from_keyring(&keyring)
         .map_err(|e| ApiError::Internal(format!("failed to create DID document: {e}")))?;
 
     let store = neunode_storage::identity_store::IdentityStore::new(&state.db);
@@ -248,21 +248,10 @@ pub async fn register_onchain(
     let resp = OnChainRegistrationResponse {
         tx_hash: result.tx_hash.clone(),
         block_number: result.block_number,
-        did_hash: format!("0x{}", hex::encode(&result.did_hash)),
+        did_hash: format!("0x{}", hex::encode(result.did_hash)),
     };
 
     Ok(types::ok(resp))
-}
-
-// ---------------------------------------------------------------------------
-// Router
-// ---------------------------------------------------------------------------
-
-pub fn router() -> axum::Router<Arc<ApiState>> {
-    axum::Router::new()
-        .route("/api/v1/identity/list", axum::routing::get(list_identities))
-        .route("/api/v1/identity/register-onchain", axum::routing::post(register_onchain))
-        .route("/api/v1/identity", axum::routing::get(show_identity).post(create_identity))
 }
 
 // ---------------------------------------------------------------------------

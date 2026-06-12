@@ -275,8 +275,19 @@ pub async fn create_bounty(
         bond: None,
     };
 
+    let token_byte = token_type_to_u8(&token_type);
+    let escrow_did = format!("escrow:{bounty_id}");
     let store = neunode_storage::bounty_store::BountyStore::new(&state.db);
-    store.put(&bounty).map_err(|e| ApiError::Internal(e.to_string()))?;
+    store
+        .create_with_escrow(&bounty, &creator.0, &escrow_did, token_byte, body.reward as u128)
+        .map_err(|e| match e {
+            neunode_storage::error::StorageError::InsufficientBalance { required, available } => {
+                ApiError::BadRequest(format!(
+                    "insufficient balance: required {required}, available {available}"
+                ))
+            }
+            other => ApiError::Internal(other.to_string()),
+        })?;
 
     let resp = bounty_data_to_response(&bounty);
     Ok(types::created(resp))
@@ -537,21 +548,6 @@ pub async fn cancel_bounty(
 
     let resp = BountyActionResponse { bounty_id: id, state: "Cancelled".to_string() };
     Ok(types::ok(resp))
-}
-
-// ---------------------------------------------------------------------------
-// Router
-// ---------------------------------------------------------------------------
-
-pub fn router() -> axum::Router<Arc<ApiState>> {
-    axum::Router::new()
-        .route("/api/v1/bounties", axum::routing::get(list_bounties).post(create_bounty))
-        .route("/api/v1/bounties/{id}/claim", axum::routing::post(claim_bounty))
-        .route("/api/v1/bounties/{id}/submit", axum::routing::post(submit_bounty))
-        .route("/api/v1/bounties/{id}/review", axum::routing::post(review_bounty))
-        .route("/api/v1/bounties/{id}/pay", axum::routing::post(pay_bounty))
-        .route("/api/v1/bounties/{id}/cancel", axum::routing::post(cancel_bounty))
-        .route("/api/v1/bounties/{id}", axum::routing::get(show_bounty))
 }
 
 // ---------------------------------------------------------------------------
