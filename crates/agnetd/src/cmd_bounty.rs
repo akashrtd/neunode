@@ -203,19 +203,10 @@ fn create_bounty(
     let store_data = lib_to_storage(sm.data(), reward);
 
     let store = state.bounty_store();
-    store.put(&store_data)?;
-
-    let token_store = state.token_store();
     let token_byte = token_type_to_u8(&token_type);
     let creator_did = sm.data().creator.0.clone();
-    if let Err(e) = token_store.transfer(
-        &creator_did,
-        &format!("escrow:{}", bounty_id),
-        token_byte,
-        reward as u128,
-    ) {
-        tracing::warn!("escrow transfer failed (creator may have insufficient balance): {}", e);
-    }
+    let escrow_did = format!("escrow:{bounty_id}");
+    store.create_with_escrow(&store_data, &creator_did, &escrow_did, token_byte, reward as u128)?;
 
     let out = serde_json::json!({
         "id": bounty_id,
@@ -553,14 +544,14 @@ mod tests {
 
     #[test]
     fn create_bounty_valid() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("Test", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
     }
 
     #[test]
     fn create_bounty_persists() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("Persist Test", "Desc", 1000, "compute", None, None, &writer, &state)
             .unwrap();
@@ -574,28 +565,28 @@ mod tests {
 
     #[test]
     fn create_bounty_empty_title_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(create_bounty("", "Desc", 1000, "compute", None, None, &writer, &state).is_err());
     }
 
     #[test]
     fn create_bounty_empty_desc_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(create_bounty("Title", "", 1000, "compute", None, None, &writer, &state).is_err());
     }
 
     #[test]
     fn create_bounty_zero_reward_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(create_bounty("Title", "Desc", 0, "compute", None, None, &writer, &state).is_err());
     }
 
     #[test]
     fn create_bounty_invalid_token_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(
             create_bounty("Title", "Desc", 100, "invalid", None, None, &writer, &state).is_err()
@@ -604,7 +595,7 @@ mod tests {
 
     #[test]
     fn create_bounty_with_deadlines() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("Title", "Desc", 500, "compute", Some(48), Some(72), &writer, &state)
             .unwrap();
@@ -612,7 +603,7 @@ mod tests {
 
     #[test]
     fn claim_bounty_valid() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("Claimable", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
 
@@ -630,28 +621,28 @@ mod tests {
 
     #[test]
     fn claim_bounty_not_found_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(claim_bounty("nonexistent", 200, &writer, &state).is_err());
     }
 
     #[test]
     fn claim_bounty_zero_stake_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(claim_bounty("bnty_001", 0, &writer, &state).is_err());
     }
 
     #[test]
     fn claim_bounty_empty_id_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(claim_bounty("", 200, &writer, &state).is_err());
     }
 
     #[test]
     fn submit_bounty_valid() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("Submit", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
         let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
@@ -665,21 +656,21 @@ mod tests {
 
     #[test]
     fn submit_bounty_empty_cid_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(submit_bounty("bnty_001", "", "{}", &writer, &state).is_err());
     }
 
     #[test]
     fn submit_bounty_empty_id_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(submit_bounty("", "ipfs://QmX7b", "{}", &writer, &state).is_err());
     }
 
     #[test]
     fn review_bounty_valid_score() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("Reviewable", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
         let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
@@ -696,21 +687,21 @@ mod tests {
 
     #[test]
     fn review_bounty_score_over_100_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(review_bounty("bnty_001", 101, "Too high", &writer, &state).is_err());
     }
 
     #[test]
     fn list_bounties_empty() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = human_writer();
         list_bounties(None, None, 10, &writer, &state).unwrap();
     }
 
     #[test]
     fn list_bounties_after_create() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("List1", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
         create_bounty("List2", "Desc", 2000, "train", None, None, &writer, &state).unwrap();
@@ -723,7 +714,7 @@ mod tests {
 
     #[test]
     fn show_bounty_valid() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("Showable", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
         let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
@@ -734,21 +725,21 @@ mod tests {
 
     #[test]
     fn show_bounty_not_found() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(show_bounty("nonexistent", &writer, &state).is_err());
     }
 
     #[test]
     fn show_bounty_empty_id_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(show_bounty("", &writer, &state).is_err());
     }
 
     #[test]
     fn cancel_bounty_valid() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("Cancellable", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
         let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
@@ -762,14 +753,14 @@ mod tests {
 
     #[test]
     fn cancel_bounty_empty_id_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(cancel_bounty("", "reason", &writer, &state).is_err());
     }
 
     #[test]
     fn submit_not_claimed_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("NoClaim", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
         let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
@@ -783,7 +774,7 @@ mod tests {
 
     #[test]
     fn review_not_submitted_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("NoSubmit", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
         let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
@@ -797,7 +788,7 @@ mod tests {
 
     #[test]
     fn cancel_wrong_state_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("NoCancel", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
         let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
@@ -817,7 +808,7 @@ mod tests {
 
     #[test]
     fn cancel_from_claimed_ok() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("CancelClaimed", "Desc", 1000, "compute", None, None, &writer, &state)
             .unwrap();
@@ -851,6 +842,13 @@ mod tests {
             .unwrap();
     }
 
+    fn seeded_state() -> AppState {
+        let state = test_state();
+        seed_token_balance(&state, 0x01, 100_000);
+        seed_token_balance(&state, 0x02, 100_000);
+        state
+    }
+
     fn full_bounty_lifecycle_to_accepted(state: &AppState) -> String {
         let writer = test_writer();
         create_bounty("Payable", "Desc", 1000, "compute", None, None, &writer, state).unwrap();
@@ -870,8 +868,7 @@ mod tests {
 
     #[test]
     fn pay_bounty_full_flow() {
-        let state = test_state();
-        seed_token_balance(&state, 0x01, 10_000);
+        let state = seeded_state();
 
         let bounty_id = full_bounty_lifecycle_to_accepted(&state);
 
@@ -884,8 +881,7 @@ mod tests {
 
     #[test]
     fn pay_bounty_transfers_tokens_to_claimant() {
-        let state = test_state();
-        seed_token_balance(&state, 0x01, 10_000);
+        let state = seeded_state();
 
         let bounty_id = full_bounty_lifecycle_to_accepted(&state);
 
@@ -900,28 +896,27 @@ mod tests {
         assert_eq!(escrow_bal.balance, 200, "escrow should have stake remaining");
 
         let claimant_bal = state.token_store().get_balance(&claimant_did, 0x01).unwrap();
-        // Same DID for creator+claimant in tests: 10000 - 1000(escrow) - 200(stake) + 1000(pay) = 9800
-        assert_eq!(claimant_bal.balance, 9800, "claimant should have received reward from escrow");
+        // Same DID for creator+claimant in tests: 100000 - 1000(escrow) - 200(stake) + 1000(pay) = 99800
+        assert_eq!(claimant_bal.balance, 99800, "claimant should have received reward from escrow");
     }
 
     #[test]
     fn pay_bounty_empty_id_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(pay_bounty("", &writer, &state).is_err());
     }
 
     #[test]
     fn pay_bounty_not_found_fails() {
-        let state = test_state();
+        let state = seeded_state();
         let writer = test_writer();
         assert!(pay_bounty("nonexistent", &writer, &state).is_err());
     }
 
     #[test]
     fn pay_bounty_not_accepted_fails() {
-        let state = test_state();
-        seed_token_balance(&state, 0x01, 10_000);
+        let state = seeded_state();
         let writer = test_writer();
         create_bounty("NotAccepted", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
         let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
@@ -935,7 +930,7 @@ mod tests {
 
     #[test]
     fn create_bounty_escrows_tokens() {
-        let state = test_state();
+        let state = seeded_state();
         seed_token_balance(&state, 0x01, 5000);
         let writer = test_writer();
         create_bounty("EscrowTest", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();
@@ -952,7 +947,7 @@ mod tests {
 
     #[test]
     fn cancel_bounty_refunds_escrow() {
-        let state = test_state();
+        let state = seeded_state();
         seed_token_balance(&state, 0x01, 5000);
         let writer = test_writer();
         create_bounty("RefundTest", "Desc", 1000, "compute", None, None, &writer, &state).unwrap();

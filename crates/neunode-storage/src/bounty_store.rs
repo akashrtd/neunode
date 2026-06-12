@@ -1,6 +1,7 @@
 use crate::cf;
 use crate::db::NeunodeDb;
 use crate::error::{Result, StorageError};
+use crate::token_store::TokenStore;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -47,6 +48,50 @@ impl<'a> BountyStore<'a> {
         self.db.put_raw(cf::CF_BOUNTIES, &key_bytes, &value_bytes)
     }
 
+    /// Atomically create a bounty with escrow: validates balance, transfers tokens
+    /// to escrow, and persists the bounty record in a single RocksDB WriteBatch.
+    /// All writes target the ledger partition, so the batch is fully atomic.
+    pub fn create_with_escrow(
+        &self,
+        bounty: &BountyData,
+        creator_did: &str,
+        escrow_did: &str,
+        token_type: u8,
+        amount: u128,
+    ) -> Result<()> {
+        let token_store = TokenStore::new(self.db);
+
+        let mut from_balance = token_store.get_balance(creator_did, token_type)?;
+        if from_balance.balance < amount {
+            return Err(StorageError::InsufficientBalance {
+                required: amount,
+                available: from_balance.balance,
+            });
+        }
+        let mut to_balance = token_store.get_balance(escrow_did, token_type)?;
+        from_balance.balance -= amount;
+        to_balance.balance += amount;
+
+        let from_key = cf::token_key(&cf::did_hash_16(creator_did), token_type);
+        let to_key = cf::token_key(&cf::did_hash_16(escrow_did), token_type);
+        let from_bytes = bincode::serialize(&from_balance)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let to_bytes = bincode::serialize(&to_balance)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
+
+        let bounty_key = bincode::serialize(&bounty.id)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let bounty_bytes =
+            bincode::serialize(bounty).map_err(|e| StorageError::Serialization(e.to_string()))?;
+
+        // Single atomic WriteBatch — all keys are in the ledger partition.
+        self.db.batch_put_raw(&[
+            (cf::CF_TOKENS, &from_key, &from_bytes),
+            (cf::CF_TOKENS, &to_key, &to_bytes),
+            (cf::CF_BOUNTIES, &bounty_key, &bounty_bytes),
+        ])
+    }
+
     pub fn get(&self, bounty_id: &str) -> Result<Option<BountyData>> {
         let key_bytes = bincode::serialize(bounty_id)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
@@ -88,6 +133,7 @@ impl<'a> BountyStore<'a> {
 mod tests {
     use super::*;
     use crate::db::NeunodeDb;
+    use crate::token_store::{TokenBalance, TokenStore};
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static TEST_ID: AtomicU64 = AtomicU64::new(0);
@@ -232,5 +278,89 @@ mod tests {
             store.update_state(id, state).unwrap();
             assert_eq!(store.get(id).unwrap().unwrap().state, state);
         }
+    }
+
+    #[test]
+    fn test_create_with_escrow_atomic() {
+        let db = temp_db();
+        let token_store = TokenStore::new(&db);
+        let bounty_store = BountyStore::new(&db);
+
+        let creator = "did:neunode:creator";
+        token_store
+            .set_balance(
+                creator,
+                crate::token_store::TOKEN_COMPUTE,
+                &TokenBalance { balance: 5000, staked: 0, last_decay_epoch: 0 },
+            )
+            .unwrap();
+
+        let bounty = make_bounty("bnty_escrow", "Open");
+        let escrow_did = format!("escrow:{}", bounty.id);
+
+        bounty_store
+            .create_with_escrow(
+                &bounty,
+                creator,
+                &escrow_did,
+                crate::token_store::TOKEN_COMPUTE,
+                1000,
+            )
+            .unwrap();
+
+        // Bounty persisted
+        assert!(bounty_store.get("bnty_escrow").unwrap().is_some());
+
+        // Escrow received tokens
+        let escrow_bal =
+            token_store.get_balance(&escrow_did, crate::token_store::TOKEN_COMPUTE).unwrap();
+        assert_eq!(escrow_bal.balance, 1000);
+
+        // Creator debited
+        let creator_bal =
+            token_store.get_balance(creator, crate::token_store::TOKEN_COMPUTE).unwrap();
+        assert_eq!(creator_bal.balance, 4000);
+    }
+
+    #[test]
+    fn test_create_with_escrow_insufficient_balance() {
+        let db = temp_db();
+        let token_store = TokenStore::new(&db);
+        let bounty_store = BountyStore::new(&db);
+
+        let creator = "did:neunode:poor";
+        token_store
+            .set_balance(
+                creator,
+                crate::token_store::TOKEN_COMPUTE,
+                &TokenBalance { balance: 100, staked: 0, last_decay_epoch: 0 },
+            )
+            .unwrap();
+
+        let bounty = make_bounty("bnty_fail", "Open");
+        let escrow_did = format!("escrow:{}", bounty.id);
+
+        let result = bounty_store.create_with_escrow(
+            &bounty,
+            creator,
+            &escrow_did,
+            crate::token_store::TOKEN_COMPUTE,
+            1000,
+        );
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            StorageError::InsufficientBalance { required, available } => {
+                assert_eq!(required, 1000);
+                assert_eq!(available, 100);
+            }
+            other => panic!("expected InsufficientBalance, got {other}"),
+        }
+
+        // Nothing persisted
+        assert!(bounty_store.get("bnty_fail").unwrap().is_none());
+        let escrow_bal =
+            token_store.get_balance(&escrow_did, crate::token_store::TOKEN_COMPUTE).unwrap();
+        assert_eq!(escrow_bal.balance, 0);
     }
 }

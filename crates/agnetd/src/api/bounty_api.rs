@@ -275,8 +275,19 @@ pub async fn create_bounty(
         bond: None,
     };
 
+    let token_byte = token_type_to_u8(&token_type);
+    let escrow_did = format!("escrow:{bounty_id}");
     let store = neunode_storage::bounty_store::BountyStore::new(&state.db);
-    store.put(&bounty).map_err(|e| ApiError::Internal(e.to_string()))?;
+    store
+        .create_with_escrow(&bounty, &creator.0, &escrow_did, token_byte, body.reward as u128)
+        .map_err(|e| match e {
+            neunode_storage::error::StorageError::InsufficientBalance { required, available } => {
+                ApiError::BadRequest(format!(
+                    "insufficient balance: required {required}, available {available}"
+                ))
+            }
+            other => ApiError::Internal(other.to_string()),
+        })?;
 
     let resp = bounty_data_to_response(&bounty);
     Ok(types::created(resp))
