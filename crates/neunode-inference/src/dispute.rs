@@ -165,9 +165,9 @@ mod tests {
     #[test]
     fn challenge_succeeds_within_window() {
         let engine = DisputeEngine::new(DisputeConfig::default());
-        let dispute =
-            engine.challenge(test_challenge(1, 1, 2, "provider returned gibberish", 2, 1000, 2000))
-                .unwrap();
+        let dispute = engine
+            .challenge(test_challenge(1, 1, 2, "provider returned gibberish", 2, 1000, 2000))
+            .unwrap();
         assert!(!dispute.resolved);
         assert_eq!(dispute.requester_did, test_did(1));
         assert_eq!(dispute.provider_did, test_did(2));
@@ -199,8 +199,7 @@ mod tests {
     #[test]
     fn resolve_already_resolved_fails() {
         let engine = DisputeEngine::new(DisputeConfig::default());
-        let mut dispute =
-            engine.challenge(test_challenge(1, 1, 2, "bad", 2, 0, 0)).unwrap();
+        let mut dispute = engine.challenge(test_challenge(1, 1, 2, "bad", 2, 0, 0)).unwrap();
         DisputeEngine::resolve(&mut dispute, 1).unwrap();
         let result = DisputeEngine::resolve(&mut dispute, 2);
         assert!(result.is_err());

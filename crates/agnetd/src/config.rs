@@ -162,9 +162,7 @@ impl CliConfig {
             ConfigKey::AgentDidMethod => self.app_config.agent.did_method = value.to_string(),
             ConfigKey::AgentDataDir => self.app_config.agent.data_dir = value.to_string(),
             ConfigKey::AgentLogLevel => self.app_config.agent.log_level = value.to_string(),
-            ConfigKey::NetworkListenAddr => {
-                self.app_config.network.listen_addr = value.to_string()
-            }
+            ConfigKey::NetworkListenAddr => self.app_config.network.listen_addr = value.to_string(),
             ConfigKey::NetworkMeshDegree => {
                 self.app_config.network.mesh_degree =
                     value.parse().with_context(|| format!("invalid integer: {value}"))?;
@@ -225,9 +223,7 @@ impl CliConfig {
             ConfigKey::NetworkMeshDegree => self.app_config.network.mesh_degree.to_string(),
             ConfigKey::NetworkEnableMdns => self.app_config.network.enable_mdns.to_string(),
             ConfigKey::NetworkEnableRelay => self.app_config.network.enable_relay.to_string(),
-            ConfigKey::NetworkBootstrapPeers => {
-                self.app_config.network.bootstrap_peers.join(", ")
-            }
+            ConfigKey::NetworkBootstrapPeers => self.app_config.network.bootstrap_peers.join(", "),
             ConfigKey::StorageDbPath => self.app_config.storage.db_path.clone(),
             ConfigKey::StorageCacheSize => self.app_config.storage.cache_size.to_string(),
             ConfigKey::StorageCacheTtlSecs => self.app_config.storage.cache_ttl_secs.to_string(),
@@ -247,9 +243,7 @@ impl CliConfig {
     }
 
     pub fn list_all(&self) -> Vec<(String, String)> {
-        ConfigKey::ALL
-            .map(|ck| (ck.to_dot_path().to_string(), self.get_typed(ck)))
-            .to_vec()
+        ConfigKey::ALL.map(|ck| (ck.to_dot_path().to_string(), self.get_typed(ck))).to_vec()
     }
 
     fn default_app_config() -> AppConfig {
