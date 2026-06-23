@@ -29,6 +29,13 @@ pub enum VerificationError {
 
     #[error("invalid config: {0}")]
     ConfigInvalid(String),
+
+    /// A verification layer is not available in this build/configuration.
+    /// Distinct from `ConfigInvalid` (bad inputs) and the layer-specific failure
+    /// variants (the check ran and failed): this means the check could not run at
+    /// all. Lets callers degrade gracefully (e.g. fall back from ZK to RepOps).
+    #[error("verification layer '{layer}' unsupported in this build: {reason}")]
+    Unsupported { layer: String, reason: String },
 }
 
 pub type Result<T> = std::result::Result<T, VerificationError>;
@@ -108,6 +115,18 @@ mod tests {
     fn config_invalid_display() {
         let err = VerificationError::ConfigInvalid("bad rate".into());
         assert!(err.to_string().contains("bad rate"));
+    }
+
+    #[test]
+    fn unsupported_display() {
+        let err = VerificationError::Unsupported {
+            layer: "zk".to_string(),
+            reason: "not compiled in".to_string(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("zk"));
+        assert!(msg.contains("not compiled in"));
+        assert!(msg.contains("unsupported"));
     }
 
     #[test]
