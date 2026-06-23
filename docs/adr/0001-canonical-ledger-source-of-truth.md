@@ -73,7 +73,13 @@ Concrete implications:
 
 - **`TokenAmount` width — RESOLVED (commit `783c0c8`).** Widened `TokenAmount`
   from `u64` to `u128`, aligning the domain type with the `uint256` range and
-  removing the silent cap. Storage and API DTOs remain `u64` (practical wire
-  format — amounts fit) and cast at the boundary.
+  removing the silent cap. **Boundary policy (code-review H1/H2):** the domain
+  type is `u128` for arithmetic headroom and `uint256` alignment; the
+  operational boundary (CLI args, storage schema, API DTOs) remains `u64` and
+  casts with `as u64` at the bridge. This is safe by policy — the CLI only
+  accepts `u64` amounts, so no operational path can construct a
+  `TokenAmount(>u64::MAX)` today, and the `as u64` casts cannot silently wrap.
+  If a future path allows constructing an out-of-`u64`-range amount, the
+  boundary must be guarded (saturate/reject) or widened — tracked as a follow-up.
 - **Consensus strategy** (build Reth+Malachite vs deploy on an existing L2) is the
   gating decision for *when* the contract path becomes live. Tracked separately.

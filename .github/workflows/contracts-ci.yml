@@ -30,6 +30,11 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          # Pin to a specific Foundry release so gas snapshots — especially
+          # fuzz-test μ/median — are reproducible. Unpinned "stable" drifted
+          # vs local builds and flaked `forge snapshot --check`.
+          version: "v1.5.1"
 
       - name: Show Forge version
         run: forge --version
