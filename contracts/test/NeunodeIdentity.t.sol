@@ -8,15 +8,23 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 /// @title NeunodeIdentityTest — Tests for DID Registry
 contract NeunodeIdentityTest is Test {
     NeunodeIdentity public identity;
+    MockStakeSource public stakeSource;
     address public alice;
     address public bob;
     bytes32 public alicePubKeyHash;
+
+    uint256 public constant MIN_STAKE = 1000e18;
 
     function setUp() public {
         identity = new NeunodeIdentity();
         alice = makeAddr("alice");
         bob = makeAddr("bob");
         alicePubKeyHash = keccak256("alice_ed25519_pubkey");
+
+        // Sybil-resistance gate: register a stake source + minimum for the suite.
+        stakeSource = new MockStakeSource();
+        identity.setStakeSource(address(stakeSource));
+        identity.setMinRegistrationStake(MIN_STAKE);
     }
 
     // ─── Create DID ───────────────────────────────────────────────────────
@@ -258,5 +266,112 @@ contract NeunodeIdentityTest is Test {
         bytes memory sig = abi.encodePacked(r, s, v);
 
         assertFalse(identity.verifySignature(didHash, messageHash, sig));
+    }
+
+    // ─── Network Registration (Sybil Resistance) ─────────────────────────
+    // DID creation stays free (key generation); participation in reputation /
+    // validator eligibility requires a slashable stake ≥ minRegistrationStake.
+
+    function testRegisterForNetworkRequiresStake() public {
+        vm.prank(alice);
+        bytes32 didHash = identity.createDid(alicePubKeyHash);
+
+        // alice holds zero stake → must be rejected
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                NeunodeIdentity.InsufficientRegistrationStake.selector, alice, uint256(0), MIN_STAKE
+            )
+        );
+        identity.registerForNetwork(didHash);
+    }
+
+    function testRegisterForNetworkSucceedsWithStake() public {
+        vm.prank(alice);
+        bytes32 didHash = identity.createDid(alicePubKeyHash);
+        stakeSource.setStaked(alice, MIN_STAKE);
+
+        vm.prank(alice);
+        vm.expectEmit(true, true, false, true);
+        emit NeunodeIdentity.NetworkRegistered(didHash, alice, MIN_STAKE);
+        identity.registerForNetwork(didHash);
+
+        assertTrue(identity.isRegistered(didHash));
+    }
+
+    function testRegisterForNetworkFreeWhenNoMinimum() public {
+        // Unconfigured gate (min = 0) stays backward-compatible: no stake needed.
+        NeunodeIdentity bare = new NeunodeIdentity();
+        vm.prank(alice);
+        bytes32 didHash = bare.createDid(alicePubKeyHash);
+
+        vm.prank(alice);
+        bare.registerForNetwork(didHash);
+        assertTrue(bare.isRegistered(didHash));
+    }
+
+    function testRevertRegisterNotController() public {
+        vm.prank(alice);
+        bytes32 didHash = identity.createDid(alicePubKeyHash);
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeIdentity.NotController.selector, didHash, bob)
+        );
+        identity.registerForNetwork(didHash);
+    }
+
+    function testRevertRegisterInactiveDid() public {
+        vm.prank(alice);
+        bytes32 didHash = identity.createDid(alicePubKeyHash);
+        stakeSource.setStaked(alice, MIN_STAKE);
+
+        vm.prank(alice);
+        identity.deactivateDid(didHash);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(NeunodeIdentity.DidNotActive.selector, didHash));
+        identity.registerForNetwork(didHash);
+    }
+
+    function testDeregisterFromNetwork() public {
+        vm.prank(alice);
+        bytes32 didHash = identity.createDid(alicePubKeyHash);
+        stakeSource.setStaked(alice, MIN_STAKE);
+
+        vm.prank(alice);
+        identity.registerForNetwork(didHash);
+
+        vm.prank(alice);
+        identity.deregisterFromNetwork(didHash);
+        assertFalse(identity.isRegistered(didHash));
+    }
+
+    function testRevertDeregisterUnregistered() public {
+        vm.prank(alice);
+        bytes32 didHash = identity.createDid(alicePubKeyHash);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(NeunodeIdentity.NotRegistered.selector, didHash));
+        identity.deregisterFromNetwork(didHash);
+    }
+
+    function testRevertSetStakeSourceNotOwner() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(NeunodeIdentity.NotOwner.selector, alice));
+        identity.setStakeSource(address(0xBEEF));
+    }
+}
+
+/// @dev Minimal stake oracle for tests — NeunodeToken satisfies this interface in prod.
+contract MockStakeSource {
+    mapping(address => uint256) private _staked;
+
+    function setStaked(address account, uint256 amount) external {
+        _staked[account] = amount;
+    }
+
+    function stakedBalanceOf(address account) external view returns (uint256) {
+        return _staked[account];
     }
 }

@@ -4,12 +4,32 @@ pragma solidity ^0.8.24;
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
+/// @notice Minimal stake-read interface (interface segregation).
+///         NeunodeToken satisfies this via its public stakedBalanceOf.
+interface IStakeSource {
+    function stakedBalanceOf(address account) external view returns (uint256);
+}
+
 /// @title NeunodeIdentity — DID Registry for AI agents
 /// @notice Maps did:neunode:<hash> → controller address with key rotation support.
 ///         Dual-key model: Ed25519 for P2P signing, secp256k1 (Ethereum) for on-chain ops.
 contract NeunodeIdentity {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
+
+    // ─── Access Control ───────────────────────────────────────────────────
+
+    address public owner;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner(msg.sender);
+        _;
+    }
+
     // ─── Types ────────────────────────────────────────────────────────────
 
     struct DidDocument {
@@ -25,12 +45,21 @@ contract NeunodeIdentity {
     mapping(bytes32 => DidDocument) public documents; // didHash → document
     mapping(address => bytes32) public addressToDid; // addr → didHash
 
+    // Sybil resistance: network participation requires a slashable stake.
+    IStakeSource public stakeSource;
+    uint256 public minRegistrationStake;
+    mapping(bytes32 => bool) private _registered; // didHash → reputation/validator eligible
+
     // ─── Events ───────────────────────────────────────────────────────────
 
     event DidCreated(bytes32 indexed didHash, address indexed controller, uint256 timestamp);
     event DidUpdated(bytes32 indexed didHash, address indexed newController, uint256 timestamp);
     event DidKeyRotated(bytes32 indexed didHash, bytes32 newPubKeyHash, uint256 timestamp);
     event DidDeactivated(bytes32 indexed didHash, uint256 timestamp);
+    event NetworkRegistered(bytes32 indexed didHash, address indexed controller, uint256 stake);
+    event NetworkDeregistered(bytes32 indexed didHash, address indexed controller);
+    event MinRegistrationStakeUpdated(uint256 oldMin, uint256 newMin);
+    event StakeSourceUpdated(address stakeSource);
 
     // ─── Errors ───────────────────────────────────────────────────────────
 
@@ -40,6 +69,9 @@ contract NeunodeIdentity {
     error NotController(bytes32 didHash, address caller);
     error AddressAlreadyHasDid(address addr);
     error InvalidPublicKeyHash();
+    error NotOwner(address caller);
+    error NotRegistered(bytes32 didHash);
+    error InsufficientRegistrationStake(address controller, uint256 staked, uint256 required);
 
     // ─── Functions ────────────────────────────────────────────────────────
 
@@ -114,6 +146,59 @@ contract NeunodeIdentity {
         addressToDid[msg.sender] = bytes32(0);
 
         emit DidDeactivated(didHash, block.timestamp);
+    }
+
+    // ─── Sybil Resistance: Network Registration ──────────────────────────
+    // DID creation is free (key generation). Participating in reputation and
+    // validator eligibility requires a slashable stake ≥ minRegistrationStake,
+    // so an attacker cannot cheaply mint identities to game reputation.
+
+    /// @notice Register a DID for network participation (reputation/validator eligibility).
+    /// @dev Requires the controller to currently stake ≥ minRegistrationStake.
+    ///      Ongoing eligibility (e.g. auto-deregister on slash) hangs off this seam.
+    function registerForNetwork(bytes32 didHash) external {
+        DidDocument storage doc = documents[didHash];
+        if (doc.created == 0) revert DidNotFound(didHash);
+        if (!doc.active) revert DidNotActive(didHash);
+        if (doc.controller != msg.sender) revert NotController(didHash, msg.sender);
+
+        uint256 staked = 0;
+        if (minRegistrationStake != 0) {
+            staked = stakeSource.stakedBalanceOf(msg.sender);
+            if (staked < minRegistrationStake) {
+                revert InsufficientRegistrationStake(msg.sender, staked, minRegistrationStake);
+            }
+        }
+        _registered[didHash] = true;
+        emit NetworkRegistered(didHash, msg.sender, staked);
+    }
+
+    /// @notice Voluntarily remove a DID from network participation.
+    function deregisterFromNetwork(bytes32 didHash) external {
+        DidDocument storage doc = documents[didHash];
+        if (doc.created == 0) revert DidNotFound(didHash);
+        if (doc.controller != msg.sender) revert NotController(didHash, msg.sender);
+        if (!_registered[didHash]) revert NotRegistered(didHash);
+
+        _registered[didHash] = false;
+        emit NetworkDeregistered(didHash, msg.sender);
+    }
+
+    /// @notice Whether a DID is registered for reputation/validator eligibility.
+    function isRegistered(bytes32 didHash) external view returns (bool) {
+        return _registered[didHash];
+    }
+
+    /// @notice Set the stake source (any contract exposing stakedBalanceOf, e.g. NeunodeToken).
+    function setStakeSource(address source) external onlyOwner {
+        stakeSource = IStakeSource(source);
+        emit StakeSourceUpdated(source);
+    }
+
+    /// @notice Set the minimum stake required to register for the network.
+    function setMinRegistrationStake(uint256 newMin) external onlyOwner {
+        emit MinRegistrationStakeUpdated(minRegistrationStake, newMin);
+        minRegistrationStake = newMin;
     }
 
     /// @notice Get the controller address for a DID
