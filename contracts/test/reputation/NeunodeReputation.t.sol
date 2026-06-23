@@ -3,6 +3,20 @@ pragma solidity ^0.8.28;
 
 import "forge-std/Test.sol";
 import "../../src/reputation/NeunodeReputation.sol";
+import "../../src/NeunodeIdentity.sol";
+
+/// @dev Minimal stake oracle — NeunodeToken satisfies this in prod.
+contract MockStakeSource {
+    mapping(address => uint256) private _staked;
+
+    function setStaked(address account, uint256 amount) external {
+        _staked[account] = amount;
+    }
+
+    function stakedBalanceOf(address account) external view returns (uint256) {
+        return _staked[account];
+    }
+}
 
 /// @title NeunodeReputationTest — Tests for on-chain reputation and voting power
 contract NeunodeReputationTest is Test {
@@ -56,6 +70,68 @@ contract NeunodeReputationTest is Test {
         rep.updateFactorScore(agent, 3, bps);
         vm.prank(tenureOracle);
         rep.updateFactorScore(agent, 4, bps);
+    }
+
+    // ─── Identity wiring for Sybil-resistance tests ───────────────────────
+
+    NeunodeIdentity public identity;
+    MockStakeSource public stake;
+    uint256 public constant MIN_STAKE = 1000e18;
+
+    function _wireIdentityRegistry() internal {
+        identity = new NeunodeIdentity();
+        stake = new MockStakeSource();
+        identity.setStakeSource(address(stake));
+        identity.setMinRegistrationStake(MIN_STAKE);
+        vm.prank(admin);
+        rep.setIdentityRegistry(address(identity));
+    }
+
+    // ─── Sybil-resistance wiring (identity registration gates validators) ──
+
+    function test_registerValidator_revertsWhenRegistrySetButNoDid() public {
+        _wireIdentityRegistry();
+        _setAllScores(bob, 6000); // sufficient reputation, but bob controls no DID
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeReputation.NotNetworkRegistered.selector, bob)
+        );
+        rep.registerValidator();
+    }
+
+    function test_registerValidator_revertsWhenDidNotRegistered() public {
+        _wireIdentityRegistry();
+        vm.prank(carol);
+        identity.createDid(keccak256("carol_ed")); // DID exists but not network-registered
+        _setAllScores(carol, 6000);
+
+        vm.prank(carol);
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeReputation.NotNetworkRegistered.selector, carol)
+        );
+        rep.registerValidator();
+    }
+
+    function test_registerValidator_succeedsWhenRegistered() public {
+        _wireIdentityRegistry();
+        vm.prank(alice);
+        bytes32 did = identity.createDid(keccak256("alice_ed"));
+        stake.setStaked(alice, MIN_STAKE);
+        vm.prank(alice);
+        identity.registerForNetwork(did);
+        _setAllScores(alice, 6000);
+
+        vm.prank(alice);
+        vm.expectEmit(true, false, false, false);
+        emit NeunodeReputation.ValidatorRegistered(alice);
+        rep.registerValidator();
+    }
+
+    function testRevert_setIdentityRegistry_notAdmin() public {
+        vm.prank(alice); // not REPUTATION_ADMIN_ROLE
+        vm.expectRevert();
+        rep.setIdentityRegistry(address(0xBEEF));
     }
 
     // ─── 1. test_updateFactorScore ────────────────────────────────────────
