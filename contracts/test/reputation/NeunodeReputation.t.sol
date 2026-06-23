@@ -134,6 +134,51 @@ contract NeunodeReputationTest is Test {
         rep.setIdentityRegistry(address(0xBEEF));
     }
 
+    // ─── Stake-factor on-chain derivation (decentralization) ───────────────
+    // When a stake source is configured, the stake factor (factor 0) is derived
+    // deterministically from real staked balance instead of being pushed by a
+    // trusted oracle — removing one centralized trust assumption.
+
+    function _configureStakeDerivation(uint256 target) internal {
+        stake = new MockStakeSource();
+        vm.prank(admin);
+        rep.setStakeSource(address(stake));
+        vm.prank(admin);
+        rep.setStakeFactorTarget(target);
+    }
+
+    function test_stakeFactor_derivedFromBalance() public {
+        _configureStakeDerivation(10_000e18); // 10k staked == 100% factor
+
+        stake.setStaked(alice, 5_000e18); // half the target → 50%
+        rep.deriveStakeFactor(alice);
+
+        assertEq(rep.getFactorScores(alice).stake, 5000);
+    }
+
+    function test_stakeFactor_cappedAtMax() public {
+        _configureStakeDerivation(1_000e18);
+
+        stake.setStaked(alice, 1_000_000e18); // far above target
+        rep.deriveStakeFactor(alice);
+
+        assertEq(rep.getFactorScores(alice).stake, 10000); // capped at 100%
+    }
+
+    function test_revert_oracleCannotSetStakeFactorWhenDeriving() public {
+        _configureStakeDerivation(10_000e18);
+
+        vm.prank(stakeOracle);
+        vm.expectRevert(NeunodeReputation.StakeFactorDerived.selector);
+        rep.updateFactorScore(alice, 0, 7500);
+    }
+
+    function testRevert_setStakeSource_notAdmin() public {
+        vm.prank(alice);
+        vm.expectRevert();
+        rep.setStakeSource(address(0xBEEF));
+    }
+
     // ─── 1. test_updateFactorScore ────────────────────────────────────────
 
     function test_updateFactorScore() public {

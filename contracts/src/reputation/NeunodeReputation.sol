@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {IStakeSource} from "../NeunodeIdentity.sol";
 
 /// @notice Minimal identity-registry read interface (NeunodeIdentity satisfies it).
 interface IIdentityRegistry {
@@ -93,6 +94,10 @@ contract NeunodeReputation is AccessControl {
     // Sybil resistance: when set, only network-registered (staked) DIDs may validate.
     IIdentityRegistry public identityRegistry;
 
+    // Decentralization: when set, the stake factor (0) is derived from real staked balance.
+    IStakeSource public stakeSource;
+    uint256 public stakeFactorTarget; // staked balance at which stake factor = 100%
+
     // ─── Events ───────────────────────────────────────────────────────────
 
     event FactorScoreUpdated(address indexed agent, uint8 indexed factor, uint16 scoreBps);
@@ -104,6 +109,9 @@ contract NeunodeReputation is AccessControl {
     event PenaltyApplied(address indexed validator, uint256 reputationSlashBps);
     event WeightsUpdated(FactorWeights newWeights);
     event IdentityRegistryUpdated(address registry);
+    event StakeSourceUpdated(address source);
+    event StakeFactorTargetUpdated(uint256 target);
+    event StakeFactorRecomputed(address indexed agent, uint16 factorBps);
 
     // ─── Errors ───────────────────────────────────────────────────────────
 
@@ -120,6 +128,8 @@ contract NeunodeReputation is AccessControl {
     error PenaltyNotDecayed();
     error ArrayLengthMismatch();
     error NotNetworkRegistered(address agent);
+    error StakeFactorDerived(); // stake factor is auto-derived; oracle cannot set it
+    error StakeDerivationNotConfigured();
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
@@ -173,6 +183,7 @@ contract NeunodeReputation is AccessControl {
         onlyFactorOracle(factorIndex)
     {
         if (scoreBps > uint16(MAX_BPS)) revert ScoreOutOfBounds(scoreBps);
+        if (factorIndex == 0 && address(stakeSource) != address(0)) revert StakeFactorDerived();
         _setFactorScore(agent, factorIndex, scoreBps);
         _recompute(agent);
 
@@ -191,6 +202,7 @@ contract NeunodeReputation is AccessControl {
         uint16[] calldata scoresBps
     ) external onlyFactorOracle(factorIndex) {
         if (agents.length != scoresBps.length) revert ArrayLengthMismatch();
+        if (factorIndex == 0 && address(stakeSource) != address(0)) revert StakeFactorDerived();
         for (uint256 i = 0; i < agents.length; i++) {
             if (scoresBps[i] > uint16(MAX_BPS)) revert ScoreOutOfBounds(scoresBps[i]);
             _setFactorScore(agents[i], factorIndex, scoresBps[i]);
@@ -379,6 +391,42 @@ contract NeunodeReputation is AccessControl {
     function setIdentityRegistry(address registry) external onlyRole(REPUTATION_ADMIN_ROLE) {
         identityRegistry = IIdentityRegistry(registry);
         emit IdentityRegistryUpdated(registry);
+    }
+
+    // ─── Stake-factor on-chain derivation (decentralization) ───────────────
+    // When a stake source is configured, factor 0 (stake) is derived from real
+    // staked balance deterministically, and the stake oracle can no longer set it.
+
+    /// @notice Recompute an agent's stake factor from its on-chain staked balance.
+    /// @dev Callable by anyone (deterministic). factor = min(staked * MAX_BPS / target, MAX_BPS).
+    function deriveStakeFactor(address agent) external {
+        if (address(stakeSource) == address(0)) revert StakeDerivationNotConfigured();
+
+        uint256 balance = stakeSource.stakedBalanceOf(agent);
+        uint256 factor = stakeFactorTarget == 0
+            ? (balance == 0 ? 0 : MAX_BPS)
+            : (balance * MAX_BPS) / stakeFactorTarget;
+        if (factor > MAX_BPS) factor = MAX_BPS;
+
+        _setFactorScore(agent, 0, uint16(factor));
+        _recompute(agent);
+
+        emit FactorScoreUpdated(agent, 0, uint16(factor));
+        emit CompositeScoreUpdated(agent, _entries[agent].compositeScore);
+        emit VotingPowerUpdated(agent, _entries[agent].votingPower);
+        emit StakeFactorRecomputed(agent, uint16(factor));
+    }
+
+    /// @notice Set the stake source used to derive the stake factor (NeunodeToken satisfies IStakeSource).
+    function setStakeSource(address source) external onlyRole(REPUTATION_ADMIN_ROLE) {
+        stakeSource = IStakeSource(source);
+        emit StakeSourceUpdated(source);
+    }
+
+    /// @notice Set the staked balance at which the stake factor reaches 100%.
+    function setStakeFactorTarget(uint256 target) external onlyRole(REPUTATION_ADMIN_ROLE) {
+        stakeFactorTarget = target;
+        emit StakeFactorTargetUpdated(target);
     }
 
     // ─── Slashing Integration ─────────────────────────────────────────────
