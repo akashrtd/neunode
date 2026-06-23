@@ -62,7 +62,7 @@ impl BalanceSheet {
     }
 
     pub fn total_value(&self) -> TokenAmount {
-        let mut total: u64 = 0;
+        let mut total: u128 = 0;
         for &token_type in
             &[TokenType::Compute, TokenType::Train, TokenType::Bandwidth, TokenType::Storage]
         {
@@ -113,7 +113,7 @@ mod tests {
     #[test]
     fn deposit_overflow() {
         let mut sheet = BalanceSheet::new();
-        sheet.deposit(TokenType::Compute, TokenAmount(u64::MAX)).unwrap();
+        sheet.deposit(TokenType::Compute, TokenAmount(u128::MAX)).unwrap();
         let result = sheet.deposit(TokenType::Compute, TokenAmount(1));
         assert!(matches!(result, Err(TokenError::Overflow)));
     }
@@ -230,9 +230,9 @@ mod tests {
     #[test]
     fn total_value_saturating() {
         let mut sheet = BalanceSheet::new();
-        sheet.deposit(TokenType::Compute, TokenAmount(u64::MAX)).unwrap();
-        sheet.deposit(TokenType::Train, TokenAmount(u64::MAX)).unwrap();
-        assert_eq!(sheet.total_value(), TokenAmount(u64::MAX));
+        sheet.deposit(TokenType::Compute, TokenAmount(u128::MAX)).unwrap();
+        sheet.deposit(TokenType::Train, TokenAmount(u128::MAX)).unwrap();
+        assert_eq!(sheet.total_value(), TokenAmount(u128::MAX));
     }
 
     #[test]

@@ -112,7 +112,7 @@ impl StreamingAccumulator {
             model_info.output_price_per_million,
         );
 
-        let fee_amount = (gross_cost.0 * config.protocol_fee_bps).div_ceil(10_000);
+        let fee_amount = (gross_cost.0 * config.protocol_fee_bps as u128).div_ceil(10_000);
         let protocol_fee = TokenAmount(fee_amount);
         let net_payout = gross_cost
             .checked_sub(protocol_fee)

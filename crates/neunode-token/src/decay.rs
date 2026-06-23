@@ -16,7 +16,7 @@ pub struct DecayDistribution {
 
 impl DecayDistribution {
     pub fn total(&self) -> TokenAmount {
-        let total: u64 = self
+        let total: u128 = self
             .treasury
             .0
             .saturating_add(self.staking_rewards.0)
@@ -58,7 +58,7 @@ impl DecayCalculator {
             }
         }
 
-        TokenAmount(current as u64)
+        TokenAmount(current as u128)
     }
 
     pub fn apply_decay(
@@ -87,14 +87,14 @@ impl DecayCalculator {
         let dev_fund = Self::distribute_share(decayed_amount, DECAY_DEV_FUND_PCT);
 
         // Remainder from rounding goes to treasury (largest share)
-        let distributed: u64 = treasury.0 + staking_rewards.0 + burned.0 + dev_fund.0;
+        let distributed: u128 = treasury.0 + staking_rewards.0 + burned.0 + dev_fund.0;
         let treasury = TokenAmount(treasury.0 + (decayed_amount - distributed));
 
         (new_balance, DecayDistribution { treasury, staking_rewards, burned, dev_fund })
     }
 
-    fn distribute_share(total: u64, percentage: f64) -> TokenAmount {
-        TokenAmount((total as f64 * percentage / 100.0) as u64)
+    fn distribute_share(total: u128, percentage: f64) -> TokenAmount {
+        TokenAmount((total as f64 * percentage / 100.0) as u128)
     }
 }
 
@@ -211,7 +211,7 @@ mod tests {
         // With odd numbers, remainder goes to treasury
         let (_, dist) = DecayCalculator::apply_decay(TokenAmount(999), ActivityLevel::Inactive);
         let decayed = 999u64 - (999_f64 * 0.85) as u64;
-        assert_eq!(dist.total(), TokenAmount(decayed));
+        assert_eq!(dist.total(), TokenAmount(decayed as u128));
     }
 
     #[test]
