@@ -71,8 +71,9 @@ Concrete implications:
 
 ## Open questions
 
-- **`TokenAmount` width.** `u64` caps at ~1.84e19 (≈18.4B units at 18 decimals).
-  Widening to `u128` removes the practical cap and aligns intent with `uint256`'s
-  range without a full 256-bit dependency. To be addressed in a follow-up.
+- **`TokenAmount` width — RESOLVED (commit `783c0c8`).** Widened `TokenAmount`
+  from `u64` to `u128`, aligning the domain type with the `uint256` range and
+  removing the silent cap. Storage and API DTOs remain `u64` (practical wire
+  format — amounts fit) and cast at the boundary.
 - **Consensus strategy** (build Reth+Malachite vs deploy on an existing L2) is the
   gating decision for *when* the contract path becomes live. Tracked separately.
