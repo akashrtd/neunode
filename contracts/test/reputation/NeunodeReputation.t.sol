@@ -3,6 +3,20 @@ pragma solidity ^0.8.28;
 
 import "forge-std/Test.sol";
 import "../../src/reputation/NeunodeReputation.sol";
+import "../../src/NeunodeIdentity.sol";
+
+/// @dev Minimal stake oracle — NeunodeToken satisfies this in prod.
+contract MockStakeSource {
+    mapping(address => uint256) private _staked;
+
+    function setStaked(address account, uint256 amount) external {
+        _staked[account] = amount;
+    }
+
+    function stakedBalanceOf(address account) external view returns (uint256) {
+        return _staked[account];
+    }
+}
 
 /// @title NeunodeReputationTest — Tests for on-chain reputation and voting power
 contract NeunodeReputationTest is Test {
@@ -56,6 +70,113 @@ contract NeunodeReputationTest is Test {
         rep.updateFactorScore(agent, 3, bps);
         vm.prank(tenureOracle);
         rep.updateFactorScore(agent, 4, bps);
+    }
+
+    // ─── Identity wiring for Sybil-resistance tests ───────────────────────
+
+    NeunodeIdentity public identity;
+    MockStakeSource public stake;
+    uint256 public constant MIN_STAKE = 1000e18;
+
+    function _wireIdentityRegistry() internal {
+        identity = new NeunodeIdentity();
+        stake = new MockStakeSource();
+        identity.setStakeSource(address(stake));
+        identity.setMinRegistrationStake(MIN_STAKE);
+        vm.prank(admin);
+        rep.setIdentityRegistry(address(identity));
+    }
+
+    // ─── Sybil-resistance wiring (identity registration gates validators) ──
+
+    function test_registerValidator_revertsWhenRegistrySetButNoDid() public {
+        _wireIdentityRegistry();
+        _setAllScores(bob, 6000); // sufficient reputation, but bob controls no DID
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeReputation.NotNetworkRegistered.selector, bob)
+        );
+        rep.registerValidator();
+    }
+
+    function test_registerValidator_revertsWhenDidNotRegistered() public {
+        _wireIdentityRegistry();
+        vm.prank(carol);
+        identity.createDid(keccak256("carol_ed")); // DID exists but not network-registered
+        _setAllScores(carol, 6000);
+
+        vm.prank(carol);
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeReputation.NotNetworkRegistered.selector, carol)
+        );
+        rep.registerValidator();
+    }
+
+    function test_registerValidator_succeedsWhenRegistered() public {
+        _wireIdentityRegistry();
+        vm.prank(alice);
+        bytes32 did = identity.createDid(keccak256("alice_ed"));
+        stake.setStaked(alice, MIN_STAKE);
+        vm.prank(alice);
+        identity.registerForNetwork(did);
+        _setAllScores(alice, 6000);
+
+        vm.prank(alice);
+        vm.expectEmit(true, false, false, false);
+        emit NeunodeReputation.ValidatorRegistered(alice);
+        rep.registerValidator();
+    }
+
+    function testRevert_setIdentityRegistry_notAdmin() public {
+        vm.prank(alice); // not REPUTATION_ADMIN_ROLE
+        vm.expectRevert();
+        rep.setIdentityRegistry(address(0xBEEF));
+    }
+
+    // ─── Stake-factor on-chain derivation (decentralization) ───────────────
+    // When a stake source is configured, the stake factor (factor 0) is derived
+    // deterministically from real staked balance instead of being pushed by a
+    // trusted oracle — removing one centralized trust assumption.
+
+    function _configureStakeDerivation(uint256 target) internal {
+        stake = new MockStakeSource();
+        vm.prank(admin);
+        rep.setStakeSource(address(stake));
+        vm.prank(admin);
+        rep.setStakeFactorTarget(target);
+    }
+
+    function test_stakeFactor_derivedFromBalance() public {
+        _configureStakeDerivation(10_000e18); // 10k staked == 100% factor
+
+        stake.setStaked(alice, 5_000e18); // half the target → 50%
+        rep.deriveStakeFactor(alice);
+
+        assertEq(rep.getFactorScores(alice).stake, 5000);
+    }
+
+    function test_stakeFactor_cappedAtMax() public {
+        _configureStakeDerivation(1_000e18);
+
+        stake.setStaked(alice, 1_000_000e18); // far above target
+        rep.deriveStakeFactor(alice);
+
+        assertEq(rep.getFactorScores(alice).stake, 10000); // capped at 100%
+    }
+
+    function test_revert_oracleCannotSetStakeFactorWhenDeriving() public {
+        _configureStakeDerivation(10_000e18);
+
+        vm.prank(stakeOracle);
+        vm.expectRevert(NeunodeReputation.StakeFactorDerived.selector);
+        rep.updateFactorScore(alice, 0, 7500);
+    }
+
+    function testRevert_setStakeSource_notAdmin() public {
+        vm.prank(alice);
+        vm.expectRevert();
+        rep.setStakeSource(address(0xBEEF));
     }
 
     // ─── 1. test_updateFactorScore ────────────────────────────────────────

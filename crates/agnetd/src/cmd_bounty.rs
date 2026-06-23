@@ -116,14 +116,14 @@ fn storage_to_lib(data: &neunode_storage::bounty_store::BountyData) -> Result<Li
         creator: Did(data.requester_did.clone()),
         title: data.title.clone(),
         description: data.description.clone(),
-        reward_amount: TokenAmount(data.reward_amount),
+        reward_amount: TokenAmount(data.reward_amount as u128),
         reward_token,
         state,
         claimant: data.provider_did.as_ref().map(|d| Did(d.clone())),
         created_at: data.created_at,
         deadlines,
         artifact_hash: data.artifact_hash.as_ref().map(|h| Hash256(h.clone())),
-        bond: data.bond.map(TokenAmount),
+        bond: data.bond.map(|b| TokenAmount(b as u128)),
     })
 }
 
@@ -133,7 +133,7 @@ fn lib_to_storage(data: &LibBountyData, escrow: u64) -> neunode_storage::bounty_
         state: format!("{:?}", data.state),
         requester_did: data.creator.0.clone(),
         provider_did: data.claimant.as_ref().map(|d| d.0.clone()),
-        reward_amount: data.reward_amount.0,
+        reward_amount: data.reward_amount.0 as u64,
         reward_token_type: token_type_to_u8(&data.reward_token),
         deadline: data.deadlines.work,
         created_at: data.created_at,
@@ -144,7 +144,7 @@ fn lib_to_storage(data: &LibBountyData, escrow: u64) -> neunode_storage::bounty_
         work_deadline: data.deadlines.work,
         review_deadline: data.deadlines.review,
         artifact_hash: data.artifact_hash.as_ref().map(|h| h.0.clone()),
-        bond: data.bond.map(|b| b.0),
+        bond: data.bond.map(|b| b.0 as u64),
     }
 }
 
@@ -189,7 +189,7 @@ fn create_bounty(
         creator,
         title: title.to_string(),
         description: description.to_string(),
-        reward_amount: TokenAmount(reward),
+        reward_amount: TokenAmount(reward as u128),
         reward_token: token_type,
         state: BountyState::Open,
         claimant: None,
@@ -247,7 +247,7 @@ fn claim_bounty(
     let now = current_timestamp();
 
     sm.try_transition(
-        BountyEvent::Claim { claimant: claimant.clone(), bond: TokenAmount(stake) },
+        BountyEvent::Claim { claimant: claimant.clone(), bond: TokenAmount(stake as u128) },
         now,
     )?;
 

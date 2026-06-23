@@ -221,10 +221,11 @@ pub async fn request_inference(
 
     let providers = load_all_providers(&state.db);
     let pricing_info = providers.iter().find_map(|p| p.find_model(&body.model)).map(|m| {
-        let cost = (estimated_tokens as u64 * m.input_price_per_million.0 / 1_000_000).max(1);
+        let cost =
+            ((estimated_tokens as u128 * m.input_price_per_million.0 / 1_000_000).max(1)) as u64;
         PricingEstimate {
-            input_price_per_mtok: m.input_price_per_million.0,
-            output_price_per_mtok: m.output_price_per_million.0,
+            input_price_per_mtok: m.input_price_per_million.0 as u64,
+            output_price_per_mtok: m.output_price_per_million.0 as u64,
             estimated_cost: cost,
         }
     });
@@ -274,8 +275,8 @@ pub async fn list_models(
         .into_iter()
         .map(|m| ModelEntry {
             id: m.id.clone(),
-            input_price_per_million: m.input_price_per_million.0,
-            output_price_per_million: m.output_price_per_million.0,
+            input_price_per_million: m.input_price_per_million.0 as u64,
+            output_price_per_million: m.output_price_per_million.0 as u64,
             context_length: m.context_length,
         })
         .collect();
@@ -417,9 +418,10 @@ pub async fn show_pricing(
             }
         });
 
-    let input_cost = (query.input_tokens as u64) * model_info.input_price_per_million.0 / 1_000_000;
+    let input_cost =
+        ((query.input_tokens as u128) * model_info.input_price_per_million.0 / 1_000_000) as u64;
     let output_cost =
-        (query.output_tokens as u64) * model_info.output_price_per_million.0 / 1_000_000;
+        ((query.output_tokens as u128) * model_info.output_price_per_million.0 / 1_000_000) as u64;
     let total = input_cost.saturating_add(output_cost);
     let total_cost = if total == 0 && (query.input_tokens > 0 || query.output_tokens > 0) {
         1u64

@@ -54,7 +54,7 @@ impl ModelInfo {
     pub fn total_price_per_million(&self) -> TokenAmount {
         self.input_price_per_million
             .checked_add(self.output_price_per_million)
-            .unwrap_or(TokenAmount(u64::MAX))
+            .unwrap_or(TokenAmount(u128::MAX))
     }
 }
 

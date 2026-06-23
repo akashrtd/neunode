@@ -48,11 +48,11 @@ impl Router {
                     let price_a = a
                         .find_model(model_id)
                         .map(|m| m.total_price_per_million().0)
-                        .unwrap_or(u64::MAX);
+                        .unwrap_or(u128::MAX);
                     let price_b = b
                         .find_model(model_id)
                         .map(|m| m.total_price_per_million().0)
-                        .unwrap_or(u64::MAX);
+                        .unwrap_or(u128::MAX);
                     price_a.cmp(&price_b)
                 });
                 best.ok_or_else(|| {
@@ -109,11 +109,11 @@ impl Router {
                     let price_a = a
                         .find_model(model_id)
                         .map(|m| m.total_price_per_million().0)
-                        .unwrap_or(u64::MAX);
+                        .unwrap_or(u128::MAX);
                     let price_b = b
                         .find_model(model_id)
                         .map(|m| m.total_price_per_million().0)
-                        .unwrap_or(u64::MAX);
+                        .unwrap_or(u128::MAX);
                     price_a.cmp(&price_b)
                 });
             }
@@ -160,8 +160,8 @@ mod tests {
             id: model_id.to_string(),
             base_model: None,
             context_length: 4096,
-            input_price_per_million: TokenAmount(input_price),
-            output_price_per_million: TokenAmount(output_price),
+            input_price_per_million: TokenAmount(input_price as u128),
+            output_price_per_million: TokenAmount(output_price as u128),
             capabilities: vec!["chat".to_string()],
         }
     }

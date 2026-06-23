@@ -62,8 +62,8 @@ impl SettlementEngine {
         input_price: TokenAmount,
         output_price: TokenAmount,
     ) -> TokenAmount {
-        let input_cost = (input_tokens as u64) * input_price.0;
-        let output_cost = (output_tokens as u64) * output_price.0;
+        let input_cost = (input_tokens as u128) * input_price.0;
+        let output_cost = (output_tokens as u128) * output_price.0;
         let total = input_cost.saturating_add(output_cost) / 1_000_000;
         if total == 0 && (input_tokens > 0 || output_tokens > 0) {
             TokenAmount(1)
@@ -131,7 +131,7 @@ impl SettlementEngine {
             model_info.output_price_per_million,
         );
 
-        let fee_amount = (gross_cost.0 * self.config.protocol_fee_bps).div_ceil(10_000);
+        let fee_amount = (gross_cost.0 * self.config.protocol_fee_bps as u128).div_ceil(10_000);
         let protocol_fee = TokenAmount(fee_amount);
         let net_payout = gross_cost
             .checked_sub(protocol_fee)
@@ -212,8 +212,8 @@ mod tests {
             id: model_id.to_string(),
             base_model: None,
             context_length: 4096,
-            input_price_per_million: TokenAmount(input_price),
-            output_price_per_million: TokenAmount(output_price),
+            input_price_per_million: TokenAmount(input_price as u128),
+            output_price_per_million: TokenAmount(output_price as u128),
             capabilities: vec!["chat".to_string()],
         }
     }

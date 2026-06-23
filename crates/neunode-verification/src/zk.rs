@@ -49,6 +49,7 @@ pub struct ZkProofResult {
 /// Production implementation will use EZKL (zkonduit/ezkl v23.0.5)
 /// for ONNX→Halo2 circuit→proof→EVM verification of small models.
 /// LLM-scale ZK is infeasible today; use RepOps or TEE instead.
+#[derive(Default)]
 pub struct ZkVerifier;
 
 impl ZkVerifier {
@@ -62,10 +63,13 @@ impl ZkVerifier {
         _public_inputs: &[u8],
         model_cid: &str,
     ) -> Result<ZkProofResult> {
-        Err(VerificationError::ConfigInvalid(format!(
-            "ZK proof verification not yet implemented for model {model_cid}. \
-                 Use RepOps or TEE attestation for LLM-scale verification."
-        )))
+        Err(VerificationError::Unsupported {
+            layer: "zk".to_string(),
+            reason: format!(
+                "ZK proof verification not yet implemented for model {model_cid}; \
+                 use RepOps or TEE attestation for LLM-scale verification"
+            ),
+        })
     }
 
     pub fn verify_proof_result(&self, proof_result: &ZkProofResult) -> VerificationResult {
@@ -125,12 +129,14 @@ mod tests {
     }
 
     #[test]
-    fn verify_proof_returns_not_implemented() {
+    fn verify_proof_returns_unsupported() {
         let verifier = ZkVerifier::new();
         let result = verifier.verify_proof(&[], &[], "test-model");
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(err, VerificationError::ConfigInvalid(_)));
+        let err = result.expect_err("ZK verify must signal unsupported, not pass");
+        assert!(
+            matches!(err, VerificationError::Unsupported { .. }),
+            "expected Unsupported, got {err:?}"
+        );
     }
 
     #[test]

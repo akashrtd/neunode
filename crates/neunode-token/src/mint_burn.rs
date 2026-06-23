@@ -88,7 +88,7 @@ mod tests {
     #[test]
     fn mint_overflow() {
         let mut sheet = BalanceSheet::new();
-        mint(&mut sheet, TokenType::Compute, TokenAmount(u64::MAX)).unwrap();
+        mint(&mut sheet, TokenType::Compute, TokenAmount(u128::MAX)).unwrap();
         let result = mint(&mut sheet, TokenType::Compute, TokenAmount(1));
         assert!(matches!(result, Err(TokenError::Overflow)));
     }
@@ -166,7 +166,7 @@ mod tests {
         let mut sheet = BalanceSheet::new();
         let result = mint_batch(
             &mut sheet,
-            &[(TokenType::Compute, TokenAmount(u64::MAX)), (TokenType::Compute, TokenAmount(1))],
+            &[(TokenType::Compute, TokenAmount(u128::MAX)), (TokenType::Compute, TokenAmount(1))],
         );
         assert!(matches!(result, Err(TokenError::Overflow)));
         assert_eq!(sheet.get_balance(TokenType::Compute), TokenAmount::ZERO);

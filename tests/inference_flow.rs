@@ -24,8 +24,8 @@ fn make_model(model_id: &str, input_price: u64, output_price: u64) -> ModelInfo 
         id: model_id.to_string(),
         base_model: None,
         context_length: 4096,
-        input_price_per_million: TokenAmount(input_price),
-        output_price_per_million: TokenAmount(output_price),
+        input_price_per_million: TokenAmount(input_price as u128),
+        output_price_per_million: TokenAmount(output_price as u128),
         capabilities: vec!["chat".to_string(), "streaming".to_string()],
     }
 }

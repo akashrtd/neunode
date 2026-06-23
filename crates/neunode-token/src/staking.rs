@@ -34,9 +34,9 @@ impl StakingManager {
         amount: TokenAmount,
         balances: &mut BalanceSheet,
     ) -> Result<()> {
-        if amount.0 < MIN_STAKE {
+        if amount.0 < MIN_STAKE as u128 {
             return Err(TokenError::InsufficientStake {
-                required: TokenAmount(MIN_STAKE),
+                required: TokenAmount(MIN_STAKE as u128),
                 available: amount,
             });
         }
@@ -210,8 +210,9 @@ mod tests {
         let mut balances = BalanceSheet::new();
         balances.deposit(TokenType::Compute, TokenAmount(500)).unwrap();
 
-        mgr.stake(&test_did(), TokenType::Compute, TokenAmount(MIN_STAKE), &mut balances).unwrap();
-        assert_eq!(mgr.total_staked(&test_did()).unwrap(), TokenAmount(MIN_STAKE));
+        mgr.stake(&test_did(), TokenType::Compute, TokenAmount(MIN_STAKE as u128), &mut balances)
+            .unwrap();
+        assert_eq!(mgr.total_staked(&test_did()).unwrap(), TokenAmount(MIN_STAKE as u128));
     }
 
     #[test]

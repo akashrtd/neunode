@@ -93,8 +93,8 @@ pub struct FeeBreakdown {
 
 impl FeeBreakdown {
     pub fn from_gross(gross: TokenAmount) -> Self {
-        let protocol_units = (gross.0 * PROTOCOL_FEE_BPS).div_ceil(BPS_DENOMINATOR);
-        let reviewer_units = (gross.0 * REVIEWER_FEE_BPS).div_ceil(BPS_DENOMINATOR);
+        let protocol_units = (gross.0 * PROTOCOL_FEE_BPS as u128).div_ceil(BPS_DENOMINATOR as u128);
+        let reviewer_units = (gross.0 * REVIEWER_FEE_BPS as u128).div_ceil(BPS_DENOMINATOR as u128);
         let total_fees = protocol_units.saturating_add(reviewer_units);
         let capped_fees = total_fees.min(gross.0);
         let net = gross.0.saturating_sub(capped_fees);
@@ -290,9 +290,9 @@ mod tests {
     #[test]
     fn fee_fees_dont_exceed_gross() {
         for amount in [1u64, 10, 100, 1000, 10000, 1_000_000] {
-            let fb = FeeBreakdown::from_gross(TokenAmount(amount));
+            let fb = FeeBreakdown::from_gross(TokenAmount(amount as u128));
             let total_fees = fb.protocol_fee.0.saturating_add(fb.reviewer_fee.0);
-            assert!(total_fees <= amount, "fees exceed gross for amount {amount}");
+            assert!(total_fees <= amount as u128, "fees exceed gross for amount {amount}");
         }
     }
 

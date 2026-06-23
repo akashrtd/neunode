@@ -249,9 +249,9 @@ fn model_info_to_response(m: neunode_inference::provider::ModelInfo) -> ModelRes
         id: m.id,
         base_model: m.base_model,
         context_length: m.context_length,
-        input_price_per_million: m.input_price_per_million.0,
-        output_price_per_million: m.output_price_per_million.0,
-        total_price_per_million: total.0,
+        input_price_per_million: m.input_price_per_million.0 as u64,
+        output_price_per_million: m.output_price_per_million.0 as u64,
+        total_price_per_million: total.0 as u64,
         capabilities: m.capabilities,
     }
 }

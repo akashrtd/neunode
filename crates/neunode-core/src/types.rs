@@ -94,10 +94,11 @@ impl std::fmt::Display for EventId {
     }
 }
 
-/// Token amount (u64, in smallest unit).
+/// Token amount (u128, in smallest unit). Width aligns with the on-chain uint256
+/// range (see ADR-0001); avoids the u64 cap that silently diverged from the contracts.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, TS)]
 #[ts(export)]
-pub struct TokenAmount(pub u64);
+pub struct TokenAmount(pub u128);
 
 impl TokenAmount {
     pub const ZERO: TokenAmount = TokenAmount(0);
@@ -339,7 +340,7 @@ mod tests {
 
     #[test]
     fn token_amount_checked_add_overflow() {
-        let a = TokenAmount(u64::MAX);
+        let a = TokenAmount(u128::MAX);
         let b = TokenAmount(1);
         assert_eq!(a.checked_add(b), None);
     }
