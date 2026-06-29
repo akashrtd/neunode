@@ -16,7 +16,7 @@
   <a href="https://www.npmjs.com/package/@neunode/sdk"><img src="https://img.shields.io/npm/v/@neunode/sdk.svg" alt="@neunode/sdk on npm" /></a>
   <img src="https://img.shields.io/badge/Rust-1.93-orange.svg" alt="Rust 1.93" />
   <img src="https://img.shields.io/badge/Solidity-0.8.28-blue.svg" alt="Solidity 0.8.28" />
-  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" />
+  <img src="https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg" alt="License: AGPL-3.0-or-later" />
 </p>
 
 ---
@@ -228,6 +228,12 @@ CI runs all three on every push/PR to `main`.
 
 Pull requests welcome against `main`. Match existing conventions (see [CLAUDE.md](./CLAUDE.md)): `thiserror` in library crates, custom Solidity errors + NatSpec, branded TS types, flat `src/*.rs` layout. Every change should keep the full test suites + linters green.
 
+Contributors must agree to the [CLA](./CLA.md) before non-trivial merges.
+
 ## License
 
-[MIT](./LICENSE)
+Copyright (c) 2025-2026 Akash Rathod. Licensed under the [GNU Affero General Public License v3.0 or later](./LICENSE) (`AGPL-3.0-or-later`).
+
+This is a **strong copyleft** license. If you modify neunode and run it as a network service (SaaS, hosted API, or any interaction over a network), you must offer the modified source code to all users of that service under the same license (AGPL section 13). If you only want to *use* neunode as-is, or build a client that talks to a neunode node, no obligation applies.
+
+Vendored dependencies under `contracts/lib/` (forge-std, OpenZeppelin) retain their original licenses.

@@ -224,4 +224,4 @@ For feature requests, describe the use case and expected behavior.
 
 ## License
 
-By contributing to Neunode, you agree that your contributions will be licensed under the [MIT License](./LICENSE).
+By contributing to Neunode, you agree that your contributions will be licensed under the [GNU AGPL v3.0 or later](./LICENSE), and that you agree to the [Contributor License Agreement](./CLA.md).
