@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.24;
 
 /// @title IDiamondLoupe — EIP-2535 Diamond Loupe interface

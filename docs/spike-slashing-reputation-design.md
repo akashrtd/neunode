@@ -176,7 +176,7 @@ struct SlashingEvidence {
 ### 2.6 Slashing Contract Interface
 
 ```solidity
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.24;
 
 interface ISlashing {
@@ -621,7 +621,7 @@ impl NeunodeContext {
 The `NeunodeReputation` contract stores and manages per-agent reputation scores on-chain. It integrates with the existing Diamond proxy pattern (EIP-2535) and other Neunode contracts.
 
 ```solidity
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";

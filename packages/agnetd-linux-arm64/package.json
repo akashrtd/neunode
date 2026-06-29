@@ -6,7 +6,7 @@
     "type": "git",
     "url": "https://github.com/akashrtd/neunode"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "preferUnplugged": true,
   "engines": {
     "node": ">=18"
