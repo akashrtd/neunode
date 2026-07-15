@@ -1,0 +1,19 @@
+{
+  "name": "neunode-agent-examples",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "coding": "tsx coding-agent.ts",
+    "research": "tsx research-agent.ts",
+    "provider": "tsx inference-provider.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@neunode/sdk": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0"
+  }
+}

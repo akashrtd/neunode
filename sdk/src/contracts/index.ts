@@ -19,24 +19,14 @@ export { neunodeRegistryAbi } from "./abi/neunode-registry.js";
 export { neunodeReputationAbi } from "./abi/neunode-reputation.js";
 export { neunodeSlashingAbi } from "./abi/neunode-slashing.js";
 export { neunodeTokenAbi } from "./abi/neunode-token.js";
-export { royaltySplitterAbi } from "./abi/royalty-splitter.js";
 export { resourceAmmAbi } from "./abi/resource-amm.js";
+export { royaltySplitterAbi } from "./abi/royalty-splitter.js";
 export { stakingEscrowAbi } from "./abi/staking-escrow.js";
 export { storageTokenAbi } from "./abi/storage-token.js";
 export { trainingTokenAbi } from "./abi/training-token.js";
 export type { ChainId, ContractAddresses } from "./addresses.js";
 // Addresses
 export { chainAddresses, getContractAddresses } from "./addresses.js";
-export {
-	agentPaymasterSignatureMagic,
-	encodeAgentPaymasterData,
-	getAgentSponsorshipTypedData,
-} from "./paymaster.js";
-export type {
-	AgentPaymasterData,
-	AgentSponsorshipTypedData,
-} from "./paymaster.js";
-
 // Contract helpers
 export {
 	getAgentPaymaster,
@@ -55,9 +45,18 @@ export {
 	getNeunodeReputation,
 	getNeunodeSlashing,
 	getNeunodeToken,
-	getRoyaltySplitter,
 	getResourceAmm,
+	getRoyaltySplitter,
 	getStakingEscrow,
 	getStorageToken,
 	getTrainingToken,
 } from "./contracts.js";
+export type {
+	AgentPaymasterData,
+	AgentSponsorshipTypedData,
+} from "./paymaster.js";
+export {
+	agentPaymasterSignatureMagic,
+	encodeAgentPaymasterData,
+	getAgentSponsorshipTypedData,
+} from "./paymaster.js";

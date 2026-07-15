@@ -34,7 +34,9 @@
     "generate:abi": "node scripts/contract-abis.mjs --write",
     "check:abi": "node scripts/contract-abis.mjs",
     "typecheck": "tsc --noEmit",
+    "typecheck:examples": "tsc --noEmit -p ../examples/tsconfig.json",
     "lint": "biome check src/",
+    "lint:examples": "biome check ../examples/*.ts",
     "clean": "rm -rf dist",
     "docs": "typedoc"
   },

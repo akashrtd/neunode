@@ -1,5 +1,5 @@
+import { decodeAbiParameters, size, slice } from "viem";
 import { describe, expect, it } from "vitest";
-import { decodeAbiParameters, slice, size } from "viem";
 import {
 	agentPaymasterSignatureMagic,
 	encodeAgentPaymasterData,
@@ -29,7 +29,11 @@ describe("agent paymaster helpers", () => {
 			[{ type: "uint48" }, { type: "uint48" }, { type: "uint256" }],
 			slice(encoded, 52, 148),
 		);
-		expect([validUntil, validAfter, sponsorLimit]).toEqual([1_000, 100, 5_000_000n]);
+		expect([validUntil, validAfter, sponsorLimit]).toEqual([
+			1_000,
+			100,
+			5_000_000n,
+		]);
 	});
 
 	it("rejects values that cannot be represented on the wire", () => {

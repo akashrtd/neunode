@@ -1,10 +1,10 @@
 import {
+	type Address,
 	concat,
 	encodeAbiParameters,
+	type Hex,
 	numberToHex,
 	size,
-	type Address,
-	type Hex,
 } from "viem";
 
 export const agentPaymasterSignatureMagic = "0x22e325a297439656" as const;
