@@ -35,6 +35,37 @@ assert_unreachable derivative@2.2.0
 # publishes a release without the yanked optional dependency.
 assert_unreachable spin@0.9.8
 
+# cargo-audit's advisory ignores are intentionally narrow, but it does not have
+# an equivalent ignore mechanism for yanked lock-only packages. Pin the entire
+# observed finding set so any newly introduced vulnerability, advisory, or yank
+# fails this gate instead of blending into the known upstream exceptions.
+report=$(mktemp)
+trap 'rm -f "$report"' EXIT
+cargo audit --json >"$report" || true
+
+assert_exact() {
+  local label=$1
+  local actual=$2
+  local expected=$3
+
+  if [[ "$actual" != "$expected" ]]; then
+    echo "unexpected cargo-audit $label" >&2
+    echo "expected: $expected" >&2
+    echo "actual:   $actual" >&2
+    exit 1
+  fi
+}
+
+vulnerabilities=$(jq -r '[.vulnerabilities.list[].advisory.id] | sort | join(" ")' "$report")
+unmaintained=$(jq -r '[.warnings.unmaintained[].advisory.id] | sort | join(" ")' "$report")
+yanked=$(jq -r '[.warnings.yanked[] | "\(.package.name)@\(.package.version)"] | sort | join(" ")' "$report")
+
+assert_exact vulnerabilities "$vulnerabilities" \
+  "RUSTSEC-2023-0071 RUSTSEC-2026-0118 RUSTSEC-2026-0119"
+assert_exact unmaintained "$unmaintained" \
+  "RUSTSEC-2024-0388 RUSTSEC-2024-0436 RUSTSEC-2025-0141 RUSTSEC-2026-0173"
+assert_exact yanked "$yanked" "spin@0.9.8"
+
 cargo audit \
   --ignore RUSTSEC-2026-0118 \
   --ignore RUSTSEC-2026-0119 \
