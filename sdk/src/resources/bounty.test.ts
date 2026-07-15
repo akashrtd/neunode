@@ -404,4 +404,41 @@ describe("createBountyResource", () => {
 			]);
 		});
 	});
+
+	describe("pay", () => {
+		it("should use HTTP transport", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				post: ReturnType<typeof vi.fn>;
+			};
+			http.post.mockResolvedValue({
+				bounty_id: "bnty_123",
+				claimant: "did:neunode:provider",
+				amount_paid: 1000,
+				bond_returned: 150,
+				state: "Paid",
+			});
+			const resource = createBountyResource(dualClient);
+			await resource.pay("bnty_123");
+			expect(http.post).toHaveBeenCalledWith("/api/v1/bounties/bnty_123/pay");
+		});
+
+		it("should call bounty pay via CLI", async () => {
+			execute.mockResolvedValue({
+				bounty_id: "bnty_123",
+				claimant: "did:neunode:provider",
+				amount_paid: 1000,
+				bond_returned: 150,
+				state: "Paid",
+			});
+			const resource = createBountyResource(mockClient);
+			await resource.pay("bnty_123");
+			expect(execute).toHaveBeenCalledWith([
+				"bounty",
+				"pay",
+				"--id",
+				"bnty_123",
+			]);
+		});
+	});
 });

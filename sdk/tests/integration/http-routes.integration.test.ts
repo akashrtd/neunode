@@ -68,6 +68,10 @@ describe("Integration: live HTTP resource routes", () => {
 			],
 			{ env },
 		);
+		await execFileAsync(BINARY_PATH, ["token", "seed"], { env });
+		await execFileAsync(BINARY_PATH, ["token", "unstake", "--amount", "100"], {
+			env,
+		});
 
 		const port = await availablePort();
 		baseUrl = `http://127.0.0.1:${port}`;
@@ -112,5 +116,40 @@ describe("Integration: live HTTP resource routes", () => {
 	it("uses the daemon's canonical train jobs route", async () => {
 		const jobs = await client.train.list();
 		expect(jobs).toBeDefined();
+	});
+
+	it("settles a bounty with reward and provider bond through the shared service", async () => {
+		const created = await client.bounty.create({
+			title: "HTTP atomic settlement",
+			description: "Exercises the live economic lifecycle",
+			reward: 80,
+			token: "compute",
+		});
+		const claimed = await client.bounty.claim({ id: created.id, stake: 12 });
+		expect(claimed).toMatchObject({
+			bounty_id: created.id,
+			bond: 12,
+			state: "Claimed",
+		});
+		const submitted = await client.bounty.submit({
+			id: created.id,
+			artifact: "ipfs://QmHttpAtomicSettlement",
+		});
+		expect(submitted.artifact_cid).toBe("ipfs://QmHttpAtomicSettlement");
+		const reviewed = await client.bounty.review({
+			id: created.id,
+			score: 85,
+			feedback: "accepted by integration test",
+		});
+		expect(reviewed).toMatchObject({ score: 85, state: "Accepted" });
+
+		const paid = await client.bounty.pay(created.id);
+
+		expect(paid).toMatchObject({
+			bounty_id: created.id,
+			amount_paid: 80,
+			bond_returned: 12,
+			state: "Paid",
+		});
 	});
 });

@@ -90,6 +90,14 @@ export interface BountyCancelResult {
 	reason: string;
 }
 
+export interface BountyPayResult {
+	bounty_id: string;
+	claimant: string;
+	amount_paid: number;
+	bond_returned: number;
+	state: string;
+}
+
 /** Bounty marketplace for task creation, claiming, submission, and review. */
 export interface BountyResource {
 	/** Create a new bounty with escrowed reward. */
@@ -106,6 +114,8 @@ export interface BountyResource {
 	show(id: string): Promise<BountyShowResult>;
 	/** Cancel an open bounty and refund escrow. */
 	cancel(id: string, reason?: string): Promise<BountyCancelResult>;
+	/** Settle an accepted bounty, paying its reward and returning the provider bond. */
+	pay(id: string): Promise<BountyPayResult>;
 }
 
 export function createBountyResource(client: NeunodeClient): BountyResource {
@@ -246,6 +256,18 @@ export function createBountyResource(client: NeunodeClient): BountyResource {
 			const args = ["bounty", "cancel", "--id", id];
 			if (reason) args.push("--reason", reason);
 			return cli.execute<BountyCancelResult>(args);
+		},
+
+		async pay(id: string): Promise<BountyPayResult> {
+			if (client.http) {
+				return client.http.post<BountyPayResult>(
+					`/api/v1/bounties/${encodeURIComponent(id)}/pay`,
+				);
+			}
+			const cli = client.cli;
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for bounty operations");
+			return cli.execute<BountyPayResult>(["bounty", "pay", "--id", id]);
 		},
 	};
 }

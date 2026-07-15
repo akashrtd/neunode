@@ -1,8 +1,6 @@
 use anyhow::Result;
-use neunode_bounty::state_machine::{
-    BountyData as LibBountyData, BountyEvent, BountyStateMachine, Deadlines,
-};
-use neunode_core::types::{BountyId, BountyState, Did, Hash256, Timestamp, TokenAmount, TokenType};
+use neunode_bounty::state_machine::{BountyData as LibBountyData, BountyStateMachine, Deadlines};
+use neunode_core::types::{BountyId, BountyState, Timestamp, TokenAmount, TokenType};
 
 use crate::cli::{BountyCommands, GlobalArgs};
 use crate::output::OutputWriter;
@@ -81,16 +79,6 @@ fn parse_bounty_state(s: &str) -> Option<BountyState> {
     }
 }
 
-fn u8_to_token_type(code: u8) -> Option<TokenType> {
-    match code {
-        0x01 => Some(TokenType::Compute),
-        0x02 => Some(TokenType::Train),
-        0x03 => Some(TokenType::Bandwidth),
-        0x04 => Some(TokenType::Storage),
-        _ => None,
-    }
-}
-
 fn token_type_to_u8(t: &TokenType) -> u8 {
     match t {
         TokenType::Compute => 0x01,
@@ -98,33 +86,6 @@ fn token_type_to_u8(t: &TokenType) -> u8 {
         TokenType::Bandwidth => 0x03,
         TokenType::Storage => 0x04,
     }
-}
-
-fn storage_to_lib(data: &neunode_storage::bounty_store::BountyData) -> Result<LibBountyData> {
-    let state = parse_bounty_state(&data.state)
-        .ok_or_else(|| anyhow::anyhow!("invalid bounty state in storage: '{}'", data.state))?;
-    let reward_token = u8_to_token_type(data.reward_token_type)
-        .ok_or_else(|| anyhow::anyhow!("invalid token type code: {}", data.reward_token_type))?;
-
-    let mut deadlines = Deadlines::from_created_at(data.created_at);
-    deadlines.claim = data.claim_deadline;
-    deadlines.work = data.work_deadline;
-    deadlines.review = data.review_deadline;
-
-    Ok(LibBountyData {
-        id: BountyId(data.id.clone()),
-        creator: Did(data.requester_did.clone()),
-        title: data.title.clone(),
-        description: data.description.clone(),
-        reward_amount: TokenAmount(data.reward_amount as u128),
-        reward_token,
-        state,
-        claimant: data.provider_did.as_ref().map(|d| Did(d.clone())),
-        created_at: data.created_at,
-        deadlines,
-        artifact_hash: data.artifact_hash.as_ref().map(|h| Hash256(h.clone())),
-        bond: data.bond.map(|b| TokenAmount(b as u128)),
-    })
 }
 
 fn lib_to_storage(data: &LibBountyData, escrow: u64) -> neunode_storage::bounty_store::BountyData {
@@ -229,48 +190,15 @@ fn claim_bounty(
     writer: &OutputWriter,
     state: &AppState,
 ) -> Result<()> {
-    if bounty_id.is_empty() {
-        anyhow::bail!("bounty id cannot be empty");
-    }
-    if stake == 0 {
-        anyhow::bail!("stake must be greater than 0");
-    }
-
     let claimant = state.require_did()?.clone();
-    let store = state.bounty_store();
-
-    let bounty =
-        store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
-
-    let lib_data = storage_to_lib(&bounty)?;
-    let mut sm = BountyStateMachine::new(lib_data);
-    let now = current_timestamp();
-
-    sm.try_transition(
-        BountyEvent::Claim { claimant: claimant.clone(), bond: TokenAmount(stake as u128) },
-        now,
-    )?;
-
-    let updated = lib_to_storage(sm.data(), bounty.escrow_deposited);
-    store.put(&updated)?;
-
-    let token_store = state.token_store();
-    let claimant_did_str = claimant.0.clone();
-    let token_byte = bounty.reward_token_type;
-    if let Err(e) = token_store.transfer(
-        &claimant_did_str,
-        &format!("escrow:{}", bounty_id),
-        token_byte,
-        stake as u128,
-    ) {
-        tracing::warn!("stake escrow failed: {}", e);
-    }
+    let updated =
+        crate::bounty_service::claim(state.db(), bounty_id, &claimant, stake, current_timestamp())?;
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
         "claimant": claimant.to_string(),
         "bond": stake,
-        "state": format!("{:?}", sm.current_state()),
+        "state": updated.state,
     });
 
     writer.write_json(&out);
@@ -285,30 +213,14 @@ fn submit_bounty(
     writer: &OutputWriter,
     state: &AppState,
 ) -> Result<()> {
-    if bounty_id.is_empty() {
-        anyhow::bail!("bounty id cannot be empty");
-    }
-    if artifact.is_empty() {
-        anyhow::bail!("artifact CID cannot be empty");
-    }
-
-    let store = state.bounty_store();
-    let bounty =
-        store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
-
-    let lib_data = storage_to_lib(&bounty)?;
-    let mut sm = BountyStateMachine::new(lib_data);
-    let now = current_timestamp();
-
-    sm.try_transition(BountyEvent::Submit { artifact_hash: Hash256(artifact.to_string()) }, now)?;
-
-    let updated = lib_to_storage(sm.data(), bounty.escrow_deposited);
-    store.put(&updated)?;
+    let actor = state.require_did()?;
+    let updated =
+        crate::bounty_service::submit(state.db(), bounty_id, actor, artifact, current_timestamp())?;
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
         "artifact_cid": artifact,
-        "state": format!("{:?}", sm.current_state()),
+        "state": updated.state,
     });
 
     writer.write_json(&out);
@@ -323,49 +235,21 @@ fn review_bounty(
     writer: &OutputWriter,
     state: &AppState,
 ) -> Result<()> {
-    if bounty_id.is_empty() {
-        anyhow::bail!("bounty id cannot be empty");
-    }
-    if score > 100 {
-        anyhow::bail!("invalid score: {} (must be 0-100)", score);
-    }
-
-    let store = state.bounty_store();
-    let bounty =
-        store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
-
-    let lib_data = storage_to_lib(&bounty)?;
-    let mut sm = BountyStateMachine::new(lib_data);
-    let now = current_timestamp();
-
-    // Transition Submitted → UnderReview if needed
-    if sm.current_state() == BountyState::Submitted {
-        sm.try_transition(BountyEvent::StartReview, now)?;
-    }
-
-    // Submit review (FSM validates state is UnderReview)
     let reviewer = state.require_did()?.clone();
-    sm.try_transition(
-        BountyEvent::SubmitReview { reviewer, score, notes: feedback.to_string(), signature: None },
-        now,
+    let updated = crate::bounty_service::review(
+        state.db(),
+        bounty_id,
+        &reviewer,
+        score,
+        feedback,
+        current_timestamp(),
     )?;
-
-    // Score-based decision
-    if score >= 60 {
-        sm.try_transition(BountyEvent::Accept, now)?;
-    } else if score < 40 {
-        sm.try_transition(BountyEvent::Reject, now)?;
-    }
-
-    let new_state_str = format!("{:?}", sm.current_state());
-    let updated = lib_to_storage(sm.data(), bounty.escrow_deposited);
-    store.put(&updated)?;
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
         "score": score,
         "feedback": feedback,
-        "state": new_state_str,
+        "state": updated.state,
     });
 
     writer.write_json(&out);
@@ -447,37 +331,8 @@ fn cancel_bounty(
     writer: &OutputWriter,
     state: &AppState,
 ) -> Result<()> {
-    if bounty_id.is_empty() {
-        anyhow::bail!("bounty id cannot be empty");
-    }
-
-    let store = state.bounty_store();
-    let bounty =
-        store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
-
-    let lib_data = storage_to_lib(&bounty)?;
-    let mut sm = BountyStateMachine::new(lib_data);
-    let now = current_timestamp();
-
-    sm.try_transition(BountyEvent::Cancel, now)?;
-
-    let updated = lib_to_storage(sm.data(), bounty.escrow_deposited);
-    store.put(&updated)?;
-
-    let token_store = state.token_store();
-    let creator_did = bounty.requester_did.clone();
-    let token_byte = bounty.reward_token_type;
-    let escrow_amount = bounty.escrow_deposited;
-    if escrow_amount > 0 {
-        if let Err(e) = token_store.transfer(
-            &format!("escrow:{}", bounty_id),
-            &creator_did,
-            token_byte,
-            escrow_amount as u128,
-        ) {
-            tracing::warn!("escrow refund failed: {}", e);
-        }
-    }
+    let actor = state.require_did()?;
+    crate::bounty_service::cancel(state.db(), bounty_id, actor, current_timestamp())?;
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
@@ -491,48 +346,22 @@ fn cancel_bounty(
 }
 
 fn pay_bounty(bounty_id: &str, writer: &OutputWriter, state: &AppState) -> Result<()> {
-    if bounty_id.is_empty() {
-        anyhow::bail!("bounty id cannot be empty");
-    }
-
-    let store = state.bounty_store();
-    let bounty =
-        store.get(bounty_id)?.ok_or_else(|| anyhow::anyhow!("bounty '{bounty_id}' not found"))?;
-
-    let lib_data = storage_to_lib(&bounty)?;
-    let mut sm = BountyStateMachine::new(lib_data);
-    let now = current_timestamp();
-
-    sm.try_transition(BountyEvent::Pay, now)?;
-
-    let claimant_did =
-        sm.data().claimant.as_ref().ok_or_else(|| anyhow::anyhow!("bounty has no claimant"))?;
-    let reward_amount = bounty.reward_amount;
-    let token_byte = bounty.reward_token_type;
-
-    let token_store = state.token_store();
-    token_store.transfer(
-        &format!("escrow:{}", bounty_id),
-        &claimant_did.0,
-        token_byte,
-        reward_amount as u128,
-    )?;
-
-    let updated = lib_to_storage(sm.data(), bounty.escrow_deposited);
-    store.put(&updated)?;
+    let actor = state.require_did()?;
+    let payment = crate::bounty_service::pay(state.db(), bounty_id, actor, current_timestamp())?;
 
     let out = serde_json::json!({
         "bounty_id": bounty_id,
-        "claimant": claimant_did.to_string(),
-        "amount_paid": reward_amount,
-        "token_type": bounty.reward_token_type,
+        "claimant": payment.claimant,
+        "amount_paid": payment.reward_paid,
+        "bond_returned": payment.bond_returned,
+        "token_type": payment.bounty.reward_token_type,
         "state": "Paid",
     });
 
     writer.write_json(&out);
     writer.write_status(&format!(
         "Bounty paid: {bounty_id} → {} tokens to {}",
-        reward_amount, claimant_did
+        payment.reward_paid, payment.claimant
     ));
     Ok(())
 }
@@ -773,6 +602,34 @@ mod tests {
     }
 
     #[test]
+    fn submit_by_non_claimant_is_rejected_without_state_change() {
+        let mut state = seeded_state();
+        create_bounty(
+            "Authorized submit",
+            "Desc",
+            1000,
+            "compute",
+            None,
+            None,
+            &test_writer(),
+            &state,
+        )
+        .unwrap();
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
+        claim_bounty(&bounty_id, 200, &test_writer(), &state).unwrap();
+        state.active_did = Some(neunode_core::types::Did("did:neunode:intruder".to_string()));
+
+        let result =
+            submit_bounty(&bounty_id, "ipfs://QmUnauthorized", "{}", &test_writer(), &state);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("only the bounty claimant"));
+        let bounty = state.bounty_store().get(&bounty_id).unwrap().unwrap();
+        assert_eq!(bounty.state, "Claimed");
+        assert!(bounty.artifact_hash.is_none());
+    }
+
+    #[test]
     fn review_not_submitted_fails() {
         let state = seeded_state();
         let writer = test_writer();
@@ -822,6 +679,12 @@ mod tests {
 
         let updated = state.bounty_store().get(&bounty_id).unwrap().unwrap();
         assert_eq!(updated.state, "Cancelled");
+        assert_eq!(updated.escrow_deposited, 0);
+        let escrow = state.token_store().get_balance(&format!("escrow:{bounty_id}"), 0x01).unwrap();
+        assert_eq!(escrow.balance, 0, "reward and bond must both leave escrow");
+        let actor = state.active_did.as_ref().unwrap();
+        let actor_balance = state.token_store().get_balance(&actor.0, 0x01).unwrap();
+        assert_eq!(actor_balance.balance, 100_000, "reward and provider bond must be returned");
     }
 
     // --- pay_bounty tests ---
@@ -893,11 +756,37 @@ mod tests {
 
         let escrow_bal =
             state.token_store().get_balance(&format!("escrow:{}", bounty_id), 0x01).unwrap();
-        assert_eq!(escrow_bal.balance, 200, "escrow should have stake remaining");
+        assert_eq!(escrow_bal.balance, 0, "reward and provider bond must leave escrow");
 
         let claimant_bal = state.token_store().get_balance(&claimant_did, 0x01).unwrap();
-        // Same DID for creator+claimant in tests: 100000 - 1000(escrow) - 200(stake) + 1000(pay) = 99800
-        assert_eq!(claimant_bal.balance, 99800, "claimant should have received reward from escrow");
+        // Same DID for creator+claimant: both reward and bond return on the happy path.
+        assert_eq!(claimant_bal.balance, 100_000, "payout must conserve reward and bond");
+        let paid = state.bounty_store().get(&bounty_id).unwrap().unwrap();
+        assert_eq!(paid.escrow_deposited, 0);
+    }
+
+    #[test]
+    fn claim_insufficient_balance_preserves_open_state_and_reward_escrow() {
+        let state = seeded_state();
+        let writer = test_writer();
+        create_bounty("Atomic claim", "Desc", 1000, "compute", None, None, &writer, &state)
+            .unwrap();
+        let bounty_id = state.bounty_store().list_all().unwrap()[0].id.clone();
+        let actor = state.active_did.as_ref().unwrap();
+        state
+            .token_store()
+            .set_balance(&actor.0, 0x01, &neunode_storage::token_store::TokenBalance::default())
+            .unwrap();
+
+        let result = claim_bounty(&bounty_id, 200, &test_writer(), &state);
+
+        assert!(result.is_err());
+        let bounty = state.bounty_store().get(&bounty_id).unwrap().unwrap();
+        assert_eq!(bounty.state, "Open");
+        assert!(bounty.provider_did.is_none());
+        assert!(bounty.bond.is_none());
+        let escrow = state.token_store().get_balance(&format!("escrow:{bounty_id}"), 0x01).unwrap();
+        assert_eq!(escrow.balance, 1000, "reward escrow must remain unchanged");
     }
 
     #[test]

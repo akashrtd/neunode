@@ -101,9 +101,33 @@ pub struct BountyListItem {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct BountyActionResponse {
+pub struct BountyClaimResponse {
+    pub bounty_id: String,
+    pub claimant: String,
+    pub bond: u64,
+    pub state: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct BountySubmitResponse {
+    pub bounty_id: String,
+    pub artifact_cid: String,
+    pub state: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct BountyReviewResponse {
+    pub bounty_id: String,
+    pub score: u8,
+    pub feedback: String,
+    pub state: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct BountyCancelResponse {
     pub bounty_id: String,
     pub state: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -111,6 +135,7 @@ pub struct BountyPayResponse {
     pub bounty_id: String,
     pub claimant: String,
     pub amount_paid: u64,
+    pub bond_returned: u64,
     pub state: String,
 }
 
@@ -172,6 +197,20 @@ fn bounty_data_to_response(data: &neunode_storage::bounty_store::BountyData) -> 
         review_deadline: data.review_deadline,
         artifact_hash: data.artifact_hash.clone(),
         bond: data.bond,
+    }
+}
+
+fn service_error(error: crate::bounty_service::BountyServiceError) -> ApiError {
+    use crate::bounty_service::BountyServiceError;
+    match error {
+        BountyServiceError::NotFound(id) => ApiError::NotFound(format!("bounty '{id}' not found")),
+        BountyServiceError::Invalid(message) => ApiError::BadRequest(message),
+        BountyServiceError::Storage(
+            neunode_storage::error::StorageError::InsufficientBalance { required, available },
+        ) => ApiError::BadRequest(format!(
+            "insufficient balance: required {required}, available {available}"
+        )),
+        BountyServiceError::Storage(error) => ApiError::Internal(error.to_string()),
     }
 }
 
@@ -322,7 +361,7 @@ pub async fn show_bounty(
     params(("id" = String, Path, description = "Bounty ID")),
     request_body = ClaimBountyRequest,
     responses(
-        (status = 200, description = "Bounty claimed", body = BountyActionResponse),
+        (status = 200, description = "Bounty claimed", body = BountyClaimResponse),
         (status = 400, description = "Invalid stake or state transition"),
         (status = 401, description = "No active identity"),
         (status = 404, description = "Bounty not found"),
@@ -334,32 +373,17 @@ pub async fn claim_bounty(
     Path(id): Path<String>,
     Json(body): Json<ClaimBountyRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    if body.stake == 0 {
-        return Err(ApiError::BadRequest("stake must be greater than 0".to_string()));
-    }
-
     let claimant = state.require_did()?;
-    let store = neunode_storage::bounty_store::BountyStore::new(&state.db);
-    let bounty = store
-        .get(&id)
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or_else(|| ApiError::NotFound(format!("bounty '{id}' not found")))?;
+    let updated =
+        crate::bounty_service::claim(&state.db, &id, claimant, body.stake, current_timestamp())
+            .map_err(service_error)?;
 
-    if bounty.state != "Open" {
-        return Err(ApiError::BadRequest(format!(
-            "bounty is in '{}' state, expected 'Open'",
-            bounty.state
-        )));
-    }
-
-    let mut updated = bounty;
-    updated.state = "Claimed".to_string();
-    updated.provider_did = Some(claimant.0.clone());
-    updated.bond = Some(body.stake);
-
-    store.put(&updated).map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let resp = BountyActionResponse { bounty_id: id, state: "Claimed".to_string() };
+    let resp = BountyClaimResponse {
+        bounty_id: id,
+        claimant: updated.provider_did.unwrap_or_else(|| claimant.0.clone()),
+        bond: updated.bond.unwrap_or(body.stake),
+        state: updated.state,
+    };
     Ok(types::ok(resp))
 }
 
@@ -369,7 +393,7 @@ pub async fn claim_bounty(
     params(("id" = String, Path, description = "Bounty ID")),
     request_body = SubmitBountyRequest,
     responses(
-        (status = 200, description = "Work submitted", body = BountyActionResponse),
+        (status = 200, description = "Work submitted", body = BountySubmitResponse),
         (status = 400, description = "Invalid artifact or state transition"),
         (status = 401, description = "No active identity"),
         (status = 404, description = "Bounty not found"),
@@ -381,30 +405,13 @@ pub async fn submit_bounty(
     Path(id): Path<String>,
     Json(body): Json<SubmitBountyRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    if body.artifact.is_empty() {
-        return Err(ApiError::BadRequest("artifact CID cannot be empty".to_string()));
-    }
+    let artifact_cid = body.artifact;
+    let actor = state.require_did()?;
+    let updated =
+        crate::bounty_service::submit(&state.db, &id, actor, &artifact_cid, current_timestamp())
+            .map_err(service_error)?;
 
-    let store = neunode_storage::bounty_store::BountyStore::new(&state.db);
-    let bounty = store
-        .get(&id)
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or_else(|| ApiError::NotFound(format!("bounty '{id}' not found")))?;
-
-    if bounty.state != "Claimed" {
-        return Err(ApiError::BadRequest(format!(
-            "bounty is in '{}' state, expected 'Claimed'",
-            bounty.state
-        )));
-    }
-
-    let mut updated = bounty;
-    updated.state = "Submitted".to_string();
-    updated.artifact_hash = Some(body.artifact);
-
-    store.put(&updated).map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let resp = BountyActionResponse { bounty_id: id, state: "Submitted".to_string() };
+    let resp = BountySubmitResponse { bounty_id: id, artifact_cid, state: updated.state };
     Ok(types::ok(resp))
 }
 
@@ -414,7 +421,7 @@ pub async fn submit_bounty(
     params(("id" = String, Path, description = "Bounty ID")),
     request_body = ReviewBountyRequest,
     responses(
-        (status = 200, description = "Review submitted", body = BountyActionResponse),
+        (status = 200, description = "Review submitted", body = BountyReviewResponse),
         (status = 400, description = "Invalid score or state transition"),
         (status = 401, description = "No active identity"),
         (status = 404, description = "Bounty not found"),
@@ -426,40 +433,23 @@ pub async fn review_bounty(
     Path(id): Path<String>,
     Json(body): Json<ReviewBountyRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    if body.score > 100 {
-        return Err(ApiError::BadRequest(format!("invalid score: {} (must be 0-100)", body.score)));
-    }
+    let reviewer = state.require_did()?;
+    let updated = crate::bounty_service::review(
+        &state.db,
+        &id,
+        reviewer,
+        body.score,
+        &body.feedback,
+        current_timestamp(),
+    )
+    .map_err(service_error)?;
 
-    let store = neunode_storage::bounty_store::BountyStore::new(&state.db);
-    let bounty = store
-        .get(&id)
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or_else(|| ApiError::NotFound(format!("bounty '{id}' not found")))?;
-
-    if bounty.state != "Submitted" && bounty.state != "UnderReview" {
-        return Err(ApiError::BadRequest(format!(
-            "bounty is in '{}' state, expected 'Submitted' or 'UnderReview'",
-            bounty.state
-        )));
-    }
-
-    let mut updated = bounty;
-
-    // Transition to UnderReview if still Submitted
-    if updated.state == "Submitted" {
-        updated.state = "UnderReview".to_string();
-    }
-
-    // Score-based decision following the CLI pattern
-    if body.score >= 60 {
-        updated.state = "Accepted".to_string();
-    } else if body.score < 40 {
-        updated.state = "Rejected".to_string();
-    }
-
-    store.put(&updated).map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let resp = BountyActionResponse { bounty_id: id, state: updated.state };
+    let resp = BountyReviewResponse {
+        bounty_id: id,
+        score: body.score,
+        feedback: body.feedback,
+        state: updated.state,
+    };
     Ok(types::ok(resp))
 }
 
@@ -479,34 +469,16 @@ pub async fn pay_bounty(
     State(state): State<Arc<ApiState>>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let store = neunode_storage::bounty_store::BountyStore::new(&state.db);
-    let bounty = store
-        .get(&id)
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or_else(|| ApiError::NotFound(format!("bounty '{id}' not found")))?;
-
-    if bounty.state != "Accepted" {
-        return Err(ApiError::BadRequest(format!(
-            "bounty is in '{}' state, expected 'Accepted'",
-            bounty.state
-        )));
-    }
-
-    let claimant = bounty
-        .provider_did
-        .clone()
-        .ok_or_else(|| ApiError::BadRequest("bounty has no claimant".to_string()))?;
-
-    let mut updated = bounty;
-    updated.state = "Paid".to_string();
-
-    store.put(&updated).map_err(|e| ApiError::Internal(e.to_string()))?;
+    let actor = state.require_did()?;
+    let payment = crate::bounty_service::pay(&state.db, &id, actor, current_timestamp())
+        .map_err(service_error)?;
 
     let resp = BountyPayResponse {
         bounty_id: id,
-        claimant,
-        amount_paid: updated.reward_amount,
-        state: "Paid".to_string(),
+        claimant: payment.claimant,
+        amount_paid: payment.reward_paid,
+        bond_returned: payment.bond_returned,
+        state: payment.bounty.state,
     };
     Ok(types::ok(resp))
 }
@@ -517,7 +489,7 @@ pub async fn pay_bounty(
     params(("id" = String, Path, description = "Bounty ID")),
     request_body = CancelBountyRequest,
     responses(
-        (status = 200, description = "Bounty cancelled", body = BountyActionResponse),
+        (status = 200, description = "Bounty cancelled", body = BountyCancelResponse),
         (status = 400, description = "Invalid state for cancellation"),
         (status = 404, description = "Bounty not found"),
     ),
@@ -526,27 +498,17 @@ pub async fn pay_bounty(
 pub async fn cancel_bounty(
     State(state): State<Arc<ApiState>>,
     Path(id): Path<String>,
-    Json(_body): Json<CancelBountyRequest>,
+    Json(body): Json<CancelBountyRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let store = neunode_storage::bounty_store::BountyStore::new(&state.db);
-    let bounty = store
-        .get(&id)
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or_else(|| ApiError::NotFound(format!("bounty '{id}' not found")))?;
+    let actor = state.require_did()?;
+    let updated = crate::bounty_service::cancel(&state.db, &id, actor, current_timestamp())
+        .map_err(service_error)?;
 
-    if bounty.state != "Open" && bounty.state != "Claimed" {
-        return Err(ApiError::BadRequest(format!(
-            "bounty in '{}' state cannot be cancelled",
-            bounty.state
-        )));
-    }
-
-    let mut updated = bounty;
-    updated.state = "Cancelled".to_string();
-
-    store.put(&updated).map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let resp = BountyActionResponse { bounty_id: id, state: "Cancelled".to_string() };
+    let resp = BountyCancelResponse {
+        bounty_id: id,
+        state: updated.state,
+        reason: body.reason.unwrap_or_default(),
+    };
     Ok(types::ok(resp))
 }
 

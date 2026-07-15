@@ -5,6 +5,7 @@ export type {
 	BountyCreateParams,
 	BountyCreateResult,
 	BountyListParams,
+	BountyPayResult,
 	BountyResource,
 	BountyReviewParams,
 	BountyReviewResult,

@@ -3,6 +3,7 @@ use crate::db::NeunodeDb;
 use crate::error::{Result, StorageError};
 use crate::token_store::TokenStore;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct BountyData {
@@ -134,6 +135,67 @@ impl<'a> BountyStore<'a> {
             (cf::CF_TOKENS, &to_key, &to_bytes),
             (cf::CF_BOUNTIES, &bounty_key, &bounty_bytes),
         ])
+    }
+
+    /// Atomically persist a bounty transition and distribute funds from one
+    /// escrow balance to one or more recipients.
+    pub fn transition_with_payouts(
+        &self,
+        bounty: &BountyData,
+        escrow_did: &str,
+        token_type: u8,
+        payouts: &[(&str, u128)],
+    ) -> Result<()> {
+        let token_store = TokenStore::new(self.db);
+        let total = payouts.iter().try_fold(0_u128, |sum, (_, amount)| {
+            sum.checked_add(*amount)
+                .ok_or_else(|| StorageError::Serialization("payout total overflow".to_string()))
+        })?;
+        let mut escrow = token_store.get_balance(escrow_did, token_type)?;
+        if escrow.balance < total {
+            return Err(StorageError::InsufficientBalance {
+                required: total,
+                available: escrow.balance,
+            });
+        }
+        escrow.balance -= total;
+
+        let mut recipients = BTreeMap::<String, crate::token_store::TokenBalance>::new();
+        for (did, amount) in payouts {
+            if !recipients.contains_key(*did) {
+                recipients.insert((*did).to_string(), token_store.get_balance(did, token_type)?);
+            }
+            let balance = recipients.get_mut(*did).expect("recipient inserted");
+            balance.balance = balance
+                .balance
+                .checked_add(*amount)
+                .ok_or_else(|| StorageError::Serialization("token balance overflow".to_string()))?;
+        }
+
+        let escrow_key = cf::token_key(&cf::did_hash_16(escrow_did), token_type);
+        let escrow_bytes =
+            bincode::serialize(&escrow).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let recipient_records = recipients
+            .into_iter()
+            .map(|(did, balance)| {
+                let key = cf::token_key(&cf::did_hash_16(&did), token_type);
+                let bytes = bincode::serialize(&balance)
+                    .map_err(|e| StorageError::Serialization(e.to_string()))?;
+                Ok((key, bytes))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let bounty_key = bincode::serialize(&bounty.id)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let bounty_bytes =
+            bincode::serialize(bounty).map_err(|e| StorageError::Serialization(e.to_string()))?;
+
+        let mut ops = Vec::with_capacity(recipient_records.len() + 2);
+        ops.push((cf::CF_TOKENS, escrow_key.as_slice(), escrow_bytes.as_slice()));
+        for (key, bytes) in &recipient_records {
+            ops.push((cf::CF_TOKENS, key.as_slice(), bytes.as_slice()));
+        }
+        ops.push((cf::CF_BOUNTIES, bounty_key.as_slice(), bounty_bytes.as_slice()));
+        self.db.batch_put_raw(&ops)
     }
 
     pub fn get(&self, bounty_id: &str) -> Result<Option<BountyData>> {
@@ -446,6 +508,57 @@ mod tests {
                 .balance,
             150
         );
+    }
+
+    #[test]
+    fn transition_with_payouts_conserves_funds() {
+        let db = temp_db();
+        let token_store = TokenStore::new(&db);
+        let bounty_store = BountyStore::new(&db);
+        let mut cancelled = make_bounty("bnty_cancel", "Claimed");
+        cancelled.state = "Cancelled".to_string();
+        cancelled.provider_did = Some("did:neunode:provider".to_string());
+        cancelled.bond = Some(150);
+        cancelled.escrow_deposited = 0;
+        token_store
+            .set_balance(
+                "escrow:bnty_cancel",
+                crate::token_store::TOKEN_COMPUTE,
+                &TokenBalance { balance: 650, ..Default::default() },
+            )
+            .unwrap();
+
+        bounty_store
+            .transition_with_payouts(
+                &cancelled,
+                "escrow:bnty_cancel",
+                crate::token_store::TOKEN_COMPUTE,
+                &[("did:neunode:requester", 500), ("did:neunode:provider", 150)],
+            )
+            .unwrap();
+
+        assert_eq!(
+            token_store
+                .get_balance("escrow:bnty_cancel", crate::token_store::TOKEN_COMPUTE)
+                .unwrap()
+                .balance,
+            0
+        );
+        assert_eq!(
+            token_store
+                .get_balance("did:neunode:requester", crate::token_store::TOKEN_COMPUTE)
+                .unwrap()
+                .balance,
+            500
+        );
+        assert_eq!(
+            token_store
+                .get_balance("did:neunode:provider", crate::token_store::TOKEN_COMPUTE)
+                .unwrap()
+                .balance,
+            150
+        );
+        assert_eq!(bounty_store.get("bnty_cancel").unwrap(), Some(cancelled));
     }
 
     #[test]
