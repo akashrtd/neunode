@@ -10,6 +10,12 @@ interface INeunodeToken {
     function BURNER_ROLE() external view returns (bytes32);
     function GOVERNANCE_ROLE() external view returns (bytes32);
 
+    // ─── Supply ──────────────────────────────────────────────────────────
+
+    function supplyCap() external view returns (uint256);
+    function maxSupplyCap() external view returns (uint256);
+    function setSupplyCap(uint256 newCap) external;
+
     // ─── Staking ──────────────────────────────────────────────────────────
 
     function stake(uint256 amount) external;
@@ -39,4 +45,5 @@ interface INeunodeToken {
     event SeedMinted(address indexed to, uint256 amount);
     event SeedActivated(address indexed account);
     event ActivityUpdated(address indexed account, uint256 timestamp);
+    event SupplyCapUpdated(uint256 previousCap, uint256 newCap);
 }

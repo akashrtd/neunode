@@ -1780,6 +1780,11 @@ export const neunodeBountyAbi = [
 	},
 	{
 		type: "error",
+		name: "ReviewContractNotSet",
+		inputs: [],
+	},
+	{
+		type: "error",
 		name: "ReviewNotAccepted",
 		inputs: [
 			{

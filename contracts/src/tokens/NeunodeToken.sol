@@ -16,8 +16,17 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
     error InsufficientBalance(address account, uint256 required);
     error InsufficientStake(address account, uint256 required);
     error CannotUnstakeSeed();
+    error SupplyCapExceeded(uint256 requestedSupply, uint256 cap);
+    error SupplyCapBelowCurrentSupply(uint256 requestedCap, uint256 currentSupply);
+    error SupplyCapAboveMaximum(uint256 requestedCap, uint256 maximumCap);
 
     uint8 private immutable _tokenDecimals;
+
+    /// @notice Current governance-controlled minting ceiling.
+    uint256 public supplyCap;
+
+    /// @notice Immutable upper bound governance cannot exceed.
+    uint256 public immutable maxSupplyCap;
 
     // ─── Roles ────────────────────────────────────────────────────────────
 
@@ -36,11 +45,19 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
-    constructor(string memory name, string memory symbol, uint8 decimals_)
-        ERC20(name, symbol)
-        Ownable(msg.sender)
-    {
+    constructor(
+        string memory name,
+        string memory symbol,
+        uint8 decimals_,
+        uint256 initialSupplyCap,
+        uint256 maximumSupplyCap
+    ) ERC20(name, symbol) Ownable(msg.sender) {
+        if (initialSupplyCap > maximumSupplyCap) {
+            revert SupplyCapAboveMaximum(initialSupplyCap, maximumSupplyCap);
+        }
         _tokenDecimals = decimals_;
+        supplyCap = initialSupplyCap;
+        maxSupplyCap = maximumSupplyCap;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, msg.sender);
         _grantRole(BURNER_ROLE, msg.sender);
@@ -67,7 +84,21 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
 
     /// @notice Mint tokens (owner or MINTER_ROLE)
     function mint(address to, uint256 amount) external onlyOwnerOrRole(MINTER_ROLE) {
+        _enforceSupplyCap(amount);
         _mint(to, amount);
+    }
+
+    /// @notice Update the operational minting ceiling within the immutable maximum.
+    function setSupplyCap(uint256 newCap) external onlyRole(GOVERNANCE_ROLE) {
+        uint256 currentSupply = totalSupply();
+        if (newCap < currentSupply) {
+            revert SupplyCapBelowCurrentSupply(newCap, currentSupply);
+        }
+        if (newCap > maxSupplyCap) revert SupplyCapAboveMaximum(newCap, maxSupplyCap);
+
+        uint256 previousCap = supplyCap;
+        supplyCap = newCap;
+        emit SupplyCapUpdated(previousCap, newCap);
     }
 
     /// @notice Burn tokens (owner or BURNER_ROLE)
@@ -156,6 +187,7 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
 
     /// @notice Mint seed tokens to an agent. Tokens are staked and locked.
     function mintSeed(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
+        _enforceSupplyCap(amount);
         _mint(address(this), amount);
         _stakedBalances[to] += amount;
         _seedBalances[to] += amount;
@@ -186,5 +218,12 @@ abstract contract NeunodeToken is ERC20, Ownable, AccessControl, INeunodeToken {
     function _updateActivityInternal(address account) internal {
         _lastActivity[account] = block.timestamp;
         emit ActivityUpdated(account, block.timestamp);
+    }
+
+    function _enforceSupplyCap(uint256 amount) internal view {
+        uint256 currentSupply = totalSupply();
+        if (amount > supplyCap - currentSupply) {
+            revert SupplyCapExceeded(currentSupply + amount, supplyCap);
+        }
     }
 }

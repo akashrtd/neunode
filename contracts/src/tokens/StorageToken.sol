@@ -5,5 +5,7 @@ import "./NeunodeToken.sol";
 
 /// @title StorageToken — nStorage, backed by disk space
 contract StorageToken is NeunodeToken {
-    constructor() NeunodeToken("Neunode Storage", "nStorage", 18) {}
+    constructor()
+        NeunodeToken("Neunode Storage", "nStorage", 18, 1_000_000_000e18, 10_000_000_000e18)
+    {}
 }

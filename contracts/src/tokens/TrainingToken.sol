@@ -5,5 +5,7 @@ import "./NeunodeToken.sol";
 
 /// @title TrainingToken — nTrain, backed by training units
 contract TrainingToken is NeunodeToken {
-    constructor() NeunodeToken("Neunode Training", "nTrain", 18) {}
+    constructor()
+        NeunodeToken("Neunode Training", "nTrain", 18, 1_000_000_000e18, 10_000_000_000e18)
+    {}
 }

@@ -657,6 +657,17 @@ export const royaltySplitterAbi = [
 	},
 	{
 		type: "error",
+		name: "InvalidMaxLineageDepth",
+		inputs: [
+			{
+				name: "provided",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+	},
+	{
+		type: "error",
 		name: "LineageTooDeep",
 		inputs: [
 			{

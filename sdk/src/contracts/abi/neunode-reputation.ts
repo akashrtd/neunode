@@ -48,6 +48,19 @@ export const neunodeReputationAbi = [
 	},
 	{
 		type: "function",
+		name: "EPOCH_FINALIZER_ROLE",
+		inputs: [],
+		outputs: [
+			{
+				name: "",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
 		name: "EPOCH_SIZE",
 		inputs: [],
 		outputs: [
@@ -1225,6 +1238,27 @@ export const neunodeReputationAbi = [
 		inputs: [
 			{
 				name: "epoch",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "EpochNotEnded",
+		inputs: [
+			{
+				name: "epoch",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "currentBlock",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "endBlock",
 				type: "uint256",
 				internalType: "uint256",
 			},

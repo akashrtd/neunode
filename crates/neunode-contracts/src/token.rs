@@ -26,12 +26,18 @@ sol! {
     #[derive(Debug)]
     event ActivityUpdated(address indexed account, uint256 timestamp);
 
+    #[derive(Debug)]
+    event SupplyCapUpdated(uint256 previousCap, uint256 newCap);
+
     // ─── Errors ───────────────────────────────────────────────────────────
 
     error UnauthorizedActivityUpdate(address caller, address account);
     error InsufficientBalance(address account, uint256 required);
     error InsufficientStake(address account, uint256 required);
     error CannotUnstakeSeed();
+    error SupplyCapExceeded(uint256 requestedSupply, uint256 cap);
+    error SupplyCapBelowCurrentSupply(uint256 requestedCap, uint256 currentSupply);
+    error SupplyCapAboveMaximum(uint256 requestedCap, uint256 maximumCap);
 
     // ─── Functions (INeunodeToken interface) ───────────────────────────────
 
@@ -39,6 +45,11 @@ sol! {
     function MINTER_ROLE() external view returns (bytes32);
     function BURNER_ROLE() external view returns (bytes32);
     function GOVERNANCE_ROLE() external view returns (bytes32);
+
+    // Supply
+    function supplyCap() external view returns (uint256);
+    function maxSupplyCap() external view returns (uint256);
+    function setSupplyCap(uint256 newCap) external;
 
     // Staking
     function stake(uint256 amount) external;
@@ -94,6 +105,7 @@ mod tests {
         assert!(!SeedMinted::SIGNATURE.is_empty());
         assert!(!SeedActivated::SIGNATURE.is_empty());
         assert!(!ActivityUpdated::SIGNATURE.is_empty());
+        assert!(!SupplyCapUpdated::SIGNATURE.is_empty());
     }
 
     #[test]
@@ -104,6 +116,7 @@ mod tests {
         assert!(SeedMinted::SIGNATURE.starts_with("SeedMinted("));
         assert!(SeedActivated::SIGNATURE.starts_with("SeedActivated("));
         assert!(ActivityUpdated::SIGNATURE.starts_with("ActivityUpdated("));
+        assert!(SupplyCapUpdated::SIGNATURE.starts_with("SupplyCapUpdated("));
     }
 
     #[test]
@@ -114,6 +127,7 @@ mod tests {
         assert_eq!(SeedMinted::SIGNATURE_HASH.as_slice().len(), 32);
         assert_eq!(SeedActivated::SIGNATURE_HASH.as_slice().len(), 32);
         assert_eq!(ActivityUpdated::SIGNATURE_HASH.as_slice().len(), 32);
+        assert_eq!(SupplyCapUpdated::SIGNATURE_HASH.as_slice().len(), 32);
     }
 
     #[test]
@@ -125,6 +139,7 @@ mod tests {
             SeedMinted::SIGNATURE_HASH,
             SeedActivated::SIGNATURE_HASH,
             ActivityUpdated::SIGNATURE_HASH,
+            SupplyCapUpdated::SIGNATURE_HASH,
         ];
         for i in 0..selectors.len() {
             for j in (i + 1)..selectors.len() {
@@ -156,6 +171,13 @@ mod tests {
         let _ = InsufficientBalance { account: acct, required: U256::from(1000) };
         let _ = InsufficientStake { account: acct, required: U256::from(500) };
         let _ = CannotUnstakeSeed {};
+        let _ = SupplyCapExceeded { requestedSupply: U256::from(1001), cap: U256::from(1000) };
+        let _ = SupplyCapBelowCurrentSupply {
+            requestedCap: U256::from(999),
+            currentSupply: U256::from(1000),
+        };
+        let _ =
+            SupplyCapAboveMaximum { requestedCap: U256::from(1001), maximumCap: U256::from(1000) };
     }
 
     #[test]
@@ -164,6 +186,9 @@ mod tests {
         assert_eq!(InsufficientBalance::SELECTOR.len(), 4);
         assert_eq!(InsufficientStake::SELECTOR.len(), 4);
         assert_eq!(CannotUnstakeSeed::SELECTOR.len(), 4);
+        assert_eq!(SupplyCapExceeded::SELECTOR.len(), 4);
+        assert_eq!(SupplyCapBelowCurrentSupply::SELECTOR.len(), 4);
+        assert_eq!(SupplyCapAboveMaximum::SELECTOR.len(), 4);
     }
 
     #[test]

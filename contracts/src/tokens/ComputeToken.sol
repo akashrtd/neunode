@@ -5,5 +5,7 @@ import "./NeunodeToken.sol";
 
 /// @title ComputeToken — nCompute, backed by GPU/CPU hours
 contract ComputeToken is NeunodeToken {
-    constructor() NeunodeToken("Neunode Compute", "nCompute", 18) {}
+    constructor()
+        NeunodeToken("Neunode Compute", "nCompute", 18, 1_000_000_000e18, 10_000_000_000e18)
+    {}
 }

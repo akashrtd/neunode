@@ -126,6 +126,17 @@ export const diamondAbi = [
 	},
 	{
 		type: "error",
+		name: "FunctionNotFound",
+		inputs: [
+			{
+				name: "selector",
+				type: "bytes4",
+				internalType: "bytes4",
+			},
+		],
+	},
+	{
+		type: "error",
 		name: "InitReverted",
 		inputs: [],
 	},

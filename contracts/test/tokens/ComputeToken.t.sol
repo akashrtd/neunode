@@ -28,6 +28,8 @@ contract ComputeTokenTest is Test {
         assertEq(token.symbol(), "nCompute");
         assertEq(token.decimals(), 18);
         assertEq(token.totalSupply(), 0);
+        assertEq(token.supplyCap(), 1_000_000_000e18);
+        assertEq(token.maxSupplyCap(), 10_000_000_000e18);
     }
 
     // ─── Mint ─────────────────────────────────────────────────────────────
@@ -47,6 +49,81 @@ contract ComputeTokenTest is Test {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
         token.mint(alice, 100e18);
+    }
+
+    function testMintAtSupplyCap() public {
+        token.mint(alice, token.supplyCap());
+        assertEq(token.totalSupply(), token.supplyCap());
+    }
+
+    function testRevertMintAboveSupplyCap() public {
+        uint256 cap = token.supplyCap();
+        token.mint(alice, cap);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeToken.SupplyCapExceeded.selector, cap + 1, cap)
+        );
+        token.mint(alice, 1);
+    }
+
+    function testRevertSeedMintAboveSupplyCap() public {
+        uint256 cap = token.supplyCap();
+        token.mint(alice, cap);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeToken.SupplyCapExceeded.selector, cap + 1, cap)
+        );
+        token.mintSeed(bob, 1);
+    }
+
+    function testGovernanceCanRaiseSupplyCapWithinMaximum() public {
+        uint256 oldCap = token.supplyCap();
+        uint256 newCap = oldCap + 1_000_000e18;
+
+        vm.expectEmit(false, false, false, true);
+        emit INeunodeToken.SupplyCapUpdated(oldCap, newCap);
+        token.setSupplyCap(newCap);
+
+        token.mint(alice, newCap);
+        assertEq(token.totalSupply(), newCap);
+    }
+
+    function testRevertSupplyCapAboveImmutableMaximum() public {
+        uint256 maximum = token.maxSupplyCap();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                NeunodeToken.SupplyCapAboveMaximum.selector, maximum + 1, maximum
+            )
+        );
+        token.setSupplyCap(maximum + 1);
+    }
+
+    function testRevertSupplyCapBelowCurrentSupply() public {
+        token.mint(alice, 100e18);
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeToken.SupplyCapBelowCurrentSupply.selector, 99e18, 100e18)
+        );
+        token.setSupplyCap(99e18);
+    }
+
+    function testRevertSetSupplyCapWithoutGovernanceRole() public {
+        bytes32 governanceRole = token.GOVERNANCE_ROLE();
+        uint256 currentCap = token.supplyCap();
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, alice, governanceRole
+            )
+        );
+        token.setSupplyCap(currentCap);
+    }
+
+    function testBurnRestoresMintingCapacity() public {
+        uint256 cap = token.supplyCap();
+        token.mint(alice, cap);
+        token.burn(alice, 100e18);
+        token.mint(bob, 100e18);
+        assertEq(token.totalSupply(), cap);
     }
 
     // ─── Burn ─────────────────────────────────────────────────────────────

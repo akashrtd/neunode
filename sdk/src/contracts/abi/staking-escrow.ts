@@ -153,6 +153,25 @@ export const stakingEscrowAbi = [
 	},
 	{
 		type: "function",
+		name: "lastDecayTimestamp",
+		inputs: [
+			{
+				name: "account",
+				type: "address",
+				internalType: "address",
+			},
+		],
+		outputs: [
+			{
+				name: "",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
 		name: "neunodeToken",
 		inputs: [],
 		outputs: [
@@ -344,5 +363,21 @@ export const stakingEscrowAbi = [
 				internalType: "address",
 			},
 		],
+	},
+	{
+		type: "error",
+		name: "InvalidActivityLevel",
+		inputs: [
+			{
+				name: "level",
+				type: "uint8",
+				internalType: "uint8",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "InvalidTokenAddress",
+		inputs: [],
 	},
 ] as const;

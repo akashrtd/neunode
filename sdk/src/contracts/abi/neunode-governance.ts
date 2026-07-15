@@ -1124,6 +1124,17 @@ export const neunodeGovernanceAbi = [
 	},
 	{
 		type: "error",
+		name: "InvalidVoteType",
+		inputs: [
+			{
+				name: "support",
+				type: "uint8",
+				internalType: "uint8",
+			},
+		],
+	},
+	{
+		type: "error",
 		name: "NotAuthorized",
 		inputs: [
 			{
@@ -1240,6 +1251,54 @@ export const neunodeGovernanceAbi = [
 				name: "target",
 				type: "address",
 				internalType: "address",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "TimelockBelowMinimum",
+		inputs: [
+			{
+				name: "provided",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "minimum",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "VotingDelayBelowMinimum",
+		inputs: [
+			{
+				name: "provided",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "minimum",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "VotingPeriodBelowMinimum",
+		inputs: [
+			{
+				name: "provided",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "minimum",
+				type: "uint256",
+				internalType: "uint256",
 			},
 		],
 	},

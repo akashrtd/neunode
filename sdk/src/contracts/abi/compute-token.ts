@@ -271,6 +271,19 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "function",
+		name: "maxSupplyCap",
+		inputs: [],
+		outputs: [
+			{
+				name: "",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
 		name: "mint",
 		inputs: [
 			{
@@ -395,6 +408,19 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "function",
+		name: "setSupplyCap",
+		inputs: [
+			{
+				name: "newCap",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
 		name: "slashStake",
 		inputs: [
 			{
@@ -434,6 +460,19 @@ export const computeTokenAbi = [
 				internalType: "address",
 			},
 		],
+		outputs: [
+			{
+				name: "",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "supplyCap",
+		inputs: [],
 		outputs: [
 			{
 				name: "",
@@ -790,6 +829,25 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "event",
+		name: "SupplyCapUpdated",
+		inputs: [
+			{
+				name: "previousCap",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+			{
+				name: "newCap",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "event",
 		name: "Transfer",
 		inputs: [
 			{
@@ -995,6 +1053,54 @@ export const computeTokenAbi = [
 				name: "account",
 				type: "address",
 				internalType: "address",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "SupplyCapAboveMaximum",
+		inputs: [
+			{
+				name: "requestedCap",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "maximumCap",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "SupplyCapBelowCurrentSupply",
+		inputs: [
+			{
+				name: "requestedCap",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "currentSupply",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "SupplyCapExceeded",
+		inputs: [
+			{
+				name: "requestedSupply",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "cap",
+				type: "uint256",
+				internalType: "uint256",
 			},
 		],
 	},

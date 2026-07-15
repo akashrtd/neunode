@@ -5,5 +5,7 @@ import "./NeunodeToken.sol";
 
 /// @title BandwidthToken — nBandwidth, backed by transfer volume
 contract BandwidthToken is NeunodeToken {
-    constructor() NeunodeToken("Neunode Bandwidth", "nBandwidth", 18) {}
+    constructor()
+        NeunodeToken("Neunode Bandwidth", "nBandwidth", 18, 1_000_000_000e18, 10_000_000_000e18)
+    {}
 }
