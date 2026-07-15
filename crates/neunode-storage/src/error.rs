@@ -26,11 +26,17 @@ pub enum StorageError {
     #[error("insufficient balance: required {required}, available {available}")]
     InsufficientBalance { required: u128, available: u128 },
 
+    #[error("insufficient staked balance: required {required}, available {available}")]
+    InsufficientStakedBalance { required: u128, available: u128 },
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
     #[error("token count mismatch: expected {expected}, got {got}")]
     TokenCountMismatch { expected: usize, got: usize },
+
+    #[error("ledger mutation lock is poisoned")]
+    LedgerLockPoisoned,
 }
 
 pub type Result<T> = std::result::Result<T, StorageError>;

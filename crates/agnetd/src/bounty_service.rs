@@ -57,6 +57,16 @@ pub fn claim(
     stake: u64,
     now: Timestamp,
 ) -> Result<BountyData> {
+    db.with_ledger_write(|| claim_locked(db, bounty_id, claimant, stake, now))
+}
+
+fn claim_locked(
+    db: &NeunodeDb,
+    bounty_id: &str,
+    claimant: &Did,
+    stake: u64,
+    now: Timestamp,
+) -> Result<BountyData> {
     if bounty_id.is_empty() {
         return Err(BountyServiceError::Invalid("bounty id cannot be empty".to_string()));
     }
@@ -91,6 +101,16 @@ pub fn submit(
     artifact: &str,
     now: Timestamp,
 ) -> Result<BountyData> {
+    db.with_ledger_write(|| submit_locked(db, bounty_id, actor, artifact, now))
+}
+
+fn submit_locked(
+    db: &NeunodeDb,
+    bounty_id: &str,
+    actor: &Did,
+    artifact: &str,
+    now: Timestamp,
+) -> Result<BountyData> {
     if bounty_id.is_empty() {
         return Err(BountyServiceError::Invalid("bounty id cannot be empty".to_string()));
     }
@@ -110,6 +130,17 @@ pub fn submit(
 }
 
 pub fn review(
+    db: &NeunodeDb,
+    bounty_id: &str,
+    reviewer: &Did,
+    score: u8,
+    feedback: &str,
+    now: Timestamp,
+) -> Result<BountyData> {
+    db.with_ledger_write(|| review_locked(db, bounty_id, reviewer, score, feedback, now))
+}
+
+fn review_locked(
     db: &NeunodeDb,
     bounty_id: &str,
     reviewer: &Did,
@@ -155,6 +186,15 @@ pub fn review(
 }
 
 pub fn cancel(db: &NeunodeDb, bounty_id: &str, actor: &Did, now: Timestamp) -> Result<BountyData> {
+    db.with_ledger_write(|| cancel_locked(db, bounty_id, actor, now))
+}
+
+fn cancel_locked(
+    db: &NeunodeDb,
+    bounty_id: &str,
+    actor: &Did,
+    now: Timestamp,
+) -> Result<BountyData> {
     if bounty_id.is_empty() {
         return Err(BountyServiceError::Invalid("bounty id cannot be empty".to_string()));
     }
@@ -186,6 +226,15 @@ pub fn cancel(db: &NeunodeDb, bounty_id: &str, actor: &Did, now: Timestamp) -> R
 }
 
 pub fn pay(db: &NeunodeDb, bounty_id: &str, actor: &Did, now: Timestamp) -> Result<PaymentResult> {
+    db.with_ledger_write(|| pay_locked(db, bounty_id, actor, now))
+}
+
+fn pay_locked(
+    db: &NeunodeDb,
+    bounty_id: &str,
+    actor: &Did,
+    now: Timestamp,
+) -> Result<PaymentResult> {
     if bounty_id.is_empty() {
         return Err(BountyServiceError::Invalid("bounty id cannot be empty".to_string()));
     }
@@ -336,4 +385,102 @@ fn lib_to_storage(data: &LibBountyData, escrow: u64) -> Result<BountyData> {
         artifact_hash: data.artifact_hash.as_ref().map(|hash| hash.0.clone()),
         bond,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use neunode_storage::token_store::{TokenBalance, TokenStore, TOKEN_COMPUTE};
+    use std::sync::{Arc, Barrier};
+
+    fn temp_db() -> NeunodeDb {
+        let path = std::env::temp_dir().join(format!(
+            "neunode_bounty_service_concurrency_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        NeunodeDb::open(&path).unwrap()
+    }
+
+    #[test]
+    fn concurrent_claims_lock_exactly_one_provider_bond() {
+        let db = Arc::new(temp_db());
+        let creator = "did:neunode:creator";
+        let claimants = [Did("did:neunode:alice".to_string()), Did("did:neunode:bob".to_string())];
+        let token_store = TokenStore::new(&db);
+        token_store
+            .set_balance(
+                creator,
+                TOKEN_COMPUTE,
+                &TokenBalance { balance: 500, ..Default::default() },
+            )
+            .unwrap();
+        for claimant in &claimants {
+            token_store
+                .set_balance(
+                    &claimant.0,
+                    TOKEN_COMPUTE,
+                    &TokenBalance { balance: 100, ..Default::default() },
+                )
+                .unwrap();
+        }
+        let bounty = BountyData {
+            id: "bnty_concurrent".to_string(),
+            state: "Open".to_string(),
+            requester_did: creator.to_string(),
+            provider_did: None,
+            reward_amount: 500,
+            reward_token_type: TOKEN_COMPUTE,
+            deadline: 20_000,
+            created_at: 1_000,
+            escrow_deposited: 500,
+            title: "Concurrent claim".to_string(),
+            description: "Only one claimant may win".to_string(),
+            claim_deadline: 10_000,
+            work_deadline: 20_000,
+            review_deadline: 30_000,
+            artifact_hash: None,
+            bond: None,
+        };
+        BountyStore::new(&db)
+            .create_with_escrow(&bounty, creator, "escrow:bnty_concurrent", TOKEN_COMPUTE, 500)
+            .unwrap();
+
+        let barrier = Arc::new(Barrier::new(3));
+        let handles: Vec<_> = claimants
+            .iter()
+            .cloned()
+            .map(|claimant| {
+                let db = Arc::clone(&db);
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    claim(&db, "bnty_concurrent", &claimant, 75, 2_000)
+                })
+            })
+            .collect();
+        barrier.wait();
+        let results: Vec<_> = handles.into_iter().map(|handle| handle.join().unwrap()).collect();
+
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(results.iter().filter(|result| result.is_err()).count(), 1);
+        let stored = BountyStore::new(&db).get("bnty_concurrent").unwrap().unwrap();
+        let winner = stored.provider_did.expect("one claimant persisted");
+        assert_eq!(stored.state, "Claimed");
+        assert_eq!(stored.bond, Some(75));
+        assert_eq!(
+            TokenStore::new(&db)
+                .get_balance("escrow:bnty_concurrent", TOKEN_COMPUTE)
+                .unwrap()
+                .balance,
+            575
+        );
+        for claimant in claimants {
+            let expected = if claimant.0 == winner { 25 } else { 100 };
+            assert_eq!(
+                TokenStore::new(&db).get_balance(&claimant.0, TOKEN_COMPUTE).unwrap().balance,
+                expected
+            );
+        }
+    }
 }

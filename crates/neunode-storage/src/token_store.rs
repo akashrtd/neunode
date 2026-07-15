@@ -67,6 +67,61 @@ impl<'a> TokenStore<'a> {
         token_type: u8,
         amount: u128,
     ) -> Result<()> {
+        self.db.with_ledger_write(|| self.transfer_locked(from_did, to_did, token_type, amount))
+    }
+
+    pub fn stake(&self, agent_did: &str, token_type: u8, amount: u128) -> Result<TokenBalance> {
+        self.db.with_ledger_write(|| {
+            let mut balance = self.get_balance(agent_did, token_type)?;
+            if balance.balance < amount {
+                return Err(StorageError::InsufficientBalance {
+                    required: amount,
+                    available: balance.balance,
+                });
+            }
+            balance.balance -= amount;
+            balance.staked = balance.staked.checked_add(amount).ok_or_else(|| {
+                StorageError::Serialization("staked balance overflow".to_string())
+            })?;
+            self.set_balance(agent_did, token_type, &balance)?;
+            Ok(balance)
+        })
+    }
+
+    pub fn unstake_first(
+        &self,
+        agent_did: &str,
+        token_types: &[u8],
+        amount: u128,
+    ) -> Result<(u8, TokenBalance)> {
+        self.db.with_ledger_write(|| {
+            let mut largest_stake = 0;
+            for token_type in token_types {
+                let mut balance = self.get_balance(agent_did, *token_type)?;
+                largest_stake = largest_stake.max(balance.staked);
+                if balance.staked >= amount {
+                    balance.staked -= amount;
+                    balance.balance = balance.balance.checked_add(amount).ok_or_else(|| {
+                        StorageError::Serialization("token balance overflow".to_string())
+                    })?;
+                    self.set_balance(agent_did, *token_type, &balance)?;
+                    return Ok((*token_type, balance));
+                }
+            }
+            Err(StorageError::InsufficientStakedBalance {
+                required: amount,
+                available: largest_stake,
+            })
+        })
+    }
+
+    fn transfer_locked(
+        &self,
+        from_did: &str,
+        to_did: &str,
+        token_type: u8,
+        amount: u128,
+    ) -> Result<()> {
         let mut from_balance = self.get_balance(from_did, token_type)?;
         if from_balance.balance < amount {
             return Err(StorageError::InsufficientBalance {
@@ -99,6 +154,7 @@ mod tests {
     use super::*;
     use crate::db::NeunodeDb;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, Barrier};
 
     static TEST_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -239,5 +295,49 @@ mod tests {
 
         let training_bal = store.get_balance(from, TOKEN_TRAINING).unwrap();
         assert_eq!(training_bal.balance, 999);
+    }
+
+    #[test]
+    fn concurrent_transfers_are_isolated_and_conserve_balance() {
+        let db = Arc::new(temp_db());
+        let sender = "did:neunode:concurrent-sender";
+        TokenStore::new(&db)
+            .set_balance(
+                sender,
+                TOKEN_COMPUTE,
+                &TokenBalance { balance: 1000, ..Default::default() },
+            )
+            .unwrap();
+        let barrier = Arc::new(Barrier::new(11));
+        let mut handles = Vec::new();
+        for index in 0..10 {
+            let db = Arc::clone(&db);
+            let barrier = Arc::clone(&barrier);
+            handles.push(std::thread::spawn(move || {
+                barrier.wait();
+                TokenStore::new(&db).transfer(
+                    sender,
+                    &format!("did:neunode:recipient-{index}"),
+                    TOKEN_COMPUTE,
+                    100,
+                )
+            }));
+        }
+        barrier.wait();
+        for handle in handles {
+            handle.join().unwrap().unwrap();
+        }
+
+        let store = TokenStore::new(&db);
+        assert_eq!(store.get_balance(sender, TOKEN_COMPUTE).unwrap().balance, 0);
+        let recipient_total: u128 = (0..10)
+            .map(|index| {
+                store
+                    .get_balance(&format!("did:neunode:recipient-{index}"), TOKEN_COMPUTE)
+                    .unwrap()
+                    .balance
+            })
+            .sum();
+        assert_eq!(recipient_total, 1000);
     }
 }

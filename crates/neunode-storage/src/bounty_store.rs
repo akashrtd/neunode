@@ -60,6 +60,19 @@ impl<'a> BountyStore<'a> {
         token_type: u8,
         amount: u128,
     ) -> Result<()> {
+        self.db.with_ledger_write(|| {
+            self.create_with_escrow_locked(bounty, creator_did, escrow_did, token_type, amount)
+        })
+    }
+
+    fn create_with_escrow_locked(
+        &self,
+        bounty: &BountyData,
+        creator_did: &str,
+        escrow_did: &str,
+        token_type: u8,
+        amount: u128,
+    ) -> Result<()> {
         let token_store = TokenStore::new(self.db);
 
         let mut from_balance = token_store.get_balance(creator_did, token_type)?;

@@ -2,7 +2,7 @@ use rocksdb::{
     BoundColumnFamily, ColumnFamilyDescriptor, Direction, IteratorMode, Options, WriteBatch, DB,
 };
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::cache::Cache;
 use crate::cf::{self, Partition};
@@ -14,6 +14,7 @@ pub struct NeunodeDb {
     graph_db: DB,
     cache: Cache,
     partition_map: std::collections::HashMap<&'static str, Partition>,
+    ledger_write_lock: Mutex<()>,
 }
 
 impl NeunodeDb {
@@ -37,7 +38,14 @@ impl NeunodeDb {
         let cache = Cache::new(max_cache_entries, cache_ttl_secs);
         let partition_map = cf::build_partition_map();
 
-        Ok(Self { ledger_db, network_db, graph_db, cache, partition_map })
+        Ok(Self {
+            ledger_db,
+            network_db,
+            graph_db,
+            cache,
+            partition_map,
+            ledger_write_lock: Mutex::new(()),
+        })
     }
 
     fn open_db_for_cfs(path: &Path, required: Vec<&'static str>) -> Result<DB> {
@@ -83,6 +91,23 @@ impl NeunodeDb {
             .get(cf_name)
             .copied()
             .ok_or_else(|| StorageError::ColumnFamilyNotFound(cf_name.to_string()))
+    }
+
+    /// Serialize a complete ledger read-validate-write operation.
+    ///
+    /// RocksDB prevents multiple processes from opening the same database path;
+    /// this lock supplies the missing isolation between threads in the owning
+    /// daemon process. Callers must keep the closure synchronous and short.
+    pub fn with_ledger_write<T, E>(
+        &self,
+        operation: impl FnOnce() -> std::result::Result<T, E>,
+    ) -> std::result::Result<T, E>
+    where
+        E: From<StorageError>,
+    {
+        let _guard =
+            self.ledger_write_lock.lock().map_err(|_| E::from(StorageError::LedgerLockPoisoned))?;
+        operation()
     }
 
     pub fn get_raw(&self, cf_name: &str, key: &[u8]) -> Result<Option<Vec<u8>>> {

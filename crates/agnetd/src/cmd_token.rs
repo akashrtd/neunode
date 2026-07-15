@@ -116,13 +116,7 @@ fn stake_tokens(amount: u64, token: &str, writer: &OutputWriter, state: &AppStat
     let token_byte = token_type_to_u8(&tt);
 
     let store = state.token_store();
-    let mut bal = store.get_balance(&did.0, token_byte)?;
-    if bal.balance < amount as u128 {
-        anyhow::bail!("insufficient balance: have {}, need {}", bal.balance, amount);
-    }
-    bal.balance -= amount as u128;
-    bal.staked += amount as u128;
-    store.set_balance(&did.0, token_byte, &bal)?;
+    store.stake(&did.0, token_byte, amount as u128)?;
 
     let out = serde_json::json!({
         "amount": amount,
@@ -144,30 +138,21 @@ fn unstake_tokens(amount: u64, writer: &OutputWriter, state: &AppState) -> Resul
     let did = state.require_did()?;
     let store = state.token_store();
 
-    let token_types = [
-        (TokenType::Compute, TOKEN_COMPUTE),
-        (TokenType::Train, TOKEN_TRAINING),
-        (TokenType::Bandwidth, TOKEN_BANDWIDTH),
-        (TokenType::Storage, TOKEN_STORAGE),
-    ];
-
-    let mut found = None;
-    for (tt, byte) in &token_types {
-        let bal = store.get_balance(&did.0, *byte)?;
-        if bal.staked >= amount as u128 {
-            found = Some((*tt, *byte, bal));
-            break;
+    let token_types = [TOKEN_COMPUTE, TOKEN_TRAINING, TOKEN_BANDWIDTH, TOKEN_STORAGE];
+    let (token_byte, _) = match store.unstake_first(&did.0, &token_types, amount as u128) {
+        Ok(result) => result,
+        Err(neunode_storage::error::StorageError::InsufficientStakedBalance { .. }) => {
+            anyhow::bail!("no staked tokens found with sufficient balance to unstake {amount}")
         }
-    }
-
-    let (tt, token_byte, mut bal) = match found {
-        Some(v) => v,
-        None => anyhow::bail!("no staked tokens found with sufficient balance to unstake {amount}"),
+        Err(error) => return Err(error.into()),
     };
-
-    bal.staked -= amount as u128;
-    bal.balance += amount as u128;
-    store.set_balance(&did.0, token_byte, &bal)?;
+    let tt = match token_byte {
+        TOKEN_COMPUTE => TokenType::Compute,
+        TOKEN_TRAINING => TokenType::Train,
+        TOKEN_BANDWIDTH => TokenType::Bandwidth,
+        TOKEN_STORAGE => TokenType::Storage,
+        _ => unreachable!("known token type selected"),
+    };
 
     let unbond_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

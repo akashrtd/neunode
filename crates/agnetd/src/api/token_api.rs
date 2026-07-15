@@ -281,19 +281,12 @@ pub async fn stake(
     let token_name = token_type_display(&tt).to_string();
 
     let store = TokenStore::new(&state.db);
-    let mut bal =
-        store.get_balance(&did.0, token_byte).map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    if bal.balance < body.amount as u128 {
-        return Err(ApiError::BadRequest(format!(
-            "insufficient balance: have {}, need {}",
-            bal.balance, body.amount
-        )));
-    }
-
-    bal.balance -= body.amount as u128;
-    bal.staked += body.amount as u128;
-    store.set_balance(&did.0, token_byte, &bal).map_err(|e| ApiError::Internal(e.to_string()))?;
+    store.stake(&did.0, token_byte, body.amount as u128).map_err(|error| match error {
+        neunode_storage::error::StorageError::InsufficientBalance { required, available } => {
+            ApiError::BadRequest(format!("insufficient balance: have {available}, need {required}"))
+        }
+        other => ApiError::Internal(other.to_string()),
+    })?;
 
     Ok(types::ok(StakeResponse {
         amount: body.amount,
@@ -323,33 +316,25 @@ pub async fn unstake(
     let did = state.require_did()?;
     let store = TokenStore::new(&state.db);
 
-    let token_types = [
-        (TokenType::Compute, TOKEN_COMPUTE),
-        (TokenType::Train, TOKEN_TRAINING),
-        (TokenType::Bandwidth, TOKEN_BANDWIDTH),
-        (TokenType::Storage, TOKEN_STORAGE),
-    ];
-
-    let mut found = None;
-    for (tt, byte) in &token_types {
-        let bal =
-            store.get_balance(&did.0, *byte).map_err(|e| ApiError::Internal(e.to_string()))?;
-        if bal.staked >= body.amount as u128 {
-            found = Some((*tt, *byte, bal));
-            break;
-        }
-    }
-
-    let (tt, token_byte, mut bal) = found.ok_or_else(|| {
-        ApiError::BadRequest(format!(
-            "no staked tokens found with sufficient balance to unstake {}",
-            body.amount
-        ))
-    })?;
-
-    bal.staked -= body.amount as u128;
-    bal.balance += body.amount as u128;
-    store.set_balance(&did.0, token_byte, &bal).map_err(|e| ApiError::Internal(e.to_string()))?;
+    let token_types = [TOKEN_COMPUTE, TOKEN_TRAINING, TOKEN_BANDWIDTH, TOKEN_STORAGE];
+    let (token_byte, _) = store.unstake_first(&did.0, &token_types, body.amount as u128).map_err(
+        |error| match error {
+            neunode_storage::error::StorageError::InsufficientStakedBalance { .. } => {
+                ApiError::BadRequest(format!(
+                    "no staked tokens found with sufficient balance to unstake {}",
+                    body.amount
+                ))
+            }
+            other => ApiError::Internal(other.to_string()),
+        },
+    )?;
+    let tt = match token_byte {
+        TOKEN_COMPUTE => TokenType::Compute,
+        TOKEN_TRAINING => TokenType::Train,
+        TOKEN_BANDWIDTH => TokenType::Bandwidth,
+        TOKEN_STORAGE => TokenType::Storage,
+        _ => unreachable!("known token type selected"),
+    };
 
     let unbond_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
