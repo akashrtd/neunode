@@ -64,9 +64,9 @@ bincode = "1.3"
 # CLI — CRITICAL VERSIONS
 clap = { version = "4.5", features = ["derive", "env", "string"] }
 comfy-table = "7"
-indicatif = "0.17"
+indicatif = "0.18"
 console = "0.15"
-ratatui = "0.29"
+ratatui = "0.30"
 crossterm = "0.28"
 
 # Logging
