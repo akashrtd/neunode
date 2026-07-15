@@ -130,7 +130,7 @@ pub fn spawn_mesh_task(
     }
 
     for addr in &bootstrap_peers {
-        node.add_bootstrap_peer(addr.clone());
+        node.add_bootstrap_peer(addr.clone())?;
     }
 
     if !bootstrap_peers.is_empty() {
@@ -258,6 +258,15 @@ async fn mesh_event_loop(
                     }
                     NodeEvent::PeerDisconnected(peer_id) => {
                         tracing::info!("Peer disconnected: {}", peer_id);
+                    }
+                    NodeEvent::NatStatusChanged(status) => {
+                        tracing::info!(?status, "AutoNAT reachability changed");
+                    }
+                    NodeEvent::HolePunchSucceeded { peer_id } => {
+                        tracing::info!(%peer_id, "DCUtR upgraded relayed connection to direct");
+                    }
+                    NodeEvent::HolePunchFailed { peer_id, error } => {
+                        tracing::warn!(%peer_id, %error, "DCUtR direct connection upgrade failed");
                     }
                     _ => {}
                 }

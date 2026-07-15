@@ -137,10 +137,15 @@ impl P2pNode {
         &self.subscribed_topics
     }
 
-    pub fn add_bootstrap_peer(&mut self, addr: Multiaddr) {
-        let peer_id =
-            crate::discovery::peer_id_from_multiaddr(&addr).unwrap_or_else(|| self.local_peer_id());
-        self.swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+    pub fn add_bootstrap_peer(&mut self, addr: Multiaddr) -> Result<()> {
+        let peer_id = crate::discovery::peer_id_from_multiaddr(&addr).ok_or_else(|| {
+            P2pError::InvalidAddress("bootstrap address must end with /p2p/<peer-id>".to_string())
+        })?;
+        let behaviour = self.swarm.behaviour_mut();
+        behaviour.kademlia.add_address(&peer_id, addr.clone());
+        // Configured bootstrap nodes are trusted AutoNAT dial-back servers.
+        behaviour.autonat.add_server(peer_id, Some(addr));
+        Ok(())
     }
 
     pub fn bootstrap_dht(&mut self) -> Result<()> {
@@ -205,6 +210,8 @@ pub enum NodeEvent {
     PingResult { peer_id: PeerId, rtt_ms: u64 },
     KademliaEvent(libp2p::kad::Event),
     NatStatusChanged(libp2p::autonat::NatStatus),
+    HolePunchSucceeded { peer_id: PeerId },
+    HolePunchFailed { peer_id: PeerId, error: String },
     CatchupRequest { source: Option<PeerId>, request: CatchupRequest },
     CatchupResponse { source: Option<PeerId>, response: CatchupResponse },
 }
@@ -235,6 +242,9 @@ impl P2pNode {
                     if let Some(node_event) = convert_autonat_event(autonat_event) {
                         return node_event;
                     }
+                }
+                SwarmEvent::Behaviour(NeunodeEvent::Dcutr(event)) => {
+                    return convert_dcutr_event(event);
                 }
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                     return NodeEvent::PeerConnected(peer_id);
@@ -299,6 +309,15 @@ fn convert_autonat_event(event: libp2p::autonat::Event) -> Option<NodeEvent> {
     match event {
         libp2p::autonat::Event::StatusChanged { new, .. } => Some(NodeEvent::NatStatusChanged(new)),
         _ => None,
+    }
+}
+
+fn convert_dcutr_event(event: libp2p::dcutr::Event) -> NodeEvent {
+    match event.result {
+        Ok(_) => NodeEvent::HolePunchSucceeded { peer_id: event.remote_peer_id },
+        Err(error) => {
+            NodeEvent::HolePunchFailed { peer_id: event.remote_peer_id, error: error.to_string() }
+        }
     }
 }
 
@@ -408,5 +427,29 @@ mod tests {
         let node = create_test_node();
         let random_peer = Keypair::generate_ed25519().public().to_peer_id();
         assert!(!node.is_connected(&random_peer));
+    }
+
+    #[test]
+    fn bootstrap_peer_requires_peer_id_and_registers_successfully() {
+        let mut node = create_test_node();
+        let remote = Keypair::generate_ed25519().public().to_peer_id();
+        let valid = format!("/ip4/203.0.113.1/tcp/4001/p2p/{remote}").parse().unwrap();
+        assert!(node.add_bootstrap_peer(valid).is_ok());
+
+        let invalid = "/ip4/203.0.113.1/tcp/4001".parse().unwrap();
+        assert!(matches!(node.add_bootstrap_peer(invalid), Err(P2pError::InvalidAddress(_))));
+    }
+
+    #[test]
+    fn successful_dcutr_event_is_observable() {
+        let peer_id = Keypair::generate_ed25519().public().to_peer_id();
+        let event = libp2p::dcutr::Event {
+            remote_peer_id: peer_id,
+            result: Ok(libp2p::swarm::ConnectionId::new_unchecked(7)),
+        };
+        assert!(matches!(
+            convert_dcutr_event(event),
+            NodeEvent::HolePunchSucceeded { peer_id: observed } if observed == peer_id
+        ));
     }
 }
