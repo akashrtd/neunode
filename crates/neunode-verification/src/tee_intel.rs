@@ -135,6 +135,71 @@ fn tee_error(reason: impl Into<String>) -> VerificationError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dcap_qvl::quote::Quote;
+
+    const FIXTURE_TIME: u64 = 1_751_000_000;
+
+    fn tdx_fixture() -> (Vec<u8>, QuoteCollateralV3, IntelTdxPolicy) {
+        let quote_hex = include_str!("tee_intel_tdx_quote.hex").trim();
+        let raw_quote = hex::decode(quote_hex.strip_prefix("0x").unwrap_or(quote_hex)).unwrap();
+        assert_eq!(raw_quote.len(), 5_006);
+        let collateral =
+            serde_json::from_str(include_str!("tee_intel_tdx_collateral.json")).unwrap();
+        let quote = Quote::parse(&raw_quote).unwrap();
+        let report = match quote.report {
+            Report::TD10(report) => report,
+            Report::TD15(report) => report.base,
+            Report::SgxEnclave(_) => panic!("TDX fixture decoded as SGX"),
+        };
+        let policy = IntelTdxPolicy::strict(report.mr_td, report.report_data);
+        (raw_quote, collateral, policy)
+    }
+
+    #[test]
+    fn verifies_vendor_tdx_quote_end_to_end() {
+        let (raw_quote, collateral, policy) = tdx_fixture();
+        let verifier = IntelTdxVerifier::production();
+
+        let claims = verifier.verify(&raw_quote, &collateral, &policy, FIXTURE_TIME).unwrap();
+
+        assert_eq!(claims.mr_td, policy.expected_mr_td);
+        assert_eq!(claims.report_data, policy.expected_report_data);
+        assert_eq!(claims.tcb_status, "UpToDate");
+        assert!(claims.advisory_ids.is_empty());
+        assert_eq!(claims.verified_at_secs, FIXTURE_TIME);
+    }
+
+    #[test]
+    fn rejects_tampered_vendor_tdx_quote() {
+        let (mut raw_quote, collateral, policy) = tdx_fixture();
+        raw_quote[128] ^= 1;
+        let verifier = IntelTdxVerifier::production();
+
+        let error = verifier.verify(&raw_quote, &collateral, &policy, FIXTURE_TIME).unwrap_err();
+
+        assert!(error.to_string().contains("DCAP verification failed"));
+    }
+
+    #[test]
+    fn rejects_vendor_tdx_quote_with_wrong_measurement_policy() {
+        let (raw_quote, collateral, mut policy) = tdx_fixture();
+        policy.expected_mr_td[0] ^= 1;
+        let verifier = IntelTdxVerifier::production();
+
+        let error = verifier.verify(&raw_quote, &collateral, &policy, FIXTURE_TIME).unwrap_err();
+
+        assert!(error.to_string().contains("MR_TD policy mismatch"));
+    }
+
+    #[test]
+    fn rejects_vendor_tdx_quote_with_expired_collateral() {
+        let (raw_quote, collateral, policy) = tdx_fixture();
+        let verifier = IntelTdxVerifier::production();
+
+        let error = verifier.verify(&raw_quote, &collateral, &policy, 2_000_000_000).unwrap_err();
+
+        assert!(error.to_string().contains("DCAP verification failed"));
+    }
 
     #[test]
     fn strict_policy_accepts_only_up_to_date() {
