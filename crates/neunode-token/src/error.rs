@@ -22,6 +22,24 @@ pub enum TokenError {
     #[error("invalid token type")]
     InvalidTokenType,
 
+    #[error("a pool requires two distinct token types")]
+    IdenticalTokenPair,
+
+    #[error("liquidity pool is already initialized")]
+    PoolAlreadyInitialized,
+
+    #[error("liquidity pool is not initialized")]
+    PoolNotInitialized,
+
+    #[error("amount must be greater than zero")]
+    ZeroAmount,
+
+    #[error("swap output {actual} is below minimum {minimum}")]
+    SlippageExceeded { minimum: TokenAmount, actual: TokenAmount },
+
+    #[error("insufficient liquidity")]
+    InsufficientLiquidity,
+
     #[error("arithmetic overflow")]
     Overflow,
 

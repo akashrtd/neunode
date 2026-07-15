@@ -1,3 +1,4 @@
+pub mod amm;
 pub mod balance;
 pub mod decay;
 pub mod error;

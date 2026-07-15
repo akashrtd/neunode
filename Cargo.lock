@@ -5574,6 +5574,7 @@ dependencies = [
  "neunode-identity",
  "neunode-storage",
  "proptest",
+ "ruint",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

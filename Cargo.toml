@@ -86,6 +86,7 @@ anyhow = "1.0"
 hex = "0.4"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
+ruint = "1.17"
 toml = "0.8"
 dirs = "5.0"
 
