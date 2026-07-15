@@ -206,7 +206,7 @@ pub enum NodeEvent {
     GossipsubMessage { source: Option<PeerId>, topic: String, data: Vec<u8> },
     PeerConnected(PeerId),
     PeerDisconnected(PeerId),
-    IdentifyReceived { peer_id: PeerId, agent_version: String },
+    IdentifyReceived { peer_id: PeerId, agent_version: String, listen_addresses: Vec<Multiaddr> },
     PingResult { peer_id: PeerId, rtt_ms: u64 },
     KademliaEvent(libp2p::kad::Event),
     NatStatusChanged(libp2p::autonat::NatStatus),
@@ -290,7 +290,11 @@ fn convert_gossipsub_event(event: libp2p::gossipsub::Event) -> Option<NodeEvent>
 fn convert_identify_event(event: libp2p::identify::Event) -> Option<NodeEvent> {
     match event {
         libp2p::identify::Event::Received { peer_id, info, .. } => {
-            Some(NodeEvent::IdentifyReceived { peer_id, agent_version: info.agent_version })
+            Some(NodeEvent::IdentifyReceived {
+                peer_id,
+                agent_version: info.agent_version,
+                listen_addresses: info.listen_addrs,
+            })
         }
         _ => None,
     }

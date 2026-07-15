@@ -6,5 +6,6 @@ pub mod db;
 pub mod error;
 pub mod feed_store;
 pub mod identity_store;
+pub mod peer_address_store;
 pub mod token_store;
 pub mod unbonding_store;

@@ -1,13 +1,17 @@
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use neunode_feed::rate_limit::RateLimiter;
 
 use anyhow::Result;
+use libp2p::multiaddr::Protocol;
 use libp2p::Multiaddr;
 use libp2p::PeerId;
 use neunode_p2p::node::{NodeEvent, P2pNode};
 use neunode_storage::db::NeunodeDb;
+use neunode_storage::peer_address_store::{PeerAddressRecord, PeerAddressStore};
 use tokio::sync::{mpsc, oneshot};
 
 // ---------------------------------------------------------------------------
@@ -158,9 +162,39 @@ async fn mesh_event_loop(
 ) {
     // 10 events per DID per 60-second window
     let mut rate_limiter = RateLimiter::new(10, 60);
+    let mut address_book = load_address_book(&db);
+    let mut retries = HashMap::<PeerId, RetryState>::new();
+    let mut manual_disconnects = HashSet::<PeerId>::new();
+    let mut retry_tick = tokio::time::interval(Duration::from_secs(1));
+    retry_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    for peer_id in address_book.keys().copied() {
+        retries.insert(peer_id, RetryState::new(0));
+    }
 
     loop {
         tokio::select! {
+            _ = retry_tick.tick() => {
+                let due = retries
+                    .iter()
+                    .filter(|(_, retry)| retry.next_attempt <= tokio::time::Instant::now())
+                    .map(|(peer_id, _)| *peer_id)
+                    .collect::<Vec<_>>();
+                for peer_id in due {
+                    if node.is_connected(&peer_id) || manual_disconnects.contains(&peer_id) {
+                        retries.remove(&peer_id);
+                        continue;
+                    }
+                    let Some(address) = address_book.get(&peer_id).and_then(|addrs| addrs.first()) else {
+                        retries.remove(&peer_id);
+                        continue;
+                    };
+                    if let Err(error) = node.dial(address.clone()) {
+                        tracing::debug!(%peer_id, %error, "peer redial attempt rejected");
+                    }
+                    let attempt = retries.get(&peer_id).map_or(0, |retry| retry.attempt + 1);
+                    retries.insert(peer_id, RetryState::new(attempt));
+                }
+            }
             cmd = cmd_rx.recv() => {
                 match cmd {
                     None => break,
@@ -175,11 +209,17 @@ async fn mesh_event_loop(
                         }
                     }
                     Some(MeshCommand::Dial { addr }) => {
+                        remember_address(&db, &mut address_book, &addr);
+                        if let Some(peer_id) = neunode_p2p::discovery::peer_id_from_multiaddr(&addr) {
+                            manual_disconnects.remove(&peer_id);
+                        }
                         if let Err(e) = node.dial(addr) {
                             tracing::error!("mesh dial failed: {e}");
                         }
                     }
                     Some(MeshCommand::Disconnect { peer_id }) => {
+                        manual_disconnects.insert(peer_id);
+                        retries.remove(&peer_id);
                         let _ = node.disconnect(peer_id);
                     }
                     Some(MeshCommand::GetStatus { reply }) => {
@@ -254,10 +294,28 @@ async fn mesh_event_loop(
                         }
                     }
                     NodeEvent::PeerConnected(peer_id) => {
+                        retries.remove(&peer_id);
+                        manual_disconnects.remove(&peer_id);
                         tracing::info!("Peer connected: {}", peer_id);
                     }
                     NodeEvent::PeerDisconnected(peer_id) => {
+                        if !node.is_connected(&peer_id)
+                            && !manual_disconnects.contains(&peer_id)
+                            && address_book.contains_key(&peer_id)
+                        {
+                            retries.entry(peer_id).or_insert_with(|| RetryState::new(0));
+                        }
                         tracing::info!("Peer disconnected: {}", peer_id);
+                    }
+                    NodeEvent::IdentifyReceived { peer_id, listen_addresses, .. } => {
+                        let addresses = listen_addresses
+                            .into_iter()
+                            .map(|address| with_peer_id(address, peer_id))
+                            .collect::<Vec<_>>();
+                        if !addresses.is_empty() {
+                            address_book.insert(peer_id, addresses.clone());
+                            persist_peer_addresses(&db, peer_id, &addresses);
+                        }
                     }
                     NodeEvent::NatStatusChanged(status) => {
                         tracing::info!(?status, "AutoNAT reachability changed");
@@ -273,6 +331,76 @@ async fn mesh_event_loop(
             }
         }
     }
+}
+
+const MAX_RETRY_DELAY_SECS: u64 = 300;
+
+struct RetryState {
+    attempt: u32,
+    next_attempt: tokio::time::Instant,
+}
+
+impl RetryState {
+    fn new(attempt: u32) -> Self {
+        Self { attempt, next_attempt: tokio::time::Instant::now() + retry_delay(attempt) }
+    }
+}
+
+fn retry_delay(attempt: u32) -> Duration {
+    Duration::from_secs(
+        1_u64
+            .checked_shl(attempt.min(63))
+            .unwrap_or(MAX_RETRY_DELAY_SECS)
+            .min(MAX_RETRY_DELAY_SECS),
+    )
+}
+
+fn with_peer_id(mut address: Multiaddr, peer_id: PeerId) -> Multiaddr {
+    if neunode_p2p::discovery::peer_id_from_multiaddr(&address).is_none() {
+        address.push(Protocol::P2p(peer_id));
+    }
+    address
+}
+
+fn remember_address(
+    db: &NeunodeDb,
+    address_book: &mut HashMap<PeerId, Vec<Multiaddr>>,
+    address: &Multiaddr,
+) {
+    let Some(peer_id) = neunode_p2p::discovery::peer_id_from_multiaddr(address) else { return };
+    address_book.insert(peer_id, vec![address.clone()]);
+    persist_peer_addresses(db, peer_id, std::slice::from_ref(address));
+}
+
+fn persist_peer_addresses(db: &NeunodeDb, peer_id: PeerId, addresses: &[Multiaddr]) {
+    let record = PeerAddressRecord {
+        peer_id: peer_id.to_string(),
+        addresses: addresses.iter().map(ToString::to_string).collect(),
+        updated_at: chrono::Utc::now().timestamp().max(0) as u64,
+    };
+    if let Err(error) = PeerAddressStore::new(db).put(&record) {
+        tracing::warn!(%peer_id, %error, "failed to persist peer addresses");
+    }
+}
+
+fn load_address_book(db: &NeunodeDb) -> HashMap<PeerId, Vec<Multiaddr>> {
+    PeerAddressStore::new(db)
+        .list()
+        .unwrap_or_else(|error| {
+            tracing::warn!(%error, "failed to restore peer address book");
+            Vec::new()
+        })
+        .into_iter()
+        .filter_map(|record| {
+            let peer_id = record.peer_id.parse().ok()?;
+            let addresses = record
+                .addresses
+                .iter()
+                .filter_map(|address| address.parse().ok())
+                .collect::<Vec<_>>();
+            (!addresses.is_empty()).then_some((peer_id, addresses))
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -390,5 +518,34 @@ mod tests {
 
         handle.shutdown().unwrap();
         let _ = handle.join_handle.await;
+    }
+
+    #[test]
+    fn retry_delay_is_exponential_and_capped() {
+        assert_eq!(retry_delay(0), Duration::from_secs(1));
+        assert_eq!(retry_delay(1), Duration::from_secs(2));
+        assert_eq!(retry_delay(8), Duration::from_secs(256));
+        assert_eq!(retry_delay(9), Duration::from_secs(300));
+        assert_eq!(retry_delay(u32::MAX), Duration::from_secs(300));
+    }
+
+    #[test]
+    fn address_book_survives_database_restart() {
+        let db = temp_db();
+        let peer_id = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+        let address: Multiaddr = format!("/ip4/127.0.0.1/tcp/4001/p2p/{peer_id}").parse().unwrap();
+        let mut address_book = HashMap::new();
+        remember_address(&db, &mut address_book, &address);
+
+        let restored = load_address_book(&db);
+        assert_eq!(restored.get(&peer_id), Some(&vec![address]));
+    }
+
+    #[test]
+    fn identify_address_is_normalized_with_peer_id() {
+        let peer_id = libp2p::identity::Keypair::generate_ed25519().public().to_peer_id();
+        let address: Multiaddr = "/ip4/127.0.0.1/tcp/4001".parse().unwrap();
+        let normalized = with_peer_id(address, peer_id);
+        assert_eq!(neunode_p2p::discovery::peer_id_from_multiaddr(&normalized), Some(peer_id));
     }
 }
