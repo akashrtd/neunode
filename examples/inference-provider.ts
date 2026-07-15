@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { registerProvider, required } from "./client.js";
+import { httpClient as neunode, required } from "./client.js";
 
 const model = required("MODEL_ID");
 const upstream = required("UPSTREAM_URL").replace(/\/$/, "");
@@ -39,10 +39,10 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, async () => {
-	await registerProvider(
-		process.env.PROVIDER_NAME ?? "Neunode Provider",
-		publicUrl,
-		model,
-	);
+	await neunode.inference.registerProvider({
+		name: process.env.PROVIDER_NAME ?? "Neunode Provider",
+		endpoint: publicUrl,
+		models: [model],
+	});
 	console.log(`Serving ${model} at ${publicUrl}/v1/chat/completions`);
 });

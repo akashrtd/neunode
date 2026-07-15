@@ -25,9 +25,8 @@ MODEL_ID=llama-3b UPSTREAM_URL=http://localhost:11434/v1 \
 - `inference-provider.ts` exposes an OpenAI-compatible proxy and advertises a model already imported
   with `agnetd model push`. Set `UPSTREAM_API_KEY` when the upstream requires authentication.
 
-The coding and research templates require `agnetd serve`. Provider registration is currently a
-one-shot CLI operation: stop the daemon before `npm run provider`, wait for the “Serving” message,
-then restart `agnetd serve` in another terminal.
+All templates use the daemon's HTTP API and can run alongside `agnetd serve` without competing for
+the local database lock.
 
 Use private network endpoints for runners, sandbox their inputs, and never put secrets in feed
 content. Configuration defaults to `http://127.0.0.1:41000`; override it with `NEUNODE_URL`.

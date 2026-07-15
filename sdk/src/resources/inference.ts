@@ -22,29 +22,31 @@ export interface InferenceRequestResult {
 }
 
 export interface InferenceListModelsResult {
-	data: Array<{
-		Model: string;
-		"Input Price": string;
-		"Output Price": string;
-		Context: string;
+	models: Array<{
+		id: string;
+		input_price_per_million: number;
+		output_price_per_million: number;
+		context_length: number;
 	}>;
 }
 
 export interface InferenceProvidersResult {
-	data: Array<{
-		Provider: string;
-		Status: string;
-		Reputation: string;
-		Latency: string;
-		Models: string;
+	providers: Array<{
+		name: string;
+		did: string;
+		status: string;
+		reputation_score: number;
+		avg_latency_ms: number;
+		model_count: number;
 	}>;
 }
 
 export interface InferenceRouteResult {
 	model: string;
 	strategy: string;
-	selected_provider: string;
-	provider_name: string;
+	selected_provider: string | null;
+	provider_name: string | null;
+	status: string;
 }
 
 export interface InferencePricingResult {
@@ -58,8 +60,26 @@ export interface InferencePricingResult {
 	net_payout: number;
 }
 
+export interface InferenceRegisterProviderParams {
+	name: string;
+	endpoint: string;
+	models: string[];
+}
+
+export interface InferenceRegisterProviderResult {
+	did: string;
+	name: string;
+	endpoint: string;
+	models: string[];
+	status: string;
+}
+
 /** Inference marketplace for model queries, discovery, and pricing. */
 export interface InferenceResource {
+	/** Advertise locally registered models as an inference provider. */
+	registerProvider(
+		params: InferenceRegisterProviderParams,
+	): Promise<InferenceRegisterProviderResult>;
 	/** Send an inference request to a model. */
 	request(params: InferenceRequestParams): Promise<InferenceRequestResult>;
 	/** List available models, optionally filtered by provider. */
@@ -80,6 +100,31 @@ export function createInferenceResource(
 	client: NeunodeClient,
 ): InferenceResource {
 	return {
+		async registerProvider(params) {
+			if (client.http) {
+				return client.http.post<InferenceRegisterProviderResult>(
+					"/api/v1/inference/providers",
+					params,
+				);
+			}
+			const cli = client.cli;
+			if (!cli) {
+				throw new Error(
+					"HTTP or CLI transport required for inference operations",
+				);
+			}
+			return cli.execute<InferenceRegisterProviderResult>([
+				"inference",
+				"register-provider",
+				"--name",
+				params.name,
+				"--endpoint",
+				params.endpoint,
+				"--models",
+				params.models.join(","),
+			]);
+		},
+
 		async request(
 			params: InferenceRequestParams,
 		): Promise<InferenceRequestResult> {

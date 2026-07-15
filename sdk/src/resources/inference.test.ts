@@ -68,6 +68,42 @@ describe("createInferenceResource", () => {
 		);
 	});
 
+	describe("registerProvider", () => {
+		const params = {
+			name: "GPU provider",
+			endpoint: "https://provider.example",
+			models: ["llama-3b", "embed-small"],
+		};
+
+		it("should use HTTP transport", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				post: ReturnType<typeof vi.fn>;
+			};
+			http.post.mockResolvedValue({ status: "online" });
+			await createInferenceResource(dualClient).registerProvider(params);
+			expect(http.post).toHaveBeenCalledWith(
+				"/api/v1/inference/providers",
+				params,
+			);
+		});
+
+		it("should retain CLI compatibility during migration", async () => {
+			execute.mockResolvedValue({ status: "online" });
+			await createInferenceResource(mockClient).registerProvider(params);
+			expect(execute).toHaveBeenCalledWith([
+				"inference",
+				"register-provider",
+				"--name",
+				"GPU provider",
+				"--endpoint",
+				"https://provider.example",
+				"--models",
+				"llama-3b,embed-small",
+			]);
+		});
+	});
+
 	describe("request", () => {
 		it("should use HTTP transport when available", async () => {
 			const expected = { model: "llama-3b", status: "routed" };

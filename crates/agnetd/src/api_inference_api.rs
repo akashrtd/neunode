@@ -49,6 +49,13 @@ pub struct InferenceRequest {
     pub temperature: f64,
 }
 
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct RegisterProviderRequest {
+    pub name: String,
+    pub endpoint: String,
+    pub models: Vec<String>,
+}
+
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
 pub struct ModelsQuery {
     pub provider: Option<String>,
@@ -147,6 +154,15 @@ pub struct PricingResponse {
     pub net_payout: u64,
 }
 
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct RegisterProviderResponse {
+    pub did: String,
+    pub name: String,
+    pub endpoint: String,
+    pub models: Vec<String>,
+    pub status: String,
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -166,9 +182,100 @@ fn load_all_providers(db: &NeunodeDb) -> Vec<InferenceProvider> {
         .collect()
 }
 
+fn load_model(db: &NeunodeDb, model_id: &str) -> Result<Option<ModelInfo>, ApiError> {
+    let key = format!("model:{model_id}");
+    let key = neunode_storage::codec::serialize(&key)
+        .map_err(|error| ApiError::Internal(format!("serialize model key: {error}")))?;
+    db.get_raw(neunode_storage::cf::CF_MODELS, &key)
+        .map_err(|error| ApiError::Internal(format!("load model: {error}")))?
+        .map(|value| {
+            neunode_storage::codec::deserialize(&value)
+                .map_err(|error| ApiError::Internal(format!("decode model: {error}")))
+        })
+        .transpose()
+}
+
+fn store_provider(db: &NeunodeDb, provider: &InferenceProvider) -> Result<(), ApiError> {
+    let key = neunode_storage::codec::serialize(&format!("prov:{}", provider.did))
+        .map_err(|error| ApiError::Internal(format!("serialize provider key: {error}")))?;
+    let value = neunode_storage::codec::serialize(provider)
+        .map_err(|error| ApiError::Internal(format!("encode provider: {error}")))?;
+    db.put_raw(neunode_storage::cf::CF_MODELS, &key, &value)
+        .map_err(|error| ApiError::Internal(format!("store provider: {error}")))
+}
+
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/inference/providers",
+    request_body = RegisterProviderRequest,
+    responses(
+        (status = 201, description = "Inference provider registered", body = RegisterProviderResponse)
+    ),
+    tag = "inference",
+)]
+pub async fn register_provider(
+    State(state): State<Arc<ApiState>>,
+    Json(body): Json<RegisterProviderRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let name = body.name.trim();
+    if name.is_empty() {
+        return Err(ApiError::BadRequest("provider name cannot be empty".into()));
+    }
+    let endpoint = body
+        .endpoint
+        .parse::<axum::http::Uri>()
+        .map_err(|error| ApiError::BadRequest(format!("invalid provider endpoint: {error}")))?;
+    if !matches!(endpoint.scheme_str(), Some("http" | "https")) || endpoint.authority().is_none() {
+        return Err(ApiError::BadRequest(
+            "provider endpoint must be an absolute HTTP(S) URL".into(),
+        ));
+    }
+    if body.models.is_empty() {
+        return Err(ApiError::BadRequest("at least one model is required".into()));
+    }
+
+    let mut models = Vec::with_capacity(body.models.len());
+    for model_id in &body.models {
+        let model_id = model_id.trim();
+        if model_id.is_empty() || models.iter().any(|model: &ModelInfo| model.id == model_id) {
+            return Err(ApiError::BadRequest(format!("invalid or duplicate model ID: {model_id}")));
+        }
+        models.push(
+            load_model(&state.db, model_id)?
+                .ok_or_else(|| ApiError::NotFound(format!("model not found: {model_id}")))?,
+        );
+    }
+
+    let did = state.require_did()?.clone();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let provider = InferenceProvider {
+        did: did.clone(),
+        name: name.to_string(),
+        endpoint: endpoint.to_string(),
+        models,
+        reputation_score: 0.0,
+        stake_amount: TokenAmount(0),
+        status: ProviderStatus::Online,
+        last_heartbeat: now,
+        total_requests_served: 0,
+        avg_latency_ms: 0,
+    };
+    store_provider(&state.db, &provider)?;
+    Ok(types::created(RegisterProviderResponse {
+        did: did.0,
+        name: provider.name,
+        endpoint: provider.endpoint,
+        models: provider.models.into_iter().map(|model| model.id).collect(),
+        status: "online".to_string(),
+    }))
+}
 
 #[utoipa::path(
     post,

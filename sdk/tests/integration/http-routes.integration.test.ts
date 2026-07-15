@@ -176,6 +176,41 @@ describe("Integration: live HTTP resource routes", () => {
 		});
 	});
 
+	it("registers and discovers inference providers over HTTP", async () => {
+		await expect(
+			client.inference.registerProvider({
+				name: "Invalid provider",
+				endpoint: "file:///etc/passwd",
+				models: ["missing"],
+			}),
+		).rejects.toThrow("invalid provider endpoint");
+		await client.model.push({
+			path: "/tmp/provider.gguf",
+			name: "provider-fixture",
+		});
+		await expect(
+			client.inference.registerProvider({
+				name: "Unknown model provider",
+				endpoint: "https://provider.example/v1",
+				models: ["missing"],
+			}),
+		).rejects.toThrow("model not found");
+		const registered = await client.inference.registerProvider({
+			name: "HTTP provider",
+			endpoint: "https://provider.example/v1",
+			models: ["provider-fixture"],
+		});
+		expect(registered).toMatchObject({
+			name: "HTTP provider",
+			models: ["provider-fixture"],
+			status: "online",
+		});
+		const providers = await client.inference.providers("provider-fixture");
+		expect(providers.providers).toEqual([
+			expect.objectContaining({ name: "HTTP provider", model_count: 1 }),
+		]);
+	});
+
 	it("publishes the lifecycle and lineage SDK contract in live OpenAPI", async () => {
 		const response = await fetch(`${baseUrl}/api-docs/openapi.json`);
 		expect(response.ok).toBe(true);

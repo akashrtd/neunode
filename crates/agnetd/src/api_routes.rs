@@ -42,7 +42,10 @@ pub fn build_api_router() -> Router<Arc<ApiState>> {
         // Inference
         .route("/api/v1/inference/request", post(super::inference_api::request_inference))
         .route("/api/v1/inference/models", get(super::inference_api::list_models))
-        .route("/api/v1/inference/providers", get(super::inference_api::list_providers))
+        .route(
+            "/api/v1/inference/providers",
+            get(super::inference_api::list_providers).post(super::inference_api::register_provider),
+        )
         .route("/api/v1/inference/route", get(super::inference_api::show_route))
         .route("/api/v1/inference/pricing", get(super::inference_api::show_pricing))
         // Discovery
