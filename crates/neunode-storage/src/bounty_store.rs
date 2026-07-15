@@ -92,6 +92,50 @@ impl<'a> BountyStore<'a> {
         ])
     }
 
+    /// Atomically persist a bounty transition and its accompanying token transfer.
+    /// Bounties and token balances both live in the ledger partition, so either all
+    /// three records are committed or none are.
+    pub fn transition_with_transfer(
+        &self,
+        bounty: &BountyData,
+        from_did: &str,
+        to_did: &str,
+        token_type: u8,
+        amount: u128,
+    ) -> Result<()> {
+        let token_store = TokenStore::new(self.db);
+        let mut from_balance = token_store.get_balance(from_did, token_type)?;
+        if from_balance.balance < amount {
+            return Err(StorageError::InsufficientBalance {
+                required: amount,
+                available: from_balance.balance,
+            });
+        }
+        let mut to_balance = token_store.get_balance(to_did, token_type)?;
+        from_balance.balance -= amount;
+        to_balance.balance = to_balance
+            .balance
+            .checked_add(amount)
+            .ok_or_else(|| StorageError::Serialization("token balance overflow".to_string()))?;
+
+        let from_key = cf::token_key(&cf::did_hash_16(from_did), token_type);
+        let to_key = cf::token_key(&cf::did_hash_16(to_did), token_type);
+        let from_bytes = bincode::serialize(&from_balance)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let to_bytes = bincode::serialize(&to_balance)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let bounty_key = bincode::serialize(&bounty.id)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let bounty_bytes =
+            bincode::serialize(bounty).map_err(|e| StorageError::Serialization(e.to_string()))?;
+
+        self.db.batch_put_raw(&[
+            (cf::CF_TOKENS, &from_key, &from_bytes),
+            (cf::CF_TOKENS, &to_key, &to_bytes),
+            (cf::CF_BOUNTIES, &bounty_key, &bounty_bytes),
+        ])
+    }
+
     pub fn get(&self, bounty_id: &str) -> Result<Option<BountyData>> {
         let key_bytes = bincode::serialize(bounty_id)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
@@ -320,6 +364,88 @@ mod tests {
         let creator_bal =
             token_store.get_balance(creator, crate::token_store::TOKEN_COMPUTE).unwrap();
         assert_eq!(creator_bal.balance, 4000);
+    }
+
+    #[test]
+    fn transition_with_transfer_is_atomic_on_insufficient_balance() {
+        let db = temp_db();
+        let token_store = TokenStore::new(&db);
+        let bounty_store = BountyStore::new(&db);
+        let original = make_bounty("bnty_atomic", "Open");
+        bounty_store.put(&original).unwrap();
+        token_store
+            .set_balance(
+                "did:neunode:poor",
+                crate::token_store::TOKEN_COMPUTE,
+                &TokenBalance { balance: 10, ..Default::default() },
+            )
+            .unwrap();
+
+        let mut claimed = original.clone();
+        claimed.state = "Claimed".to_string();
+        let result = bounty_store.transition_with_transfer(
+            &claimed,
+            "did:neunode:poor",
+            "escrow:bnty_atomic",
+            crate::token_store::TOKEN_COMPUTE,
+            100,
+        );
+
+        assert!(matches!(result, Err(StorageError::InsufficientBalance { .. })));
+        assert_eq!(bounty_store.get("bnty_atomic").unwrap(), Some(original));
+        assert_eq!(
+            token_store
+                .get_balance("did:neunode:poor", crate::token_store::TOKEN_COMPUTE)
+                .unwrap()
+                .balance,
+            10
+        );
+    }
+
+    #[test]
+    fn transition_with_transfer_commits_state_and_balances() {
+        let db = temp_db();
+        let token_store = TokenStore::new(&db);
+        let bounty_store = BountyStore::new(&db);
+        let original = make_bounty("bnty_claim", "Open");
+        bounty_store.put(&original).unwrap();
+        token_store
+            .set_balance(
+                "did:neunode:provider",
+                crate::token_store::TOKEN_COMPUTE,
+                &TokenBalance { balance: 200, ..Default::default() },
+            )
+            .unwrap();
+
+        let mut claimed = original;
+        claimed.state = "Claimed".to_string();
+        claimed.provider_did = Some("did:neunode:provider".to_string());
+        claimed.bond = Some(150);
+        bounty_store
+            .transition_with_transfer(
+                &claimed,
+                "did:neunode:provider",
+                "escrow:bnty_claim",
+                crate::token_store::TOKEN_COMPUTE,
+                150,
+            )
+            .unwrap();
+
+        assert_eq!(bounty_store.get("bnty_claim").unwrap(), Some(claimed));
+        assert_eq!(
+            token_store
+                .get_balance("did:neunode:provider", crate::token_store::TOKEN_COMPUTE)
+                .unwrap()
+                .balance,
+            50
+        );
+        assert_eq!(
+            token_store
+                .get_balance("escrow:bnty_claim", crate::token_store::TOKEN_COMPUTE)
+                .unwrap()
+                .balance,
+            150
+        );
     }
 
     #[test]
