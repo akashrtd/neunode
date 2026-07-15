@@ -90,6 +90,7 @@ fn claim_locked(
         &escrow_did(bounty_id),
         bounty.reward_token_type,
         stake as u128,
+        now,
     )?;
     Ok(updated)
 }
@@ -125,7 +126,7 @@ fn submit_locked(
         .map_err(|error| BountyServiceError::Invalid(error.to_string()))?;
     require_claimant(&bounty, actor)?;
     let updated = lib_to_storage(sm.data(), bounty.escrow_deposited)?;
-    store.put(&updated)?;
+    store.put_with_audit(&updated, &actor.0, "bounty.submit", now)?;
     Ok(updated)
 }
 
@@ -181,7 +182,7 @@ fn review_locked(
             .map_err(|error| BountyServiceError::Invalid(error.to_string()))?;
     }
     let updated = lib_to_storage(sm.data(), bounty.escrow_deposited)?;
-    store.put(&updated)?;
+    store.put_with_audit(&updated, &reviewer.0, "bounty.review", now)?;
     Ok(updated)
 }
 
@@ -221,6 +222,7 @@ fn cancel_locked(
         &escrow_did(bounty_id),
         bounty.reward_token_type,
         &payouts,
+        now,
     )?;
     Ok(updated)
 }
@@ -263,6 +265,7 @@ fn pay_locked(
         &escrow_did(bounty_id),
         bounty.reward_token_type,
         &[(claimant.as_str(), total)],
+        now,
     )?;
 
     Ok(PaymentResult {

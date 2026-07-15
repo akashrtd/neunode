@@ -1,3 +1,4 @@
+pub mod audit_api;
 pub mod bounty_api;
 pub mod config_api;
 pub mod discovery_api;

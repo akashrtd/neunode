@@ -1,7 +1,10 @@
+use crate::audit_store::{AuditOutcome, AuditStore, NewAuditEntry};
 use crate::cf;
 use crate::db::NeunodeDb;
 use crate::error::{Result, StorageError};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const TOKEN_COMPUTE: u8 = 0x01;
 pub const TOKEN_TRAINING: u8 = 0x02;
@@ -83,7 +86,16 @@ impl<'a> TokenStore<'a> {
             balance.staked = balance.staked.checked_add(amount).ok_or_else(|| {
                 StorageError::Serialization("staked balance overflow".to_string())
             })?;
-            self.set_balance(agent_did, token_type, &balance)?;
+            let key = cf::token_key(&cf::did_hash_16(agent_did), token_type);
+            let bytes = bincode::serialize(&balance)
+                .map_err(|error| StorageError::Serialization(error.to_string()))?;
+            let (audit_key, audit_bytes, _) = AuditStore::new(self.db).prepare_append(
+                token_audit_entry(agent_did, "token.stake", agent_did, token_type, amount)?,
+            )?;
+            self.db.batch_put_raw(&[
+                (cf::CF_TOKENS, &key, &bytes),
+                (cf::CF_AUDIT_LOG, &audit_key, &audit_bytes),
+            ])?;
             Ok(balance)
         })
     }
@@ -105,7 +117,10 @@ impl<'a> TokenStore<'a> {
 
         let mut to_balance = self.get_balance(to_did, token_type)?;
         from_balance.balance -= amount;
-        to_balance.balance += amount;
+        to_balance.balance = to_balance
+            .balance
+            .checked_add(amount)
+            .ok_or_else(|| StorageError::Serialization("token balance overflow".to_string()))?;
 
         let from_key = cf::token_key(&cf::did_hash_16(from_did), token_type);
         let to_key = cf::token_key(&cf::did_hash_16(to_did), token_type);
@@ -114,12 +129,40 @@ impl<'a> TokenStore<'a> {
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
         let to_bytes = bincode::serialize(&to_balance)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let (audit_key, audit_bytes, _) = AuditStore::new(self.db).prepare_append(
+            token_audit_entry(from_did, "token.transfer", to_did, token_type, amount)?,
+        )?;
 
         self.db.batch_put_raw(&[
             (cf::CF_TOKENS, &from_key, &from_bytes),
             (cf::CF_TOKENS, &to_key, &to_bytes),
+            (cf::CF_AUDIT_LOG, &audit_key, &audit_bytes),
         ])
     }
+}
+
+fn token_audit_entry(
+    actor: &str,
+    action: &str,
+    resource: &str,
+    token_type: u8,
+    amount: u128,
+) -> Result<NewAuditEntry> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| StorageError::Serialization(format!("system clock error: {error}")))?
+        .as_secs();
+    Ok(NewAuditEntry {
+        timestamp,
+        actor: actor.to_string(),
+        action: action.to_string(),
+        resource: resource.to_string(),
+        outcome: AuditOutcome::Success,
+        details: BTreeMap::from([
+            ("amount".to_string(), amount.to_string()),
+            ("token_type".to_string(), token_type.to_string()),
+        ]),
+    })
 }
 
 #[cfg(test)]
@@ -217,6 +260,12 @@ mod tests {
 
         assert_eq!(from_bal.balance, 700);
         assert_eq!(to_bal.balance, 400);
+        let audit = crate::audit_store::AuditStore::new(&db).entries().unwrap();
+        assert_eq!(audit.len(), 1);
+        assert_eq!(audit[0].actor, from_did);
+        assert_eq!(audit[0].action, "token.transfer");
+        assert_eq!(audit[0].resource, to_did);
+        assert_eq!(audit[0].details["amount"], "300");
     }
 
     #[test]
@@ -247,6 +296,7 @@ mod tests {
 
         let from_bal = store.get_balance(from_did, TOKEN_TRAINING).unwrap();
         assert_eq!(from_bal.balance, 50, "balance should be unchanged");
+        assert!(crate::audit_store::AuditStore::new(&db).entries().unwrap().is_empty());
     }
 
     #[test]

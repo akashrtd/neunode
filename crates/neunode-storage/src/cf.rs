@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Column Family Definitions
 // ---------------------------------------------------------------------------
-// 21 column families organized by subsystem.
+// 22 column families organized by subsystem.
 //
 // Key schemas:
 //   feed_events: [did_hash(16) | sequence(u64 BE)]
@@ -22,6 +22,7 @@ pub const CF_MODELS: &str = "models";
 pub const CF_TRAINING: &str = "training";
 pub const CF_BOUNTIES: &str = "bounties";
 pub const CF_UNBONDING: &str = "unbonding";
+pub const CF_AUDIT_LOG: &str = "audit_log";
 pub const CF_P2P_STATE: &str = "p2p_state";
 pub const CF_MERKLE_NODES: &str = "merkle_nodes";
 pub const CF_SNAPSHOTS: &str = "snapshots";
@@ -33,7 +34,7 @@ pub const CF_KG_GSPO: &str = "gspo";
 pub const CF_KG_GPOS: &str = "gpos";
 pub const CF_KG_GOSP: &str = "gosp";
 
-/// All 21 column family names in canonical order.
+/// All 22 column family names in canonical order.
 pub fn all_column_families() -> Vec<&'static str> {
     let mut all = ledger_column_families();
     all.extend(network_column_families());
@@ -51,6 +52,7 @@ pub fn ledger_column_families() -> Vec<&'static str> {
         CF_TRAINING,
         CF_BOUNTIES,
         CF_UNBONDING,
+        CF_AUDIT_LOG,
     ]
 }
 
@@ -83,7 +85,7 @@ pub enum Partition {
 
 /// Build a routing map from CF name to partition, built once at DB open.
 pub fn build_partition_map() -> std::collections::HashMap<&'static str, Partition> {
-    let mut map = std::collections::HashMap::with_capacity(20);
+    let mut map = std::collections::HashMap::with_capacity(22);
     for &cf in &ledger_column_families() {
         map.insert(cf, Partition::Ledger);
     }
@@ -142,7 +144,7 @@ mod tests {
     #[test]
     fn test_all_cfs_count() {
         let cfs = all_column_families();
-        assert_eq!(cfs.len(), 21, "expected exactly 21 column families");
+        assert_eq!(cfs.len(), 22, "expected exactly 22 column families");
     }
 
     #[test]

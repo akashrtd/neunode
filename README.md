@@ -142,7 +142,7 @@ A single Rust binary over a layered, unidirectional crate graph, with Solidity c
 |---|---|---|
 | **Identity & security** | `neunode-identity`, `NeunodeIdentity` | DID registry, dual-key (Ed25519/secp256k1), stake-gated network registration |
 | **Networking** | `neunode-p2p`, `neunode-feed`, `neunode-discovery` | libp2p mesh (gossipsub + Kademlia), signed Nostr-like feed, agent discovery |
-| **Storage** | `neunode-storage` | RocksDB, 21 column families (incl. 6-index knowledge graph) |
+| **Storage** | `neunode-storage` | RocksDB, 22 column families (incl. hash-chained audit log and 6-index knowledge graph) |
 | **Economy** | `neunode-token`, `neunode-reputation`, `neunode-bounty`, `neunode-inference` + 4 token contracts | Resource tokens (decay+staking), 5-factor reputation, bounty FSM+escrow, inference marketplace |
 | **Intelligence** | `neunode-training`, `neunode-turboquant`, `neunode-knowledge`, `neunode-lineage` | Distributed training (DiLoCo), gradient quantization, knowledge graph, model lineage DAG + royalties |
 | **Verification** | `neunode-verification` | 4-tier escalation: automated → RepOps → peer review → (ZK/TEE) |

@@ -1,3 +1,4 @@
+use crate::audit_store::{AuditOutcome, AuditStore, NewAuditEntry};
 use crate::cf;
 use crate::db::NeunodeDb;
 use crate::error::{Result, StorageError};
@@ -49,6 +50,27 @@ impl<'a> BountyStore<'a> {
         self.db.put_raw(cf::CF_BOUNTIES, &key_bytes, &value_bytes)
     }
 
+    /// Persist a state-only transition and its forensic record in one batch.
+    /// The caller must hold the ledger write lock across validation and commit.
+    pub fn put_with_audit(
+        &self,
+        bounty: &BountyData,
+        actor: &str,
+        action: &str,
+        timestamp: u64,
+    ) -> Result<()> {
+        let key = bincode::serialize(&bounty.id)
+            .map_err(|error| StorageError::Serialization(error.to_string()))?;
+        let value = bincode::serialize(bounty)
+            .map_err(|error| StorageError::Serialization(error.to_string()))?;
+        let (audit_key, audit_value, _) = AuditStore::new(self.db)
+            .prepare_append(bounty_audit_entry(timestamp, actor, action, bounty, 0))?;
+        self.db.batch_put_raw(&[
+            (cf::CF_BOUNTIES, &key, &value),
+            (cf::CF_AUDIT_LOG, &audit_key, &audit_value),
+        ])
+    }
+
     /// Atomically create a bounty with escrow: validates balance, transfers tokens
     /// to escrow, and persists the bounty record in a single RocksDB WriteBatch.
     /// All writes target the ledger partition, so the batch is fully atomic.
@@ -97,12 +119,16 @@ impl<'a> BountyStore<'a> {
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
         let bounty_bytes =
             bincode::serialize(bounty).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let (audit_key, audit_bytes, _) = AuditStore::new(self.db).prepare_append(
+            bounty_audit_entry(bounty.created_at, creator_did, "bounty.create", bounty, amount),
+        )?;
 
         // Single atomic WriteBatch — all keys are in the ledger partition.
         self.db.batch_put_raw(&[
             (cf::CF_TOKENS, &from_key, &from_bytes),
             (cf::CF_TOKENS, &to_key, &to_bytes),
             (cf::CF_BOUNTIES, &bounty_key, &bounty_bytes),
+            (cf::CF_AUDIT_LOG, &audit_key, &audit_bytes),
         ])
     }
 
@@ -116,6 +142,7 @@ impl<'a> BountyStore<'a> {
         to_did: &str,
         token_type: u8,
         amount: u128,
+        timestamp: u64,
     ) -> Result<()> {
         let token_store = TokenStore::new(self.db);
         let mut from_balance = token_store.get_balance(from_did, token_type)?;
@@ -142,11 +169,15 @@ impl<'a> BountyStore<'a> {
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
         let bounty_bytes =
             bincode::serialize(bounty).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let (audit_key, audit_bytes, _) = AuditStore::new(self.db).prepare_append(
+            bounty_audit_entry(timestamp, from_did, "bounty.transition", bounty, amount),
+        )?;
 
         self.db.batch_put_raw(&[
             (cf::CF_TOKENS, &from_key, &from_bytes),
             (cf::CF_TOKENS, &to_key, &to_bytes),
             (cf::CF_BOUNTIES, &bounty_key, &bounty_bytes),
+            (cf::CF_AUDIT_LOG, &audit_key, &audit_bytes),
         ])
     }
 
@@ -158,6 +189,7 @@ impl<'a> BountyStore<'a> {
         escrow_did: &str,
         token_type: u8,
         payouts: &[(&str, u128)],
+        timestamp: u64,
     ) -> Result<()> {
         let token_store = TokenStore::new(self.db);
         let total = payouts.iter().try_fold(0_u128, |sum, (_, amount)| {
@@ -201,13 +233,17 @@ impl<'a> BountyStore<'a> {
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
         let bounty_bytes =
             bincode::serialize(bounty).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let (audit_key, audit_bytes, _) = AuditStore::new(self.db).prepare_append(
+            bounty_audit_entry(timestamp, &bounty.requester_did, "bounty.payout", bounty, total),
+        )?;
 
-        let mut ops = Vec::with_capacity(recipient_records.len() + 2);
+        let mut ops = Vec::with_capacity(recipient_records.len() + 3);
         ops.push((cf::CF_TOKENS, escrow_key.as_slice(), escrow_bytes.as_slice()));
         for (key, bytes) in &recipient_records {
             ops.push((cf::CF_TOKENS, key.as_slice(), bytes.as_slice()));
         }
         ops.push((cf::CF_BOUNTIES, bounty_key.as_slice(), bounty_bytes.as_slice()));
+        ops.push((cf::CF_AUDIT_LOG, audit_key.as_slice(), audit_bytes.as_slice()));
         self.db.batch_put_raw(&ops)
     }
 
@@ -245,6 +281,27 @@ impl<'a> BountyStore<'a> {
             }
         }
         Ok(results)
+    }
+}
+
+fn bounty_audit_entry(
+    timestamp: u64,
+    actor: &str,
+    action: &str,
+    bounty: &BountyData,
+    amount: u128,
+) -> NewAuditEntry {
+    NewAuditEntry {
+        timestamp,
+        actor: actor.to_string(),
+        action: action.to_string(),
+        resource: bounty.id.clone(),
+        outcome: AuditOutcome::Success,
+        details: BTreeMap::from([
+            ("amount".to_string(), amount.to_string()),
+            ("state".to_string(), bounty.state.clone()),
+            ("token_type".to_string(), bounty.reward_token_type.to_string()),
+        ]),
     }
 }
 
@@ -439,6 +496,11 @@ mod tests {
         let creator_bal =
             token_store.get_balance(creator, crate::token_store::TOKEN_COMPUTE).unwrap();
         assert_eq!(creator_bal.balance, 4000);
+        let audit = crate::audit_store::AuditStore::new(&db).entries().unwrap();
+        assert_eq!(audit.len(), 1);
+        assert_eq!(audit[0].action, "bounty.create");
+        assert_eq!(audit[0].resource, "bnty_escrow");
+        assert_eq!(audit[0].details["amount"], "1000");
     }
 
     #[test]
@@ -464,6 +526,7 @@ mod tests {
             "escrow:bnty_atomic",
             crate::token_store::TOKEN_COMPUTE,
             100,
+            42,
         );
 
         assert!(matches!(result, Err(StorageError::InsufficientBalance { .. })));
@@ -503,6 +566,7 @@ mod tests {
                 "escrow:bnty_claim",
                 crate::token_store::TOKEN_COMPUTE,
                 150,
+                42,
             )
             .unwrap();
 
@@ -547,6 +611,7 @@ mod tests {
                 "escrow:bnty_cancel",
                 crate::token_store::TOKEN_COMPUTE,
                 &[("did:neunode:requester", 500), ("did:neunode:provider", 150)],
+                42,
             )
             .unwrap();
 

@@ -40,6 +40,9 @@ pub enum StorageError {
 
     #[error("atomic batch cannot span storage partitions")]
     CrossPartitionBatch,
+
+    #[error("audit log verification failed at sequence {sequence}: {reason}")]
+    AuditVerificationFailed { sequence: u64, reason: String },
 }
 
 pub type Result<T> = std::result::Result<T, StorageError>;

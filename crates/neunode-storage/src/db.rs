@@ -241,6 +241,24 @@ impl NeunodeDb {
         Ok(results)
     }
 
+    /// Scan forward from `start`, returning at most `limit` records.
+    pub fn scan_from_limit(
+        &self,
+        cf_name: &str,
+        start: &[u8],
+        limit: usize,
+    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
+        let cf = self.cf_handle(cf_name)?;
+        let db = self.get_db_for_cf(cf_name)?;
+        let iter = db.iterator_cf(&cf, IteratorMode::From(start, Direction::Forward));
+        let mut results = Vec::with_capacity(limit.min(1024));
+        for item in iter.take(limit) {
+            let (key, value) = item.map_err(StorageError::RocksDb)?;
+            results.push((key.to_vec(), value.to_vec()));
+        }
+        Ok(results)
+    }
+
     pub fn range_scan(
         &self,
         cf_name: &str,
@@ -260,6 +278,20 @@ impl NeunodeDb {
             }
         }
         Ok(results)
+    }
+
+    /// Return the lexicographically greatest key/value pair in a column family.
+    pub fn last_raw(&self, cf_name: &str) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
+        let cf = self.cf_handle(cf_name)?;
+        let db = self.get_db_for_cf(cf_name)?;
+        let mut iter = db.iterator_cf(&cf, IteratorMode::End);
+        match iter.next() {
+            Some(item) => {
+                let (key, value) = item.map_err(StorageError::RocksDb)?;
+                Ok(Some((key.to_vec(), value.to_vec())))
+            }
+            None => Ok(None),
+        }
     }
 
     pub fn close(self) -> Result<()> {
@@ -396,6 +428,17 @@ mod tests {
     }
 
     #[test]
+    fn test_last_raw() {
+        let db = temp_db();
+        assert_eq!(db.last_raw(cf::CF_CONFIG).unwrap(), None);
+        db.put_raw(cf::CF_CONFIG, b"a", b"first").unwrap();
+        db.put_raw(cf::CF_CONFIG, b"z", b"last").unwrap();
+        db.put_raw(cf::CF_CONFIG, b"m", b"middle").unwrap();
+
+        assert_eq!(db.last_raw(cf::CF_CONFIG).unwrap(), Some((b"z".to_vec(), b"last".to_vec())));
+    }
+
+    #[test]
     fn test_batch_put_raw() {
         let db = temp_db();
 
@@ -441,6 +484,16 @@ mod tests {
         let db = temp_db();
         let results = db.prefix_scan(cf::CF_MODELS, b"anything").unwrap();
         assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_scan_from_limit() {
+        let db = temp_db();
+        for key in [b"a", b"b", b"c", b"d"] {
+            db.put_raw(cf::CF_CONFIG, key, key).unwrap();
+        }
+        let results = db.scan_from_limit(cf::CF_CONFIG, b"b", 2).unwrap();
+        assert_eq!(results, vec![(b"b".to_vec(), b"b".to_vec()), (b"c".to_vec(), b"c".to_vec())]);
     }
 
     #[test]
