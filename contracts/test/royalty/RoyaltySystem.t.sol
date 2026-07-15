@@ -367,6 +367,18 @@ contract RoyaltySystemTest is Test {
         );
     }
 
+    function testSharedAncestorIncludedOnceAtShortestDepth() public {
+        _setupMultiParentLineage();
+
+        IRoyaltySplitter.RecipientInfo[] memory recipients = splitter.getRecipients(MERGE_MODEL);
+
+        assertEq(recipients.length, 3);
+        assertEq(recipients[0].depth, 1);
+        assertEq(recipients[1].depth, 1);
+        assertEq(recipients[2].depth, 2);
+        assertEq(recipients[2].weight, 100 * 100 * 81);
+    }
+
     // ─── 17. Deep lineage royalty with recency decay ──────────────────────
 
     function testDeepLineageRoyaltyDecay() public {

@@ -209,23 +209,19 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
         view
         returns (RecipientInfo[] memory)
     {
-        // Dynamic BFS using memory arrays that grow as needed
-        // We use a mapping-in-memory pattern via a fixed-size visited bitmap
+        // Bounded BFS with fixed-size memory buffers.
         uint256 maxNodes = maxLineageDepth;
         bytes32[] memory queue = new bytes32[](maxNodes);
         uint256[] memory depths = new uint256[](maxNodes);
-        // Track visited nodes using a flat array for O(1) lookup
-        // Use linear scan visited set (acceptable for on-chain with maxNodes cap)
         bytes32[] memory visited = new bytes32[](maxNodes);
         uint256 visitedCount = 0;
+        uint256 recipientCount = 0;
         uint256 queueSize = 1;
         uint256 head = 0;
 
         queue[0] = modelCid;
         depths[0] = 0;
 
-        // First pass: count unique ancestors
-        uint256 count = 0;
         while (head < queueSize) {
             bytes32 current = queue[head];
             uint256 currentDepth = depths[head];
@@ -245,7 +241,7 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
             visitedCount++;
 
             if (currentDepth > 0) {
-                count++;
+                recipientCount++;
             }
 
             // Enqueue parents, respecting maxLineageDepth
@@ -260,26 +256,19 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
             }
         }
 
-        if (count == 0) {
+        if (recipientCount == 0) {
             return new RecipientInfo[](0);
         }
 
-        // Second pass: collect recipients with weights
-        RecipientInfo[] memory result = new RecipientInfo[](count);
+        // Compact the already traversed queue into an exactly sized result.
+        // This repeats only the in-memory duplicate check, not the BFS or any
+        // registry parent lookup.
+        RecipientInfo[] memory result = new RecipientInfo[](recipientCount);
         uint256 resultIndex = 0;
-
-        // Reset BFS
-        queueSize = 1;
-        head = 0;
         visitedCount = 0;
-        queue[0] = modelCid;
-        depths[0] = 0;
 
-        while (head < queueSize) {
-            bytes32 current = queue[head];
-            uint256 currentDepth = depths[head];
-            head++;
-
+        for (uint256 i = 0; i < queueSize; i++) {
+            bytes32 current = queue[i];
             bool isVisited = false;
             for (uint256 j = 0; j < visitedCount; j++) {
                 if (visited[j] == current) {
@@ -292,25 +281,18 @@ contract RoyaltySplitter is IRoyaltySplitter, IERC2981, AccessControl {
             visited[visitedCount] = current;
             visitedCount++;
 
-            if (currentDepth > 0) {
-                IModelRegistry.ModelInfo memory info = registry.getModel(current);
-                uint256 typeWeight = contributionTypeWeights[uint8(info.contribution)];
-                uint256 decay = _computeDecay(currentDepth);
-                uint256 weight = DEFAULT_SHAPLEY_SCORE * typeWeight * decay;
+            uint256 currentDepth = depths[i];
+            if (currentDepth == 0) continue;
 
-                result[resultIndex] = RecipientInfo({
-                    contributor: info.contributor, weight: weight, depth: currentDepth
-                });
-                resultIndex++;
-            }
-
-            bytes32[] memory parents = registry.getParents(current);
-            for (uint256 i = 0; i < parents.length; i++) {
-                // No overflow check needed — already validated in first pass
-                queue[queueSize] = parents[i];
-                depths[queueSize] = currentDepth + 1;
-                queueSize++;
-            }
+            IModelRegistry.ModelInfo memory info = registry.getModel(current);
+            uint256 typeWeight = contributionTypeWeights[uint8(info.contribution)];
+            uint256 decay = _computeDecay(currentDepth);
+            result[resultIndex] = RecipientInfo({
+                contributor: info.contributor,
+                weight: DEFAULT_SHAPLEY_SCORE * typeWeight * decay,
+                depth: currentDepth
+            });
+            resultIndex++;
         }
 
         return result;
