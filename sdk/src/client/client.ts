@@ -43,6 +43,10 @@ import {
 	createTurboquantResource,
 	type TurboquantResource,
 } from "../resources/turboquant.js";
+import {
+	createVerificationResource,
+	type VerificationResource,
+} from "../resources/verification.js";
 import type { CliTransportConfig } from "../transport/cli-transport.js";
 import { CliTransport } from "../transport/cli-transport.js";
 import type { HttpTransportConfig } from "../transport/http-transport.js";
@@ -107,6 +111,8 @@ export interface NeunodeClient {
 	readonly lifecycle: LifecycleResource;
 	/** Model provenance DAG, ancestry, verification, hashing, and royalties. */
 	readonly lineage: LineageResource;
+	/** Production Intel TDX and AMD SEV-SNP evidence verification. */
+	readonly verification: VerificationResource;
 	/** Attach custom properties to the client. Returns the merged object. */
 	extend<T>(extender: (client: NeunodeClient) => T): NeunodeClient & T;
 }
@@ -131,6 +137,7 @@ class NeunodeClientImpl implements NeunodeClient {
 	readonly turboquant: TurboquantResource;
 	readonly lifecycle: LifecycleResource;
 	readonly lineage: LineageResource;
+	readonly verification: VerificationResource;
 
 	constructor(
 		cliConfig?: CliTransportConfig,
@@ -169,6 +176,7 @@ class NeunodeClientImpl implements NeunodeClient {
 		this.turboquant = createTurboquantResource(this);
 		this.lifecycle = createLifecycleResource(this);
 		this.lineage = createLineageResource(this);
+		this.verification = createVerificationResource(this);
 	}
 
 	get transportMode(): TransportMode {
@@ -204,6 +212,7 @@ class NeunodeClientImpl implements NeunodeClient {
 			"turboquant",
 			"lifecycle",
 			"lineage",
+			"verification",
 			"transportMode",
 			"extend",
 		]);

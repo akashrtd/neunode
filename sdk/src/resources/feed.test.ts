@@ -44,6 +44,7 @@ function makeMockClient(
 		turboquant: {} as never,
 		lifecycle: {} as never,
 		lineage: {} as never,
+		verification: {} as never,
 		extend: vi.fn(),
 	};
 }

@@ -168,3 +168,15 @@ export type {
 	TurboquantResource,
 } from "./turboquant.js";
 export { createTurboquantResource } from "./turboquant.js";
+export type {
+	AmdGeneration,
+	AmdSnpClaims,
+	AmdSnpVerifyParams,
+	AmdSnpVerifyResult,
+	AmdTcbClaims,
+	IntelTdxClaims,
+	IntelTdxVerifyParams,
+	IntelTdxVerifyResult,
+	VerificationResource,
+} from "./verification.js";
+export { createVerificationResource } from "./verification.js";
