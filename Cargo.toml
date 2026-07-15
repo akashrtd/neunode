@@ -48,14 +48,13 @@ k256 = "0.13"
 alloy = { version = "1.8", default-features = false, features = ["reqwest-rustls-tls", "contract", "provider-http", "rpc-types", "rpc-types-engine", "signer-local", "eip712", "sol-types", "json-abi"] }
 
 # Identity
-ssi = { version = "0.15", features = ["ring", "secp256k1", "eip712"] }
 
 # Storage
 rocksdb = { version = "0.24", features = ["multi-threaded-cf"] }
 moka = { version = "0.12", features = ["sync"] }
 
 # P2P — CRITICAL: tokio feature, NOT async-std
-libp2p = { version = "0.56", features = ["tokio", "gossipsub", "kad", "identify", "ping", "relay", "autonat", "dcutr", "noise", "yamux", "tcp", "quic", "dns", "macros"] }
+libp2p = { version = "0.56", features = ["tokio", "gossipsub", "kad", "identify", "ping", "relay", "autonat", "dcutr", "noise", "yamux", "tcp", "quic", "macros"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

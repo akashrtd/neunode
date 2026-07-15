@@ -42,6 +42,15 @@ jobs:
       - name: Check all features
         run: cargo check --workspace --all-features
 
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-audit
+      - name: Audit reachable dependencies
+        run: ./scripts/security_audit.sh
+
   sdk:
     runs-on: ubuntu-latest
     steps:
