@@ -32,7 +32,7 @@ impl<'a> TokenStore<'a> {
         let key = cf::token_key(&hash, token_type);
         match self.db.get_raw(cf::CF_TOKENS, &key)? {
             Some(bytes) => {
-                let balance: TokenBalance = bincode::deserialize(&bytes)
+                let balance: TokenBalance = crate::codec::deserialize(&bytes)
                     .map_err(|e| StorageError::Serialization(e.to_string()))?;
                 Ok(balance)
             }
@@ -48,8 +48,8 @@ impl<'a> TokenStore<'a> {
     ) -> Result<()> {
         let hash = cf::did_hash_16(agent_did);
         let key = cf::token_key(&hash, token_type);
-        let bytes =
-            bincode::serialize(balance).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let bytes = crate::codec::serialize(balance)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
         self.db.put_raw(cf::CF_TOKENS, &key, &bytes)
     }
 
@@ -87,7 +87,7 @@ impl<'a> TokenStore<'a> {
                 StorageError::Serialization("staked balance overflow".to_string())
             })?;
             let key = cf::token_key(&cf::did_hash_16(agent_did), token_type);
-            let bytes = bincode::serialize(&balance)
+            let bytes = crate::codec::serialize(&balance)
                 .map_err(|error| StorageError::Serialization(error.to_string()))?;
             let (audit_key, audit_bytes, _) = AuditStore::new(self.db).prepare_append(
                 token_audit_entry(agent_did, "token.stake", agent_did, token_type, amount)?,
@@ -125,9 +125,9 @@ impl<'a> TokenStore<'a> {
         let from_key = cf::token_key(&cf::did_hash_16(from_did), token_type);
         let to_key = cf::token_key(&cf::did_hash_16(to_did), token_type);
 
-        let from_bytes = bincode::serialize(&from_balance)
+        let from_bytes = crate::codec::serialize(&from_balance)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
-        let to_bytes = bincode::serialize(&to_balance)
+        let to_bytes = crate::codec::serialize(&to_balance)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
         let (audit_key, audit_bytes, _) = AuditStore::new(self.db).prepare_append(
             token_audit_entry(from_did, "token.transfer", to_did, token_type, amount)?,

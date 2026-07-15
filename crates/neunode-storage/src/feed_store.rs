@@ -26,8 +26,8 @@ impl<'a> FeedStore<'a> {
     pub fn append(&self, event: &StoredEvent) -> Result<()> {
         let hash = cf::did_hash_16(&event.agent_did);
         let key = cf::feed_event_key(&hash, event.sequence);
-        let value =
-            bincode::serialize(event).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let value = crate::codec::serialize(event)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
         self.db.put_raw(cf::CF_FEED_EVENTS, &key, &value)
     }
 
@@ -36,7 +36,7 @@ impl<'a> FeedStore<'a> {
         let key = cf::feed_event_key(&hash, sequence);
         match self.db.get_raw(cf::CF_FEED_EVENTS, &key)? {
             Some(bytes) => {
-                let event: StoredEvent = bincode::deserialize(&bytes)
+                let event: StoredEvent = crate::codec::deserialize(&bytes)
                     .map_err(|e| StorageError::Serialization(e.to_string()))?;
                 Ok(Some(event))
             }
@@ -76,7 +76,7 @@ impl<'a> FeedStore<'a> {
             .iter()
             .take(limit)
             .map(|(_, v)| {
-                bincode::deserialize(v).map_err(|e| StorageError::Serialization(e.to_string()))
+                crate::codec::deserialize(v).map_err(|e| StorageError::Serialization(e.to_string()))
             })
             .collect()
     }
@@ -88,7 +88,7 @@ impl<'a> FeedStore<'a> {
         entries
             .iter()
             .map(|(_, v)| {
-                bincode::deserialize(v).map_err(|e| StorageError::Serialization(e.to_string()))
+                crate::codec::deserialize(v).map_err(|e| StorageError::Serialization(e.to_string()))
             })
             .collect()
     }

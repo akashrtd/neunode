@@ -131,10 +131,10 @@ impl NeunodeDb {
         V: serde::de::DeserializeOwned,
     {
         let key_bytes =
-            bincode::serialize(key).map_err(|e| StorageError::Serialization(e.to_string()))?;
+            crate::codec::serialize(key).map_err(|e| StorageError::Serialization(e.to_string()))?;
         match self.get_raw(cf_name, &key_bytes)? {
             Some(bytes) => {
-                let value: V = bincode::deserialize(&bytes)
+                let value: V = crate::codec::deserialize(&bytes)
                     .map_err(|e| StorageError::Serialization(e.to_string()))?;
                 Ok(Some(value))
             }
@@ -156,9 +156,9 @@ impl NeunodeDb {
         V: serde::Serialize,
     {
         let key_bytes =
-            bincode::serialize(key).map_err(|e| StorageError::Serialization(e.to_string()))?;
-        let value_bytes =
-            bincode::serialize(value).map_err(|e| StorageError::Serialization(e.to_string()))?;
+            crate::codec::serialize(key).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let value_bytes = crate::codec::serialize(value)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
         self.put_raw(cf_name, &key_bytes, &value_bytes)
     }
 

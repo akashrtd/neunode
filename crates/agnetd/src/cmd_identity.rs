@@ -194,7 +194,7 @@ fn list_identities(writer: &OutputWriter, state: &AppState) -> Result<()> {
 
     let mut identities: Vec<(String, String)> = Vec::new();
     for (_, value_bytes) in &entries {
-        if let Ok(doc_json) = bincode::deserialize::<String>(value_bytes) {
+        if let Ok(doc_json) = neunode_storage::codec::deserialize::<String>(value_bytes) {
             if let Ok(doc) = neunode_identity::document::DidDocument::from_json(&doc_json) {
                 identities.push((doc.id.clone(), "stored".to_string()));
             }

@@ -34,9 +34,10 @@ pub fn execute(cmd: &InferenceCommands, args: &GlobalArgs, state: &mut AppState)
 
 fn store_provider(db: &NeunodeDb, provider: &InferenceProvider) -> Result<()> {
     let key = format!("prov:{}", provider.did);
-    let key_bytes = bincode::serialize(&key).map_err(|e| anyhow::anyhow!("key serialize: {e}"))?;
-    let value =
-        bincode::serialize(provider).map_err(|e| anyhow::anyhow!("serialize provider: {e}"))?;
+    let key_bytes = neunode_storage::codec::serialize(&key)
+        .map_err(|e| anyhow::anyhow!("key serialize: {e}"))?;
+    let value = neunode_storage::codec::serialize(provider)
+        .map_err(|e| anyhow::anyhow!("serialize provider: {e}"))?;
     db.put_raw(neunode_storage::cf::CF_MODELS, &key_bytes, &value)?;
     Ok(())
 }
@@ -45,11 +46,11 @@ fn load_all_providers(db: &NeunodeDb) -> Result<Vec<InferenceProvider>> {
     let entries = db.prefix_scan(neunode_storage::cf::CF_MODELS, &[])?;
     let mut providers = Vec::new();
     for (key, value) in entries {
-        let key = bincode::deserialize::<String>(&key)
+        let key = neunode_storage::codec::deserialize::<String>(&key)
             .map_err(|e| anyhow::anyhow!("deserialize model-store key: {e}"))?;
         if key.starts_with("prov:") {
             providers.push(
-                bincode::deserialize::<InferenceProvider>(&value)
+                neunode_storage::codec::deserialize::<InferenceProvider>(&value)
                     .map_err(|e| anyhow::anyhow!("deserialize provider {key}: {e}"))?,
             );
         }

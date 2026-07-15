@@ -13,18 +13,18 @@ impl<'a> IdentityStore<'a> {
 
     pub fn put<V: serde::Serialize>(&self, did: &str, document: &V) -> Result<()> {
         let key_bytes =
-            bincode::serialize(did).map_err(|e| StorageError::Serialization(e.to_string()))?;
-        let value_bytes =
-            bincode::serialize(document).map_err(|e| StorageError::Serialization(e.to_string()))?;
+            crate::codec::serialize(did).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let value_bytes = crate::codec::serialize(document)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
         self.db.put_raw(cf::CF_IDENTITY, &key_bytes, &value_bytes)
     }
 
     pub fn get<V: serde::de::DeserializeOwned>(&self, did: &str) -> Result<Option<V>> {
         let key_bytes =
-            bincode::serialize(did).map_err(|e| StorageError::Serialization(e.to_string()))?;
+            crate::codec::serialize(did).map_err(|e| StorageError::Serialization(e.to_string()))?;
         match self.db.get_raw(cf::CF_IDENTITY, &key_bytes)? {
             Some(bytes) => {
-                let value: V = bincode::deserialize(&bytes)
+                let value: V = crate::codec::deserialize(&bytes)
                     .map_err(|e| StorageError::Serialization(e.to_string()))?;
                 Ok(Some(value))
             }
@@ -34,7 +34,7 @@ impl<'a> IdentityStore<'a> {
 
     pub fn delete(&self, did: &str) -> Result<()> {
         let key_bytes =
-            bincode::serialize(did).map_err(|e| StorageError::Serialization(e.to_string()))?;
+            crate::codec::serialize(did).map_err(|e| StorageError::Serialization(e.to_string()))?;
         self.db.delete(cf::CF_IDENTITY, &key_bytes)
     }
 }

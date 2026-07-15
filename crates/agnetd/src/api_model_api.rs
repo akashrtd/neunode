@@ -188,9 +188,9 @@ fn store_model(
     model: &neunode_inference::provider::ModelInfo,
 ) -> Result<(), ApiError> {
     let key = format!("model:{}", model.id);
-    let key_bytes =
-        bincode::serialize(&key).map_err(|e| ApiError::Internal(format!("key: {e}")))?;
-    let value = bincode::serialize(model)
+    let key_bytes = neunode_storage::codec::serialize(&key)
+        .map_err(|e| ApiError::Internal(format!("key: {e}")))?;
+    let value = neunode_storage::codec::serialize(model)
         .map_err(|e| ApiError::Internal(format!("serialize model: {e}")))?;
     db.put_raw(neunode_storage::cf::CF_MODELS, &key_bytes, &value)
         .map_err(|e| ApiError::Internal(format!("store model: {e}")))?;
@@ -207,10 +207,12 @@ fn load_all_models(
     entries
         .iter()
         .filter(|(k, _)| {
-            let key_str = bincode::deserialize::<String>(k).ok().unwrap_or_default();
+            let key_str = neunode_storage::codec::deserialize::<String>(k).ok().unwrap_or_default();
             key_str.starts_with("model:")
         })
-        .filter_map(|(_, v)| bincode::deserialize::<neunode_inference::provider::ModelInfo>(v).ok())
+        .filter_map(|(_, v)| {
+            neunode_storage::codec::deserialize::<neunode_inference::provider::ModelInfo>(v).ok()
+        })
         .collect()
 }
 
@@ -219,15 +221,16 @@ fn load_model(
     model_id: &str,
 ) -> Result<Option<neunode_inference::provider::ModelInfo>, ApiError> {
     let key = format!("model:{model_id}");
-    let key_bytes =
-        bincode::serialize(&key).map_err(|e| ApiError::Internal(format!("key: {e}")))?;
+    let key_bytes = neunode_storage::codec::serialize(&key)
+        .map_err(|e| ApiError::Internal(format!("key: {e}")))?;
     match db
         .get_raw(neunode_storage::cf::CF_MODELS, &key_bytes)
         .map_err(|e| ApiError::Internal(format!("load model: {e}")))?
     {
         Some(bytes) => {
-            let model: neunode_inference::provider::ModelInfo = bincode::deserialize(&bytes)
-                .map_err(|e| ApiError::Internal(format!("deserialize: {e}")))?;
+            let model: neunode_inference::provider::ModelInfo =
+                neunode_storage::codec::deserialize(&bytes)
+                    .map_err(|e| ApiError::Internal(format!("deserialize: {e}")))?;
             Ok(Some(model))
         }
         None => Ok(None),
@@ -236,8 +239,8 @@ fn load_model(
 
 fn delete_model(db: &neunode_storage::db::NeunodeDb, model_id: &str) -> Result<(), ApiError> {
     let key = format!("model:{model_id}");
-    let key_bytes =
-        bincode::serialize(&key).map_err(|e| ApiError::Internal(format!("key: {e}")))?;
+    let key_bytes = neunode_storage::codec::serialize(&key)
+        .map_err(|e| ApiError::Internal(format!("key: {e}")))?;
     db.delete(neunode_storage::cf::CF_MODELS, &key_bytes)
         .map_err(|e| ApiError::Internal(format!("delete model: {e}")))?;
     Ok(())

@@ -43,10 +43,10 @@ impl<'a> BountyStore<'a> {
     }
 
     pub fn put(&self, bounty: &BountyData) -> Result<()> {
-        let key_bytes = bincode::serialize(&bounty.id)
+        let key_bytes = crate::codec::serialize(&bounty.id)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
-        let value_bytes =
-            bincode::serialize(bounty).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let value_bytes = crate::codec::serialize(bounty)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
         self.db.put_raw(cf::CF_BOUNTIES, &key_bytes, &value_bytes)
     }
 
@@ -59,9 +59,9 @@ impl<'a> BountyStore<'a> {
         action: &str,
         timestamp: u64,
     ) -> Result<()> {
-        let key = bincode::serialize(&bounty.id)
+        let key = crate::codec::serialize(&bounty.id)
             .map_err(|error| StorageError::Serialization(error.to_string()))?;
-        let value = bincode::serialize(bounty)
+        let value = crate::codec::serialize(bounty)
             .map_err(|error| StorageError::Serialization(error.to_string()))?;
         let (audit_key, audit_value, _) = AuditStore::new(self.db)
             .prepare_append(bounty_audit_entry(timestamp, actor, action, bounty, 0))?;
@@ -110,15 +110,15 @@ impl<'a> BountyStore<'a> {
 
         let from_key = cf::token_key(&cf::did_hash_16(creator_did), token_type);
         let to_key = cf::token_key(&cf::did_hash_16(escrow_did), token_type);
-        let from_bytes = bincode::serialize(&from_balance)
+        let from_bytes = crate::codec::serialize(&from_balance)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
-        let to_bytes = bincode::serialize(&to_balance)
+        let to_bytes = crate::codec::serialize(&to_balance)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
 
-        let bounty_key = bincode::serialize(&bounty.id)
+        let bounty_key = crate::codec::serialize(&bounty.id)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
-        let bounty_bytes =
-            bincode::serialize(bounty).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let bounty_bytes = crate::codec::serialize(bounty)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
         let (audit_key, audit_bytes, _) = AuditStore::new(self.db).prepare_append(
             bounty_audit_entry(bounty.created_at, creator_did, "bounty.create", bounty, amount),
         )?;
@@ -161,14 +161,14 @@ impl<'a> BountyStore<'a> {
 
         let from_key = cf::token_key(&cf::did_hash_16(from_did), token_type);
         let to_key = cf::token_key(&cf::did_hash_16(to_did), token_type);
-        let from_bytes = bincode::serialize(&from_balance)
+        let from_bytes = crate::codec::serialize(&from_balance)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
-        let to_bytes = bincode::serialize(&to_balance)
+        let to_bytes = crate::codec::serialize(&to_balance)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
-        let bounty_key = bincode::serialize(&bounty.id)
+        let bounty_key = crate::codec::serialize(&bounty.id)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
-        let bounty_bytes =
-            bincode::serialize(bounty).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let bounty_bytes = crate::codec::serialize(bounty)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
         let (audit_key, audit_bytes, _) = AuditStore::new(self.db).prepare_append(
             bounty_audit_entry(timestamp, from_did, "bounty.transition", bounty, amount),
         )?;
@@ -218,21 +218,21 @@ impl<'a> BountyStore<'a> {
         }
 
         let escrow_key = cf::token_key(&cf::did_hash_16(escrow_did), token_type);
-        let escrow_bytes =
-            bincode::serialize(&escrow).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let escrow_bytes = crate::codec::serialize(&escrow)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
         let recipient_records = recipients
             .into_iter()
             .map(|(did, balance)| {
                 let key = cf::token_key(&cf::did_hash_16(&did), token_type);
-                let bytes = bincode::serialize(&balance)
+                let bytes = crate::codec::serialize(&balance)
                     .map_err(|e| StorageError::Serialization(e.to_string()))?;
                 Ok((key, bytes))
             })
             .collect::<Result<Vec<_>>>()?;
-        let bounty_key = bincode::serialize(&bounty.id)
+        let bounty_key = crate::codec::serialize(&bounty.id)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
-        let bounty_bytes =
-            bincode::serialize(bounty).map_err(|e| StorageError::Serialization(e.to_string()))?;
+        let bounty_bytes = crate::codec::serialize(bounty)
+            .map_err(|e| StorageError::Serialization(e.to_string()))?;
         let (audit_key, audit_bytes, _) = AuditStore::new(self.db).prepare_append(
             bounty_audit_entry(timestamp, &bounty.requester_did, "bounty.payout", bounty, total),
         )?;
@@ -248,11 +248,11 @@ impl<'a> BountyStore<'a> {
     }
 
     pub fn get(&self, bounty_id: &str) -> Result<Option<BountyData>> {
-        let key_bytes = bincode::serialize(bounty_id)
+        let key_bytes = crate::codec::serialize(bounty_id)
             .map_err(|e| StorageError::Serialization(e.to_string()))?;
         match self.db.get_raw(cf::CF_BOUNTIES, &key_bytes)? {
             Some(bytes) => {
-                let bounty: BountyData = bincode::deserialize(&bytes)
+                let bounty: BountyData = crate::codec::deserialize(&bytes)
                     .map_err(|e| StorageError::Serialization(e.to_string()))?;
                 Ok(Some(bounty))
             }
@@ -273,7 +273,7 @@ impl<'a> BountyStore<'a> {
         let entries = self.db.prefix_scan(cf::CF_BOUNTIES, &[])?;
         let mut results = Vec::with_capacity(entries.len());
         for (key, value) in &entries {
-            match bincode::deserialize(value) {
+            match crate::codec::deserialize(value) {
                 Ok(bounty) => results.push(bounty),
                 Err(e) => {
                     tracing::warn!("skipping corrupt bounty entry (key {:?}): {}", key, e);
@@ -432,7 +432,7 @@ mod tests {
         store.put(&make_bounty("bnty_valid", "Open")).unwrap();
 
         // Insert a raw corrupt entry directly into the CF
-        let corrupt_key = bincode::serialize("bnty_corrupt").unwrap();
+        let corrupt_key = crate::codec::serialize("bnty_corrupt").unwrap();
         let corrupt_value = b"this is not valid bincode data".as_slice();
         db.put_raw(cf::CF_BOUNTIES, &corrupt_key, corrupt_value).unwrap();
 

@@ -23,8 +23,10 @@ pub fn execute(cmd: &ModelCommands, args: &GlobalArgs, state: &mut AppState) -> 
 
 pub(crate) fn store_model(db: &NeunodeDb, model: &ModelInfo) -> Result<()> {
     let key = format!("model:{}", model.id);
-    let key_bytes = bincode::serialize(&key).map_err(|e| anyhow::anyhow!("key: {e}"))?;
-    let value = bincode::serialize(model).map_err(|e| anyhow::anyhow!("serialize model: {e}"))?;
+    let key_bytes =
+        neunode_storage::codec::serialize(&key).map_err(|e| anyhow::anyhow!("key: {e}"))?;
+    let value = neunode_storage::codec::serialize(model)
+        .map_err(|e| anyhow::anyhow!("serialize model: {e}"))?;
     db.put_raw(neunode_storage::cf::CF_MODELS, &key_bytes, &value)?;
     Ok(())
 }
@@ -37,20 +39,21 @@ fn load_all_models(db: &NeunodeDb) -> Vec<ModelInfo> {
     entries
         .iter()
         .filter(|(k, _)| {
-            let key_str = bincode::deserialize::<String>(k).ok().unwrap_or_default();
+            let key_str = neunode_storage::codec::deserialize::<String>(k).ok().unwrap_or_default();
             key_str.starts_with("model:")
         })
-        .filter_map(|(_, v)| bincode::deserialize::<ModelInfo>(v).ok())
+        .filter_map(|(_, v)| neunode_storage::codec::deserialize::<ModelInfo>(v).ok())
         .collect()
 }
 
 pub(crate) fn load_model(db: &NeunodeDb, model_id: &str) -> Result<Option<ModelInfo>> {
     let key = format!("model:{model_id}");
-    let key_bytes = bincode::serialize(&key).map_err(|e| anyhow::anyhow!("key: {e}"))?;
+    let key_bytes =
+        neunode_storage::codec::serialize(&key).map_err(|e| anyhow::anyhow!("key: {e}"))?;
     match db.get_raw(neunode_storage::cf::CF_MODELS, &key_bytes)? {
         Some(bytes) => {
-            let model: ModelInfo =
-                bincode::deserialize(&bytes).map_err(|e| anyhow::anyhow!("deserialize: {e}"))?;
+            let model: ModelInfo = neunode_storage::codec::deserialize(&bytes)
+                .map_err(|e| anyhow::anyhow!("deserialize: {e}"))?;
             Ok(Some(model))
         }
         None => Ok(None),
@@ -59,7 +62,8 @@ pub(crate) fn load_model(db: &NeunodeDb, model_id: &str) -> Result<Option<ModelI
 
 fn delete_model(db: &NeunodeDb, model_id: &str) -> Result<()> {
     let key = format!("model:{model_id}");
-    let key_bytes = bincode::serialize(&key).map_err(|e| anyhow::anyhow!("key: {e}"))?;
+    let key_bytes =
+        neunode_storage::codec::serialize(&key).map_err(|e| anyhow::anyhow!("key: {e}"))?;
     db.delete(neunode_storage::cf::CF_MODELS, &key_bytes)?;
     Ok(())
 }

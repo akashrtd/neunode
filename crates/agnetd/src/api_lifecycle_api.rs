@@ -125,11 +125,11 @@ fn all_records(db: &neunode_storage::db::NeunodeDb) -> Result<Vec<LifecycleRecor
     let entries = db.prefix_scan(neunode_storage::cf::CF_IDENTITY, &[])?;
     let mut records = Vec::new();
     for (key, value) in entries {
-        let Ok(key) = bincode::deserialize::<String>(&key) else {
+        let Ok(key) = neunode_storage::codec::deserialize::<String>(&key) else {
             continue;
         };
         if key.starts_with(LIFECYCLE_PREFIX) {
-            let record = bincode::deserialize::<LifecycleRecord>(&value)
+            let record = neunode_storage::codec::deserialize::<LifecycleRecord>(&value)
                 .map_err(|e| ApiError::Internal(format!("corrupt lifecycle record {key}: {e}")))?;
             records.push(record);
         }

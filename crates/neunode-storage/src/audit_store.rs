@@ -103,7 +103,7 @@ impl<'a> AuditStore<'a> {
             entry_hash: GENESIS_HASH,
         };
         entry.entry_hash = calculate_hash(&entry)?;
-        let value = bincode::serialize(&entry)
+        let value = crate::codec::serialize(&entry)
             .map_err(|error| StorageError::Serialization(error.to_string()))?;
         Ok((sequence.to_be_bytes(), value, entry))
     }
@@ -163,7 +163,7 @@ fn calculate_hash(entry: &AuditEntry) -> Result<[u8; 32]> {
         details: &entry.details,
         previous_hash: entry.previous_hash,
     };
-    let bytes = bincode::serialize(&payload)
+    let bytes = crate::codec::serialize(&payload)
         .map_err(|error| StorageError::Serialization(error.to_string()))?;
     Ok(neunode_crypto::hash::blake3_hash(&bytes))
 }
@@ -175,11 +175,12 @@ fn decode_entry(key: &[u8], value: &[u8]) -> Result<AuditEntry> {
             reason: format!("invalid key length: {}", key.len()),
         }
     })?;
-    let entry: AuditEntry =
-        bincode::deserialize(value).map_err(|error| StorageError::AuditVerificationFailed {
+    let entry: AuditEntry = crate::codec::deserialize(value).map_err(|error| {
+        StorageError::AuditVerificationFailed {
             sequence,
             reason: format!("invalid entry encoding: {error}"),
-        })?;
+        }
+    })?;
     if entry.sequence != sequence {
         return audit_error(sequence, "key and entry sequence mismatch");
     }
@@ -240,7 +241,7 @@ mod tests {
         store.append(event(10, "bounty.create")).unwrap();
         let mut entry = store.entries().unwrap().remove(0);
         entry.action = "bounty.delete".to_string();
-        let bytes = bincode::serialize(&entry).unwrap();
+        let bytes = crate::codec::serialize(&entry).unwrap();
         db.put_raw(CF_AUDIT_LOG, &0_u64.to_be_bytes(), &bytes).unwrap();
 
         assert!(matches!(

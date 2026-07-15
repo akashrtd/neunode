@@ -187,7 +187,7 @@ pub async fn list_identities(
 
     let mut identities: Vec<IdentityListItem> = Vec::new();
     for (_, value_bytes) in &entries {
-        if let Ok(doc_json) = bincode::deserialize::<String>(value_bytes) {
+        if let Ok(doc_json) = neunode_storage::codec::deserialize::<String>(value_bytes) {
             if let Ok(doc) = neunode_identity::document::DidDocument::from_json(&doc_json) {
                 identities
                     .push(IdentityListItem { did: doc.id.clone(), status: "stored".to_string() });

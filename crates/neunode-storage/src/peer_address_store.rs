@@ -26,7 +26,7 @@ impl<'a> PeerAddressStore<'a> {
         if record.peer_id.is_empty() {
             return Err(StorageError::InvalidKeyFormat("peer ID cannot be empty".to_string()));
         }
-        let value = bincode::serialize(record)
+        let value = crate::codec::serialize(record)
             .map_err(|error| StorageError::Serialization(error.to_string()))?;
         self.db.put_raw(CF_P2P_STATE, &record_key(&record.peer_id), &value)
     }
@@ -35,7 +35,7 @@ impl<'a> PeerAddressStore<'a> {
         self.db
             .get_raw(CF_P2P_STATE, &record_key(peer_id))?
             .map(|value| {
-                bincode::deserialize(&value)
+                crate::codec::deserialize(&value)
                     .map_err(|error| StorageError::Serialization(error.to_string()))
             })
             .transpose()
@@ -46,7 +46,7 @@ impl<'a> PeerAddressStore<'a> {
             .prefix_scan(CF_P2P_STATE, PEER_ADDRESS_PREFIX)?
             .into_iter()
             .map(|(_, value)| {
-                bincode::deserialize(&value)
+                crate::codec::deserialize(&value)
                     .map_err(|error| StorageError::Serialization(error.to_string()))
             })
             .collect()

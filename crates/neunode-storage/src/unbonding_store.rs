@@ -60,11 +60,11 @@ impl<'a> UnbondingStore<'a> {
                     unlock_at,
                 };
                 let balance_key = cf::token_key(&cf::did_hash_16(agent_did), *token_type);
-                let balance_bytes = bincode::serialize(&balance)
+                let balance_bytes = crate::codec::serialize(&balance)
                     .map_err(|error| StorageError::Serialization(error.to_string()))?;
-                let entry_key = bincode::serialize(&entry.id)
+                let entry_key = crate::codec::serialize(&entry.id)
                     .map_err(|error| StorageError::Serialization(error.to_string()))?;
-                let entry_bytes = bincode::serialize(&entry)
+                let entry_bytes = crate::codec::serialize(&entry)
                     .map_err(|error| StorageError::Serialization(error.to_string()))?;
                 self.db.batch_put_raw(&[
                     (cf::CF_TOKENS, &balance_key, &balance_bytes),
@@ -85,7 +85,7 @@ impl<'a> UnbondingStore<'a> {
             .prefix_scan(cf::CF_UNBONDING, &[])?
             .into_iter()
             .map(|(_, bytes)| {
-                bincode::deserialize::<UnbondingEntry>(&bytes)
+                crate::codec::deserialize::<UnbondingEntry>(&bytes)
                     .map_err(|error| StorageError::Serialization(error.to_string()))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -124,7 +124,7 @@ impl<'a> UnbondingStore<'a> {
                 .into_iter()
                 .map(|(token_type, balance)| {
                     let key = cf::token_key(&cf::did_hash_16(agent_did), token_type);
-                    let bytes = bincode::serialize(&balance)
+                    let bytes = crate::codec::serialize(&balance)
                         .map_err(|error| StorageError::Serialization(error.to_string()))?;
                     Ok((key, bytes))
                 })
@@ -132,7 +132,7 @@ impl<'a> UnbondingStore<'a> {
             let delete_keys = matured
                 .iter()
                 .map(|entry| {
-                    bincode::serialize(&entry.id)
+                    crate::codec::serialize(&entry.id)
                         .map_err(|error| StorageError::Serialization(error.to_string()))
                 })
                 .collect::<Result<Vec<_>>>()?;

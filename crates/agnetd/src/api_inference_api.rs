@@ -159,10 +159,10 @@ fn load_all_providers(db: &NeunodeDb) -> Vec<InferenceProvider> {
     entries
         .iter()
         .filter(|(k, _)| {
-            let key_str = bincode::deserialize::<String>(k).unwrap_or_default();
+            let key_str = neunode_storage::codec::deserialize::<String>(k).unwrap_or_default();
             key_str.starts_with("prov:")
         })
-        .filter_map(|(_, v)| bincode::deserialize::<InferenceProvider>(v).ok())
+        .filter_map(|(_, v)| neunode_storage::codec::deserialize::<InferenceProvider>(v).ok())
         .collect()
 }
 

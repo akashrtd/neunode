@@ -54,9 +54,10 @@ fn train_db_key(job_id: &str) -> String {
 }
 
 fn store_job(db: &NeunodeDb, job: &TrainingJobMeta) -> Result<()> {
-    let key_bytes =
-        bincode::serialize(&train_db_key(&job.job_id)).map_err(|e| anyhow::anyhow!("key: {e}"))?;
-    let value = bincode::serialize(job).map_err(|e| anyhow::anyhow!("serialize job: {e}"))?;
+    let key_bytes = neunode_storage::codec::serialize(&train_db_key(&job.job_id))
+        .map_err(|e| anyhow::anyhow!("key: {e}"))?;
+    let value = neunode_storage::codec::serialize(job)
+        .map_err(|e| anyhow::anyhow!("serialize job: {e}"))?;
     db.put_raw(neunode_storage::cf::CF_TRAINING, &key_bytes, &value)?;
     Ok(())
 }
@@ -69,20 +70,20 @@ fn load_all_jobs(db: &NeunodeDb) -> Vec<TrainingJobMeta> {
     entries
         .iter()
         .filter(|(k, _)| {
-            let key_str = bincode::deserialize::<String>(k).ok().unwrap_or_default();
+            let key_str = neunode_storage::codec::deserialize::<String>(k).ok().unwrap_or_default();
             key_str.starts_with("job:")
         })
-        .filter_map(|(_, v)| bincode::deserialize::<TrainingJobMeta>(v).ok())
+        .filter_map(|(_, v)| neunode_storage::codec::deserialize::<TrainingJobMeta>(v).ok())
         .collect()
 }
 
 fn load_job(db: &NeunodeDb, job_id: &str) -> Result<Option<TrainingJobMeta>> {
-    let key_bytes =
-        bincode::serialize(&train_db_key(job_id)).map_err(|e| anyhow::anyhow!("key: {e}"))?;
+    let key_bytes = neunode_storage::codec::serialize(&train_db_key(job_id))
+        .map_err(|e| anyhow::anyhow!("key: {e}"))?;
     match db.get_raw(neunode_storage::cf::CF_TRAINING, &key_bytes)? {
         Some(bytes) => {
-            let job: TrainingJobMeta =
-                bincode::deserialize(&bytes).map_err(|e| anyhow::anyhow!("deserialize: {e}"))?;
+            let job: TrainingJobMeta = neunode_storage::codec::deserialize(&bytes)
+                .map_err(|e| anyhow::anyhow!("deserialize: {e}"))?;
             Ok(Some(job))
         }
         None => Ok(None),
@@ -112,9 +113,10 @@ fn worker_db_key(worker_id: &str) -> String {
 }
 
 fn store_worker(db: &NeunodeDb, worker: &WorkerMeta) -> Result<()> {
-    let key_bytes = bincode::serialize(&worker_db_key(&worker.worker_id))
+    let key_bytes = neunode_storage::codec::serialize(&worker_db_key(&worker.worker_id))
         .map_err(|e| anyhow::anyhow!("key: {e}"))?;
-    let value = bincode::serialize(worker).map_err(|e| anyhow::anyhow!("serialize worker: {e}"))?;
+    let value = neunode_storage::codec::serialize(worker)
+        .map_err(|e| anyhow::anyhow!("serialize worker: {e}"))?;
     db.put_raw(neunode_storage::cf::CF_TRAINING, &key_bytes, &value)?;
     Ok(())
 }
@@ -127,21 +129,21 @@ fn load_all_workers(db: &NeunodeDb) -> Vec<WorkerMeta> {
     entries
         .iter()
         .filter(|(k, _)| {
-            let key_str = bincode::deserialize::<String>(k).ok().unwrap_or_default();
+            let key_str = neunode_storage::codec::deserialize::<String>(k).ok().unwrap_or_default();
             key_str.starts_with("worker:")
         })
-        .filter_map(|(_, v)| bincode::deserialize::<WorkerMeta>(v).ok())
+        .filter_map(|(_, v)| neunode_storage::codec::deserialize::<WorkerMeta>(v).ok())
         .collect()
 }
 
 #[allow(dead_code)]
 fn load_worker(db: &NeunodeDb, worker_id: &str) -> Result<Option<WorkerMeta>> {
-    let key_bytes =
-        bincode::serialize(&worker_db_key(worker_id)).map_err(|e| anyhow::anyhow!("key: {e}"))?;
+    let key_bytes = neunode_storage::codec::serialize(&worker_db_key(worker_id))
+        .map_err(|e| anyhow::anyhow!("key: {e}"))?;
     match db.get_raw(neunode_storage::cf::CF_TRAINING, &key_bytes)? {
         Some(bytes) => {
-            let worker: WorkerMeta =
-                bincode::deserialize(&bytes).map_err(|e| anyhow::anyhow!("deserialize: {e}"))?;
+            let worker: WorkerMeta = neunode_storage::codec::deserialize(&bytes)
+                .map_err(|e| anyhow::anyhow!("deserialize: {e}"))?;
             Ok(Some(worker))
         }
         None => Ok(None),

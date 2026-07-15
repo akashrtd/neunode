@@ -235,8 +235,9 @@ pub async fn leaderboard(
         std::collections::HashMap::new();
 
     for (_, value_bytes) in &entries {
-        if let Ok(att) =
-            bincode::deserialize::<neunode_reputation::attestation::Attestation>(value_bytes)
+        if let Ok(att) = neunode_storage::codec::deserialize::<
+            neunode_reputation::attestation::Attestation,
+        >(value_bytes)
         {
             let entry = agent_scores.entry(att.target.0.clone()).or_insert((0.0, 0));
             entry.0 += att.score;
@@ -352,9 +353,9 @@ fn persist_attestation(
     attestation: &neunode_reputation::attestation::Attestation,
 ) -> Result<(), ApiError> {
     let key = format!("att_{}_{}", attestation.attester.0, attestation.timestamp);
-    let key_bytes = bincode::serialize(&key)
+    let key_bytes = neunode_storage::codec::serialize(&key)
         .map_err(|e| ApiError::Internal(format!("key serialization: {e}")))?;
-    let value_bytes = bincode::serialize(attestation)
+    let value_bytes = neunode_storage::codec::serialize(attestation)
         .map_err(|e| ApiError::Internal(format!("value serialization: {e}")))?;
     db.put_raw(neunode_storage::cf::CF_REPUTATION, &key_bytes, &value_bytes)
         .map_err(|e| ApiError::Internal(format!("persist attestation: {e}")))?;
@@ -372,7 +373,8 @@ fn load_attestations_for(
     entries
         .iter()
         .filter_map(|(_, v)| {
-            bincode::deserialize::<neunode_reputation::attestation::Attestation>(v).ok()
+            neunode_storage::codec::deserialize::<neunode_reputation::attestation::Attestation>(v)
+                .ok()
         })
         .filter(|a| a.target.0 == did)
         .collect()

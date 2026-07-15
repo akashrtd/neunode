@@ -135,7 +135,7 @@ fn show_leaderboard(limit: usize, writer: &OutputWriter, state: &AppState) -> Re
         std::collections::HashMap::new();
 
     for (_, value_bytes) in &entries {
-        if let Ok(att) = bincode::deserialize::<Attestation>(value_bytes) {
+        if let Ok(att) = neunode_storage::codec::deserialize::<Attestation>(value_bytes) {
             let entry = agent_scores.entry(att.target.0.clone()).or_insert((0.0, 0));
             entry.0 += att.score;
             entry.1 += 1;
@@ -223,10 +223,10 @@ fn persist_attestation(
     attestation: &Attestation,
 ) -> Result<()> {
     let key = format!("att_{}_{}", attestation.attester.0, attestation.timestamp);
-    let key_bytes =
-        bincode::serialize(&key).map_err(|e| anyhow::anyhow!("key serialization: {e}"))?;
-    let value_bytes =
-        bincode::serialize(attestation).map_err(|e| anyhow::anyhow!("value serialization: {e}"))?;
+    let key_bytes = neunode_storage::codec::serialize(&key)
+        .map_err(|e| anyhow::anyhow!("key serialization: {e}"))?;
+    let value_bytes = neunode_storage::codec::serialize(attestation)
+        .map_err(|e| anyhow::anyhow!("value serialization: {e}"))?;
     db.put_raw(neunode_storage::cf::CF_REPUTATION, &key_bytes, &value_bytes)?;
     Ok(())
 }
@@ -238,7 +238,7 @@ fn load_attestations_for(db: &neunode_storage::db::NeunodeDb, did: &str) -> Vec<
     };
     entries
         .iter()
-        .filter_map(|(_, v)| bincode::deserialize::<Attestation>(v).ok())
+        .filter_map(|(_, v)| neunode_storage::codec::deserialize::<Attestation>(v).ok())
         .filter(|a| a.target.0 == did)
         .collect()
 }
