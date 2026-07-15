@@ -289,6 +289,9 @@ fn parse_der_u8(value: &[u8]) -> Option<u8> {
 fn parse_der_octets(value: &[u8]) -> Option<&[u8]> {
     match value {
         [0x04, length, bytes @ ..] if usize::from(*length) == bytes.len() => Some(bytes),
+        // `x509-cert` unwraps the extension's outer OCTET STRING. AMD encodes
+        // HW_ID directly as its 64-byte content rather than a nested value.
+        bytes if bytes.len() == 64 => Some(bytes),
         _ => None,
     }
 }
@@ -300,6 +303,71 @@ fn tee_error(reason: impl Into<String>) -> VerificationError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sev::{
+        certs::snp::{builtin::milan, Certificate},
+        parser::ByteParser,
+    };
+
+    fn milan_fixture() -> (AttestationReport, Chain) {
+        // AMD's fixture is a 1,184-byte report encoded as 2,368 hex characters.
+        let report_fixture = include_str!("tee_amd_report_milan.hex").trim();
+        assert_eq!(report_fixture.len(), 2_368);
+        let report_bytes = hex::decode(report_fixture).unwrap();
+        let report = AttestationReport::from_bytes(report_bytes.as_slice()).unwrap();
+        let vek_bytes = hex::decode(include_str!("tee_amd_vcek_milan.hex").trim()).unwrap();
+        let chain = Chain {
+            ca: ca::Chain { ark: milan::ark().unwrap(), ask: milan::ask().unwrap() },
+            vek: Certificate::from_der(&vek_bytes).unwrap(),
+        };
+        (report, chain)
+    }
+
+    fn fixture_policy(report: &AttestationReport) -> AmdSnpPolicy {
+        AmdSnpPolicy {
+            expected_measurement: report.measurement,
+            expected_report_data: report.report_data,
+            minimum_tcb: report_tcb(report),
+            allow_smt: report.policy.smt_allowed(),
+            allow_migration: report.policy.migrate_ma_allowed(),
+        }
+    }
+
+    #[test]
+    fn verifies_vendor_milan_report_end_to_end() {
+        let (report, chain) = milan_fixture();
+        let policy = fixture_policy(&report);
+        let verifier = AmdSnpVerifier::production_vcek(AmdGeneration::Milan);
+
+        let claims = verifier.verify(&report, &chain, &policy, 1_740_000_000).unwrap();
+
+        assert_eq!(claims.measurement, report.measurement);
+        assert_eq!(claims.report_data, report.report_data);
+        assert_eq!(claims.chip_id, report.chip_id);
+        assert_eq!(claims.verified_at_secs, 1_740_000_000);
+    }
+
+    #[test]
+    fn rejects_tampered_vendor_report() {
+        let (mut report, chain) = milan_fixture();
+        let policy = fixture_policy(&report);
+        report.measurement[0] ^= 1;
+        let verifier = AmdSnpVerifier::production_vcek(AmdGeneration::Milan);
+
+        let error = verifier.verify(&report, &chain, &policy, 1_740_000_000).unwrap_err();
+
+        assert!(error.to_string().contains("signature failed"));
+    }
+
+    #[test]
+    fn rejects_expired_vcek_at_caller_time() {
+        let (report, chain) = milan_fixture();
+        let policy = fixture_policy(&report);
+        let verifier = AmdSnpVerifier::production_vcek(AmdGeneration::Milan);
+
+        let error = verifier.verify(&report, &chain, &policy, 2_000_000_000).unwrap_err();
+
+        assert!(error.to_string().contains("certificate expired"));
+    }
 
     #[test]
     fn parses_strict_der_u8_values() {
@@ -312,6 +380,7 @@ mod tests {
     #[test]
     fn parses_strict_der_octets() {
         assert_eq!(parse_der_octets(&[0x04, 0x03, 1, 2, 3]), Some(&[1, 2, 3][..]));
+        assert_eq!(parse_der_octets(&[7; 64]), Some(&[7; 64][..]));
         assert_eq!(parse_der_octets(&[0x04, 0x04, 1, 2, 3]), None);
         assert_eq!(parse_der_octets(&[0x05, 0x03, 1, 2, 3]), None);
     }
