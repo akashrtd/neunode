@@ -140,6 +140,27 @@ describe("Integration: live HTTP resource routes", () => {
 		expect(result.job).toBe("job:http-integration");
 	});
 
+	it("shows and exports the requested identity over HTTP", async () => {
+		const active = await client.identity.show();
+		const selected = await client.identity.show(active.did);
+		expect(selected).toMatchObject({
+			did: active.did,
+			method: "persisted",
+		});
+		expect(selected.document).toMatchObject({ id: active.did });
+
+		const exported = await client.identity.export({ did: active.did });
+		expect(exported).toMatchObject({
+			did: active.did,
+			verification_methods: selected.verification_methods,
+		});
+		expect(exported.did_document).toEqual(selected.document);
+
+		await expect(client.identity.show("did:neunode:missing")).rejects.toThrow(
+			"identity 'did:neunode:missing' not found",
+		);
+	});
+
 	it("uses the daemon's canonical train jobs route", async () => {
 		const jobs = await client.train.list();
 		expect(jobs).toBeDefined();

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::response::IntoResponse;
 use axum::Json;
 use serde::{Deserialize, Serialize};
@@ -40,6 +40,28 @@ pub struct IdentityListItem {
     pub status: String,
 }
 
+#[derive(Debug, Default, Deserialize, ToSchema)]
+pub struct IdentityQuery {
+    pub did: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct IdentityDetailResponse {
+    pub did: String,
+    pub method: String,
+    pub verification_methods: usize,
+    pub services: usize,
+    pub document: serde_json::Value,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct IdentityExportResponse {
+    pub did: String,
+    pub exported_at: String,
+    pub did_document: serde_json::Value,
+    pub verification_methods: usize,
+}
+
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct OnChainRegistrationResponse {
     pub tx_hash: String,
@@ -55,39 +77,83 @@ pub struct OnChainRegistrationResponse {
     get,
     path = "/api/v1/identity",
     responses(
-        (status = 200, description = "Active identity details", body = IdentityResponse),
+        (status = 200, description = "Identity details", body = IdentityDetailResponse),
         (status = 401, description = "No active identity"),
     ),
     tag = "identity",
 )]
 pub async fn show_identity(
     State(state): State<Arc<ApiState>>,
+    Query(query): Query<IdentityQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let did = state.require_did()?;
+    let target_did = match query.did {
+        Some(did) if !did.trim().is_empty() => did,
+        Some(_) => return Err(ApiError::BadRequest("did cannot be empty".to_string())),
+        None => state.require_did()?.0.clone(),
+    };
 
     let store = neunode_storage::identity_store::IdentityStore::new(&state.db);
     let doc_json: Option<String> =
-        store.get(&did.0).map_err(|e| ApiError::Internal(e.to_string()))?;
+        store.get(&target_did).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     match doc_json {
         Some(json_str) => {
             let doc = neunode_identity::document::DidDocument::from_json(&json_str)
                 .map_err(|e| ApiError::Internal(format!("failed to parse DID document: {e}")))?;
-            let resp = IdentityResponse {
+            let resp = IdentityDetailResponse {
                 did: doc.id.clone(),
                 method: "persisted".to_string(),
-                name: did.0.split(':').next_back().unwrap_or(&did.0).to_string(),
-                ethereum: doc
-                    .verification_method
-                    .first()
-                    .map(|_| "see document".to_string())
-                    .unwrap_or_default(),
-                peer_id: "see document".to_string(),
+                verification_methods: doc.verification_method.len(),
+                services: doc.service.len(),
+                document: serde_json::from_str(&json_str).map_err(|e| {
+                    ApiError::Internal(format!("failed to decode DID document: {e}"))
+                })?,
             };
             Ok(types::ok(resp))
         }
-        None => Err(ApiError::NotFound(format!("identity '{}' not found in local store", did.0))),
+        None => {
+            Err(ApiError::NotFound(format!("identity '{target_did}' not found in local store")))
+        }
     }
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/identity/export",
+    params(("did" = Option<String>, Query, description = "DID to export; defaults to active identity")),
+    responses(
+        (status = 200, description = "Portable public identity document", body = IdentityExportResponse),
+        (status = 404, description = "Identity not found"),
+    ),
+    tag = "identity",
+)]
+pub async fn export_identity(
+    State(state): State<Arc<ApiState>>,
+    Query(query): Query<IdentityQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let target_did = match query.did {
+        Some(did) if !did.trim().is_empty() => did,
+        Some(_) => return Err(ApiError::BadRequest("did cannot be empty".to_string())),
+        None => state.require_did()?.0.clone(),
+    };
+    let store = neunode_storage::identity_store::IdentityStore::new(&state.db);
+    let doc_json = store
+        .get::<String>(&target_did)
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| {
+            ApiError::NotFound(format!("identity '{target_did}' not found in local store"))
+        })?;
+    let doc = neunode_identity::document::DidDocument::from_json(&doc_json)
+        .map_err(|e| ApiError::Internal(format!("failed to parse DID document: {e}")))?;
+    let did_document = serde_json::from_str(&doc_json)
+        .map_err(|e| ApiError::Internal(format!("failed to decode DID document: {e}")))?;
+
+    Ok(types::ok(IdentityExportResponse {
+        did: doc.id,
+        exported_at: chrono::Utc::now().to_rfc3339(),
+        did_document,
+        verification_methods: doc.verification_method.len(),
+    }))
 }
 
 #[utoipa::path(

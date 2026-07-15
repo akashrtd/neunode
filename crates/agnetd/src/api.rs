@@ -47,6 +47,8 @@ pub use routes::build_api_router;
 #[derive(utoipa::OpenApi)]
 #[openapi(
     paths(
+        identity_api::show_identity,
+        identity_api::export_identity,
         inference_api::register_provider,
         lifecycle_api::lifecycle_status,
         lifecycle_api::activate,
@@ -65,6 +67,9 @@ pub use routes::build_api_router;
         lineage_api::verify_signature,
     ),
     components(schemas(
+        identity_api::IdentityQuery,
+        identity_api::IdentityDetailResponse,
+        identity_api::IdentityExportResponse,
         inference_api::RegisterProviderRequest,
         inference_api::RegisterProviderResponse,
         lifecycle_api::LifecycleStatusResponse,

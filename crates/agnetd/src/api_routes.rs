@@ -16,6 +16,7 @@ pub fn build_api_router() -> Router<Arc<ApiState>> {
         .route("/api/v1/identity", get(super::identity_api::show_identity))
         .route("/api/v1/identity/create", post(super::identity_api::create_identity))
         .route("/api/v1/identity/list", get(super::identity_api::list_identities))
+        .route("/api/v1/identity/export", get(super::identity_api::export_identity))
         .route("/api/v1/identity/register-onchain", post(super::identity_api::register_onchain))
         // Feed
         .route("/api/v1/feed", get(super::feed_api::list_feed).post(super::feed_api::post_feed))
