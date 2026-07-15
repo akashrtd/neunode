@@ -33,6 +33,9 @@ pub enum P2pError {
     #[error("encryption error: {0}")]
     EncryptionError(String),
 
+    #[error("wire format error: {0}")]
+    WireFormat(String),
+
     #[error("channel closed")]
     ChannelClosed,
 
@@ -105,6 +108,12 @@ mod tests {
     fn encryption_error_display() {
         let err = P2pError::EncryptionError("handshake failed".to_string());
         assert_eq!(err.to_string(), "encryption error: handshake failed");
+    }
+
+    #[test]
+    fn wire_format_error_display() {
+        let err = P2pError::WireFormat("invalid compressed frame".to_string());
+        assert_eq!(err.to_string(), "wire format error: invalid compressed frame");
     }
 
     #[test]

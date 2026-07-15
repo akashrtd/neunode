@@ -1,5 +1,6 @@
 pub mod behaviour;
 pub mod catchup;
+pub mod compression;
 pub mod dht;
 pub mod dht_store;
 pub mod discovery;

@@ -4,8 +4,11 @@ use libp2p::kad::{PeerRecord, Record, RecordKey};
 use libp2p::PeerId;
 use serde::{Deserialize, Serialize};
 
+use crate::compression;
 use crate::error::{P2pError, Result};
 use ts_rs::TS;
+
+const MAX_DHT_VALUE_SIZE: usize = 1024 * 1024;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, TS)]
 #[ts(export)]
@@ -104,8 +107,9 @@ impl DhtManager {
         &self.local_peer_id
     }
 
-    pub fn prepare_put_record(&self, key: DhtKey, value: RecordValue) -> Record {
-        value.to_record(key)
+    pub fn prepare_put_record(&self, key: DhtKey, value: RecordValue) -> Result<Record> {
+        let wire_value = compression::encode(value.as_bytes(), MAX_DHT_VALUE_SIZE)?;
+        Ok(RecordValue::new(wire_value).to_record(key))
     }
 
     pub fn prepare_put_record_signed(
@@ -113,16 +117,17 @@ impl DhtManager {
         key: DhtKey,
         value: RecordValue,
         peer_id: PeerId,
-    ) -> Record {
-        value.to_record_with_publisher(key, peer_id)
+    ) -> Result<Record> {
+        let wire_value = compression::encode(value.as_bytes(), MAX_DHT_VALUE_SIZE)?;
+        Ok(RecordValue::new(wire_value).to_record_with_publisher(key, peer_id))
     }
 
-    pub fn extract_record_value(record: &Record) -> RecordValue {
-        RecordValue::new(record.value.clone())
+    pub fn extract_record_value(record: &Record) -> Result<RecordValue> {
+        compression::decode(&record.value, MAX_DHT_VALUE_SIZE).map(RecordValue::new)
     }
 
-    pub fn extract_peer_record(peer_record: &PeerRecord) -> RecordValue {
-        RecordValue::new(peer_record.record.value.clone())
+    pub fn extract_peer_record(peer_record: &PeerRecord) -> Result<RecordValue> {
+        compression::decode(&peer_record.record.value, MAX_DHT_VALUE_SIZE).map(RecordValue::new)
     }
 }
 
@@ -227,7 +232,7 @@ mod tests {
         let manager = DhtManager::new(peer_id);
         let key = DhtKey::from_bytes_str("test-key");
         let val = RecordValue::from_bytes_str("test-value");
-        let record = manager.prepare_put_record(key, val);
+        let record = manager.prepare_put_record(key, val).unwrap();
         assert_eq!(record.value, b"test-value");
     }
 
@@ -237,7 +242,7 @@ mod tests {
         let manager = DhtManager::new(peer_id);
         let key = DhtKey::from_bytes_str("test-key");
         let val = RecordValue::from_bytes_str("test-value");
-        let record = manager.prepare_put_record_signed(key, val, peer_id);
+        let record = manager.prepare_put_record_signed(key, val, peer_id).unwrap();
         assert_eq!(record.value, b"test-value");
         assert!(record.publisher.is_some());
     }
@@ -247,8 +252,29 @@ mod tests {
         let key = DhtKey::from_bytes_str("key");
         let val = RecordValue::from_bytes_str("payload");
         let record = val.to_record(key);
-        let extracted = DhtManager::extract_record_value(&record);
+        let extracted = DhtManager::extract_record_value(&record).unwrap();
         assert_eq!(extracted.as_bytes(), b"payload");
+    }
+
+    #[test]
+    fn dht_record_compresses_transparently() {
+        let manager = DhtManager::new(random_peer_id());
+        let original = RecordValue::new(vec![b'a'; 32 * 1024]);
+        let record = manager
+            .prepare_put_record(DhtKey::from_bytes_str("compressed"), original.clone())
+            .unwrap();
+        assert!(record.value.len() < original.as_bytes().len() / 10);
+        assert_eq!(DhtManager::extract_record_value(&record).unwrap(), original);
+    }
+
+    #[test]
+    fn dht_record_rejects_oversized_declared_frame() {
+        let mut value = b"NNZSTD\x01".to_vec();
+        value.extend_from_slice(&(MAX_DHT_VALUE_SIZE as u32 + 1).to_be_bytes());
+        value.push(0);
+        let record =
+            Record { key: RecordKey::new(&b"bomb"), value, publisher: None, expires: None };
+        assert!(DhtManager::extract_record_value(&record).is_err());
     }
 
     #[test]

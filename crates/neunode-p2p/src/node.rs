@@ -10,8 +10,11 @@ use libp2p::{Multiaddr, PeerId, Swarm};
 
 use crate::behaviour::{build_behaviour, NeunodeBehaviour, NeunodeEvent};
 use crate::catchup::{CatchupRequest, CatchupResponse, CATCHUP_TOPIC};
+use crate::compression;
 use crate::error::{P2pError, Result};
 use crate::gossipsub::all_category_topics;
+
+const MAX_WIRE_PAYLOAD_SIZE: usize = 1024 * 1024;
 
 pub struct P2pNode {
     swarm: Swarm<NeunodeBehaviour>,
@@ -70,10 +73,11 @@ impl P2pNode {
 
     pub fn publish(&mut self, topic: &str, data: &[u8]) -> Result<()> {
         let topic = IdentTopic::new(topic);
+        let wire_data = compression::encode(data, MAX_WIRE_PAYLOAD_SIZE)?;
         self.swarm
             .behaviour_mut()
             .gossipsub
-            .publish(topic, data.to_vec())
+            .publish(topic, wire_data)
             .map_err(|e| P2pError::PublishFailed(format!("publish failed: {e}")))?;
         Ok(())
     }
@@ -174,10 +178,11 @@ impl P2pNode {
             None => CatchupRequest::new(author_did, from_sequence),
         };
         let topic = IdentTopic::new(CATCHUP_TOPIC);
+        let wire_data = compression::encode(&req.serialize(), MAX_WIRE_PAYLOAD_SIZE)?;
         self.swarm
             .behaviour_mut()
             .gossipsub
-            .publish(topic, req.serialize())
+            .publish(topic, wire_data)
             .map_err(|e| P2pError::PublishFailed(format!("catchup request failed: {e}")))?;
         Ok(())
     }
@@ -192,10 +197,11 @@ impl P2pNode {
     ) -> Result<()> {
         let resp = CatchupResponse::new(author_did, events, from_sequence, to_sequence);
         let topic = IdentTopic::new(CATCHUP_TOPIC);
+        let wire_data = compression::encode(&resp.serialize(), MAX_WIRE_PAYLOAD_SIZE)?;
         self.swarm
             .behaviour_mut()
             .gossipsub
-            .publish(topic, resp.serialize())
+            .publish(topic, wire_data)
             .map_err(|e| P2pError::PublishFailed(format!("catchup response failed: {e}")))?;
         Ok(())
     }
@@ -262,14 +268,21 @@ fn convert_gossipsub_event(event: libp2p::gossipsub::Event) -> Option<NodeEvent>
     match event {
         libp2p::gossipsub::Event::Message { propagation_source, message, .. } => {
             let topic = message.topic.to_string();
+            let data = match compression::decode(&message.data, MAX_WIRE_PAYLOAD_SIZE) {
+                Ok(data) => data,
+                Err(error) => {
+                    tracing::warn!(%propagation_source, %topic, %error, "dropping invalid wire payload");
+                    return None;
+                }
+            };
             if topic == CATCHUP_TOPIC {
-                if let Some(req) = CatchupRequest::deserialize(&message.data) {
+                if let Some(req) = CatchupRequest::deserialize(&data) {
                     return Some(NodeEvent::CatchupRequest {
                         source: Some(propagation_source),
                         request: req,
                     });
                 }
-                if let Some(resp) = CatchupResponse::deserialize(&message.data) {
+                if let Some(resp) = CatchupResponse::deserialize(&data) {
                     return Some(NodeEvent::CatchupResponse {
                         source: Some(propagation_source),
                         response: resp,
@@ -277,11 +290,7 @@ fn convert_gossipsub_event(event: libp2p::gossipsub::Event) -> Option<NodeEvent>
                 }
                 return None;
             }
-            Some(NodeEvent::GossipsubMessage {
-                source: Some(propagation_source),
-                topic,
-                data: message.data,
-            })
+            Some(NodeEvent::GossipsubMessage { source: Some(propagation_source), topic, data })
         }
         _ => None,
     }
