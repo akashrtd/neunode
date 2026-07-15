@@ -361,6 +361,26 @@ contract NeunodeIdentityTest is Test {
         vm.expectRevert(abi.encodeWithSelector(NeunodeIdentity.NotOwner.selector, alice));
         identity.setStakeSource(address(0xBEEF));
     }
+
+    function testTransferOwnership() public {
+        identity.transferOwnership(alice);
+        assertEq(identity.owner(), alice);
+
+        vm.prank(alice);
+        identity.setMinRegistrationStake(MIN_STAKE * 2);
+        assertEq(identity.minRegistrationStake(), MIN_STAKE * 2);
+    }
+
+    function testRevertTransferOwnershipZeroAddress() public {
+        vm.expectRevert(NeunodeIdentity.InvalidOwner.selector);
+        identity.transferOwnership(address(0));
+    }
+
+    function testRevertTransferOwnershipNotOwner() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(NeunodeIdentity.NotOwner.selector, alice));
+        identity.transferOwnership(alice);
+    }
 }
 
 /// @dev Minimal stake oracle for tests — NeunodeToken satisfies this interface in prod.

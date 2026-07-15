@@ -14,6 +14,9 @@ import "../src/bounty/BountyReview.sol";
 import "../src/royalty/ModelRegistry.sol";
 import "../src/royalty/RoyaltySplitter.sol";
 import "../src/governance/NeunodeGovernance.sol";
+import "../src/reputation/NeunodeReputation.sol";
+import "../src/slashing/NeunodeSlashing.sol";
+import "../src/escrow/StakingEscrow.sol";
 import "../src/diamond/Diamond.sol";
 import "../src/diamond/DiamondCutFacet.sol";
 import "../src/diamond/DiamondLoupeFacet.sol";
@@ -31,6 +34,9 @@ contract Deploy is Script {
     // ─── Core ────────────────────────────────────────────────────────────
     NeunodeIdentity public identity;
     NeunodeRegistry public registry;
+    NeunodeReputation public reputation;
+    NeunodeSlashing public slashing;
+    StakingEscrow public stakingEscrow;
 
     // ─── Bounty System ───────────────────────────────────────────────────
     NeunodeBounty public bounty;
@@ -56,9 +62,12 @@ contract Deploy is Script {
     uint256 constant QUORUM_BPS = 400; // 4%
     uint256 constant TIMELOCK = 2 days;
     uint256 constant EXECUTION_WINDOW = 14 days;
+    uint256 constant MIN_REGISTRATION_STAKE = 100e18;
+    uint256 constant STAKE_FACTOR_TARGET = 10_000e18;
 
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
+        address deployer = vm.addr(pk);
         vm.startBroadcast(pk);
 
         // ── 1. Deploy 4 resource-backed tokens ──────────────────────────
@@ -73,7 +82,23 @@ contract Deploy is Script {
         // ── 3. Deploy registry (needs identity address) ─────────────────
         registry = new NeunodeRegistry(address(identity));
 
-        // ── 4. Deploy bounty system ─────────────────────────────────────
+        // ── 4. Deploy reputation, staking, and slashing ─────────────────
+        reputation = new NeunodeReputation();
+        stakingEscrow = new StakingEscrow(address(computeToken));
+        slashing = new NeunodeSlashing(address(computeToken));
+
+        identity.setStakeSource(address(computeToken));
+        identity.setMinRegistrationStake(MIN_REGISTRATION_STAKE);
+        reputation.setIdentityRegistry(address(identity));
+        reputation.setStakeSource(address(computeToken));
+        reputation.setStakeFactorTarget(STAKE_FACTOR_TARGET);
+        slashing.setReputationContract(address(reputation));
+
+        computeToken.grantRole(computeToken.GOVERNANCE_ROLE(), address(stakingEscrow));
+        computeToken.grantRole(computeToken.GOVERNANCE_ROLE(), address(slashing));
+        reputation.grantRole(reputation.SLASHING_ROLE(), address(slashing));
+
+        // ── 5. Deploy bounty system ─────────────────────────────────────
         bounty = new NeunodeBounty();
         escrow = new NeunodeEscrow();
         review = new BountyReview();
@@ -82,12 +107,13 @@ contract Deploy is Script {
         bounty.setEscrow(address(escrow));
         bounty.setReviewContract(address(review));
         escrow.registerBountyContract(address(bounty));
+        review.grantRole(review.DEFAULT_ADMIN_ROLE(), address(bounty));
 
-        // ── 5. Deploy royalty system ────────────────────────────────────
+        // ── 6. Deploy royalty system ────────────────────────────────────
         modelRegistry = new ModelRegistry();
         royaltySplitter = new RoyaltySplitter(address(modelRegistry));
 
-        // ── 6. Deploy governance (uses nCompute for voting) ─────────────
+        // ── 7. Deploy governance (uses nCompute for voting) ─────────────
         governance = new NeunodeGovernance(
             address(computeToken), // voting token
             VOTING_DELAY,
@@ -98,7 +124,9 @@ contract Deploy is Script {
             EXECUTION_WINDOW
         );
 
-        // ── 7. Deploy diamond proxy with loupe + cut facets ─────────────
+        _wireGovernance(deployer);
+
+        // ── 8. Deploy diamond proxy with loupe + cut facets ─────────────
         diamondCutFacet = new DiamondCutFacet();
         diamondLoupeFacet = new DiamondLoupeFacet();
 
@@ -126,6 +154,7 @@ contract Deploy is Script {
         });
 
         diamond = new Diamond(cuts, address(0), "", msg.sender);
+        governance.setAllowedTarget(address(diamond), true);
 
         vm.stopBroadcast();
 
@@ -139,6 +168,9 @@ contract Deploy is Script {
         console.log("=== Core ===");
         console.log("NeunodeIdentity:", address(identity));
         console.log("NeunodeRegistry:", address(registry));
+        console.log("NeunodeReputation:", address(reputation));
+        console.log("NeunodeSlashing:", address(slashing));
+        console.log("StakingEscrow:", address(stakingEscrow));
         console.log("");
         console.log("=== Bounty System ===");
         console.log("NeunodeBounty:", address(bounty));
@@ -156,5 +188,61 @@ contract Deploy is Script {
         console.log("Diamond:", address(diamond));
         console.log("DiamondCutFacet:", address(diamondCutFacet));
         console.log("DiamondLoupeFacet:", address(diamondLoupeFacet));
+    }
+
+    function _wireGovernance(address oracle) internal {
+        address governanceAddress = address(governance);
+
+        governance.grantRole(governance.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        governance.grantRole(governance.GOVERNANCE_ROLE(), governanceAddress);
+
+        computeToken.grantRole(computeToken.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        computeToken.grantRole(computeToken.GOVERNANCE_ROLE(), governanceAddress);
+        trainingToken.grantRole(trainingToken.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        trainingToken.grantRole(trainingToken.GOVERNANCE_ROLE(), governanceAddress);
+        bandwidthToken.grantRole(bandwidthToken.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        bandwidthToken.grantRole(bandwidthToken.GOVERNANCE_ROLE(), governanceAddress);
+        storageToken.grantRole(storageToken.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        storageToken.grantRole(storageToken.GOVERNANCE_ROLE(), governanceAddress);
+
+        bounty.grantRole(bounty.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        bounty.grantRole(bounty.ADMIN_ROLE(), governanceAddress);
+        escrow.grantRole(escrow.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        escrow.grantRole(escrow.ESCROW_ADMIN_ROLE(), governanceAddress);
+        review.grantRole(review.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        modelRegistry.grantRole(modelRegistry.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        modelRegistry.grantRole(modelRegistry.REGISTRAR_ROLE(), governanceAddress);
+        royaltySplitter.grantRole(royaltySplitter.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        royaltySplitter.grantRole(royaltySplitter.ADMIN_ROLE(), governanceAddress);
+        reputation.grantRole(reputation.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        reputation.grantRole(reputation.REPUTATION_ADMIN_ROLE(), governanceAddress);
+        reputation.grantRole(reputation.EPOCH_FINALIZER_ROLE(), governanceAddress);
+        reputation.grantRole(reputation.STAKE_ORACLE_ROLE(), oracle);
+        reputation.grantRole(reputation.ATTEST_ORACLE_ROLE(), oracle);
+        reputation.grantRole(reputation.ACTIVITY_ORACLE_ROLE(), oracle);
+        reputation.grantRole(reputation.VERIFY_ORACLE_ROLE(), oracle);
+        reputation.grantRole(reputation.TENURE_ORACLE_ROLE(), oracle);
+        slashing.grantRole(slashing.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        slashing.grantRole(slashing.ADMIN_ROLE(), governanceAddress);
+        slashing.grantRole(slashing.REPORTER_ROLE(), oracle);
+        stakingEscrow.grantRole(stakingEscrow.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        stakingEscrow.grantRole(stakingEscrow.DECAY_ADMIN_ROLE(), governanceAddress);
+
+        identity.transferOwnership(governanceAddress);
+
+        governance.setAllowedTarget(governanceAddress, true);
+        governance.setAllowedTarget(address(computeToken), true);
+        governance.setAllowedTarget(address(trainingToken), true);
+        governance.setAllowedTarget(address(bandwidthToken), true);
+        governance.setAllowedTarget(address(storageToken), true);
+        governance.setAllowedTarget(address(identity), true);
+        governance.setAllowedTarget(address(bounty), true);
+        governance.setAllowedTarget(address(escrow), true);
+        governance.setAllowedTarget(address(review), true);
+        governance.setAllowedTarget(address(modelRegistry), true);
+        governance.setAllowedTarget(address(royaltySplitter), true);
+        governance.setAllowedTarget(address(reputation), true);
+        governance.setAllowedTarget(address(slashing), true);
+        governance.setAllowedTarget(address(stakingEscrow), true);
     }
 }

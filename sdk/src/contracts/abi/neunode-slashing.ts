@@ -392,6 +392,19 @@ export const neunodeSlashingAbi = [
 	},
 	{
 		type: "function",
+		name: "reputation",
+		inputs: [],
+		outputs: [
+			{
+				name: "",
+				type: "address",
+				internalType: "contract IReputationPenalty",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
 		name: "revokeRole",
 		inputs: [
 			{
@@ -441,6 +454,19 @@ export const neunodeSlashingAbi = [
 				name: "outcome",
 				type: "uint8",
 				internalType: "enum NeunodeSlashing.PenaltyOutcome",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "setReputationContract",
+		inputs: [
+			{
+				name: "reputation_",
+				type: "address",
+				internalType: "address",
 			},
 		],
 		outputs: [],
@@ -654,6 +680,19 @@ export const neunodeSlashingAbi = [
 				type: "uint8",
 				indexed: false,
 				internalType: "enum NeunodeSlashing.PenaltyOutcome",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "event",
+		name: "ReputationContractUpdated",
+		inputs: [
+			{
+				name: "reputation",
+				type: "address",
+				indexed: true,
+				internalType: "address",
 			},
 		],
 		anonymous: false,

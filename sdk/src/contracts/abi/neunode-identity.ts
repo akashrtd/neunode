@@ -312,6 +312,19 @@ export const neunodeIdentityAbi = [
 	},
 	{
 		type: "function",
+		name: "transferOwnership",
+		inputs: [
+			{
+				name: "newOwner",
+				type: "address",
+				internalType: "address",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
 		name: "updateController",
 		inputs: [
 			{
@@ -534,6 +547,25 @@ export const neunodeIdentityAbi = [
 	},
 	{
 		type: "event",
+		name: "OwnershipTransferred",
+		inputs: [
+			{
+				name: "previousOwner",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "newOwner",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "event",
 		name: "StakeSourceUpdated",
 		inputs: [
 			{
@@ -636,6 +668,11 @@ export const neunodeIdentityAbi = [
 				internalType: "uint256",
 			},
 		],
+	},
+	{
+		type: "error",
+		name: "InvalidOwner",
+		inputs: [],
 	},
 	{
 		type: "error",

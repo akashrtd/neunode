@@ -5,6 +5,11 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "../interfaces/INeunodeToken.sol";
 
+interface IReputationPenalty {
+    function applyPenalty(address validator, uint256 reputationSlashBps, uint256 stakeSlashBps)
+        external;
+}
+
 /// @title NeunodeSlashing -- Validator misbehavior detection and penalty enforcement
 /// @notice Handles evidence submission, verification, stake slashing, jailing, and
 ///         tombstoning. Integrates with NeunodeToken.slashStake() for economic penalties.
@@ -72,6 +77,7 @@ contract NeunodeSlashing is AccessControl, Pausable {
     // ─── Immutables ───────────────────────────────────────────────────────
 
     INeunodeToken public immutable token;
+    IReputationPenalty public reputation;
 
     // ─── Storage ──────────────────────────────────────────────────────────
 
@@ -111,6 +117,8 @@ contract NeunodeSlashing is AccessControl, Pausable {
     event ValidatorUnjailed(address indexed validator);
 
     event ValidatorTombstoned(address indexed validator);
+
+    event ReputationContractUpdated(address indexed reputation);
 
     event PenaltyScheduleUpdated(
         OffenseType indexed offense,
@@ -546,6 +554,13 @@ contract NeunodeSlashing is AccessControl, Pausable {
         );
     }
 
+    /// @notice Configure the reputation contract that receives slashing penalties.
+    /// @dev May be set to address(0) to disable reputation integration during an incident.
+    function setReputationContract(address reputation_) external onlyRole(ADMIN_ROLE) {
+        reputation = IReputationPenalty(reputation_);
+        emit ReputationContractUpdated(reputation_);
+    }
+
     /// @notice Pause all slashing operations for incident response
     function pause() external onlyRole(ADMIN_ROLE) {
         _pause();
@@ -576,6 +591,10 @@ contract NeunodeSlashing is AccessControl, Pausable {
 
         if (slashAmount > 0) {
             token.slashStake(validator, slashAmount);
+        }
+
+        if (address(reputation) != address(0) && penalty.reputationSlashBps > 0) {
+            reputation.applyPenalty(validator, penalty.reputationSlashBps, penalty.stakeSlashBps);
         }
 
         // Update offense count

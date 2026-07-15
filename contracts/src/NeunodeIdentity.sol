@@ -60,6 +60,7 @@ contract NeunodeIdentity {
     event NetworkDeregistered(bytes32 indexed didHash, address indexed controller);
     event MinRegistrationStakeUpdated(uint256 oldMin, uint256 newMin);
     event StakeSourceUpdated(address stakeSource);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     // ─── Errors ───────────────────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ contract NeunodeIdentity {
     error NotOwner(address caller);
     error NotRegistered(bytes32 didHash);
     error InsufficientRegistrationStake(address controller, uint256 staked, uint256 required);
+    error InvalidOwner();
 
     // ─── Functions ────────────────────────────────────────────────────────
 
@@ -199,6 +201,14 @@ contract NeunodeIdentity {
     function setMinRegistrationStake(uint256 newMin) external onlyOwner {
         emit MinRegistrationStakeUpdated(minRegistrationStake, newMin);
         minRegistrationStake = newMin;
+    }
+
+    /// @notice Transfer protocol administration to a new owner (normally governance).
+    function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert InvalidOwner();
+        address previousOwner = owner;
+        owner = newOwner;
+        emit OwnershipTransferred(previousOwner, newOwner);
     }
 
     /// @notice Get the controller address for a DID
