@@ -10,6 +10,8 @@ import "../interfaces/INeunodeToken.sol";
 ///         balance and slashes it via the token's slashStake method.
 contract StakingEscrow is AccessControl {
     error DecayTooSoon(address account);
+    error InvalidTokenAddress();
+    error InvalidActivityLevel(uint8 level);
 
     bytes32 public constant DECAY_ADMIN_ROLE = keccak256("DECAY_ADMIN_ROLE");
 
@@ -24,6 +26,7 @@ contract StakingEscrow is AccessControl {
     event DecayExecuted(address indexed account, uint256 slashedAmount);
 
     constructor(address tokenAddress) {
+        if (tokenAddress == address(0)) revert InvalidTokenAddress();
         neunodeToken = INeunodeToken(tokenAddress);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(DECAY_ADMIN_ROLE, msg.sender);
@@ -35,6 +38,7 @@ contract StakingEscrow is AccessControl {
     function computeDecay(address account) public view returns (uint256) {
         uint8 level = neunodeToken.getActivityLevel(account);
         if (level == 0) return 0; // Active = no decay
+        if (level >= decayRatesBps.length) revert InvalidActivityLevel(level);
 
         uint256 stakedBal = neunodeToken.stakedBalanceOf(account);
         if (stakedBal == 0) return 0;
@@ -55,10 +59,19 @@ contract StakingEscrow is AccessControl {
             return;
         }
 
-        // Apply penalty by slashing their stake
+        // Apply the penalty and report the actual stake delta. The token may protect a portion of
+        // stake (for example locked seed tokens), so the requested decay is not authoritative.
+        uint256 stakedBefore = neunodeToken.stakedBalanceOf(account);
         neunodeToken.slashStake(account, decayAmount);
+        uint256 stakedAfter = neunodeToken.stakedBalanceOf(account);
+        uint256 slashedAmount = stakedBefore - stakedAfter;
         _lastDecayTimestamp[account] = block.timestamp;
 
-        emit DecayExecuted(account, decayAmount);
+        emit DecayExecuted(account, slashedAmount);
+    }
+
+    /// @notice Return the timestamp of the most recent decay attempt for an account.
+    function lastDecayTimestamp(address account) external view returns (uint256) {
+        return _lastDecayTimestamp[account];
     }
 }
