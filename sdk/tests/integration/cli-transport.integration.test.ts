@@ -6,12 +6,24 @@
  * is not available (e.g., CI without a Rust build step).
  */
 
-import { beforeAll, describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
 	CliTransport,
 	CliTransportError,
 } from "../../src/transport/cli-transport.js";
 import { BINARY_PATH } from "./helpers/agnetd.js";
+
+const INTEGRATION_HOME = mkdtempSync(
+	join(tmpdir(), "neunode-cli-integration-"),
+);
+const INTEGRATION_ENV = { ...process.env, HOME: INTEGRATION_HOME };
+
+afterAll(() => {
+	rmSync(INTEGRATION_HOME, { recursive: true, force: true });
+});
 
 // ---------------------------------------------------------------------------
 // Shared transport instance (uses discovered binary path)
@@ -21,6 +33,7 @@ function makeTransport(): CliTransport {
 	return new CliTransport({
 		binaryPath: BINARY_PATH ?? "agnetd",
 		timeout: 15_000,
+		env: INTEGRATION_ENV,
 	});
 }
 
@@ -28,7 +41,7 @@ function makeTransport(): CliTransport {
 // A. Binary & Envelope Format
 // ===========================================================================
 
-describe("Integration: Binary & Envelope Format", () => {
+describe.sequential("Integration: Binary & Envelope Format", () => {
 	const transport = makeTransport();
 
 	it("should find agnetd binary", () => {
@@ -58,7 +71,7 @@ describe("Integration: Binary & Envelope Format", () => {
 // B. Identity Commands
 // ===========================================================================
 
-describe("Integration: Identity Commands", () => {
+describe.sequential("Integration: Identity Commands", () => {
 	const transport = makeTransport();
 	let createdDid: string;
 
@@ -115,7 +128,7 @@ describe("Integration: Identity Commands", () => {
 // C. Config Commands
 // ===========================================================================
 
-describe("Integration: Config Commands", () => {
+describe.sequential("Integration: Config Commands", () => {
 	const transport = makeTransport();
 
 	it("should list all config values", async () => {
@@ -141,12 +154,30 @@ describe("Integration: Config Commands", () => {
 // D. Bounty Commands
 // ===========================================================================
 
-describe("Integration: Bounty Commands", () => {
+describe.sequential("Integration: Bounty Commands", () => {
 	const transport = makeTransport();
 
 	beforeAll(async () => {
+		await transport.executeRaw([
+			"config",
+			"set",
+			"tokens.unbonding_period_secs",
+			"0",
+		]);
 		await transport.execute(["token", "seed"]);
 		await transport.execute(["token", "unstake", "--amount", "100"]);
+		const claimed = await transport.execute<{ claimed_amount: number }>([
+			"token",
+			"claim-unbonded",
+		]);
+		expect(claimed.claimed_amount).toBe(100);
+		const balance = await transport.execute<Record<string, string>>([
+			"token",
+			"balance",
+			"--token",
+			"compute",
+		]);
+		expect(balance.balance).toBe("100");
 	});
 
 	it("should create a bounty", async () => {
@@ -198,7 +229,7 @@ describe("Integration: Bounty Commands", () => {
 // E. Token Commands (multi-envelope)
 // ===========================================================================
 
-describe("Integration: Token Commands (multi-envelope)", () => {
+describe.sequential("Integration: Token Commands (multi-envelope)", () => {
 	const transport = makeTransport();
 
 	it("should return token balance as multiple envelopes", async () => {
@@ -222,7 +253,7 @@ describe("Integration: Token Commands (multi-envelope)", () => {
 // F. TurboQuant transport parity
 // ===========================================================================
 
-describe("Integration: TurboQuant Commands", () => {
+describe.sequential("Integration: TurboQuant Commands", () => {
 	const transport = makeTransport();
 
 	it("selects the same compression strategy exposed over HTTP", async () => {
@@ -267,7 +298,7 @@ describe("Integration: TurboQuant Commands", () => {
 // G. Reputation Commands
 // ===========================================================================
 
-describe("Integration: Reputation Commands", () => {
+describe.sequential("Integration: Reputation Commands", () => {
 	const transport = makeTransport();
 	let agentDid: string;
 
@@ -305,7 +336,7 @@ describe("Integration: Reputation Commands", () => {
 // G. Feed Commands
 // ===========================================================================
 
-describe("Integration: Feed Commands", () => {
+describe.sequential("Integration: Feed Commands", () => {
 	const transport = makeTransport();
 
 	it("should post to feed", async () => {
@@ -329,7 +360,7 @@ describe("Integration: Feed Commands", () => {
 // H. Error Handling
 // ===========================================================================
 
-describe("Integration: Error Handling", () => {
+describe.sequential("Integration: Error Handling", () => {
 	const transport = makeTransport();
 
 	it("should throw CliTransportError for invalid identity", async () => {

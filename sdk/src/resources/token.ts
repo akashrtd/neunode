@@ -37,6 +37,7 @@ export interface TokenStakeResult {
 }
 
 export interface TokenUnstakeResult {
+	id: string;
 	amount: number;
 	token: string;
 	unbond_at: number;
@@ -50,6 +51,19 @@ export interface TokenStakeStatusResult {
 		token: string;
 		available: number;
 	}>;
+	unbonding: Array<{
+		id: string;
+		token: string;
+		amount: number;
+		created_at: number;
+		unlock_at: number;
+	}>;
+}
+
+export interface TokenClaimUnbondedResult {
+	claimed_amount: number;
+	claimed_positions: number;
+	state: "Claimed" | "NothingMatured";
 }
 
 export interface TokenDecayInfoResult {
@@ -73,6 +87,8 @@ export interface TokenResource {
 	stake(params: TokenStakeParams): Promise<TokenStakeResult>;
 	/** Begin unstaking tokens (subject to unbonding period). */
 	unstake(amount: number): Promise<TokenUnstakeResult>;
+	/** Claim every unbonding position whose maturity time has passed. */
+	claimUnbonded(): Promise<TokenClaimUnbondedResult>;
 	/** Get current staking positions and unbonding status. */
 	stakeStatus(): Promise<TokenStakeStatusResult>;
 	/** Get activity-based decay rates and distribution breakdown. */
@@ -88,9 +104,18 @@ export function createTokenResource(client: NeunodeClient): TokenResource {
 				const qs = new URLSearchParams();
 				if (token) qs.set("token", token);
 				const query = qs.toString();
-				return client.http.get<TokenBalanceResult | TokenAllBalancesResult>(
-					query ? `/api/v1/tokens/balance?${query}` : "/api/v1/tokens/balance",
-				);
+				const result = await client.http.get<
+					| { token: string; balance: string | number; staked: string | number }
+					| TokenAllBalancesResult
+				>(query ? `/api/v1/tokens/balance?${query}` : "/api/v1/tokens/balance");
+				if ("balance" in result) {
+					return {
+						token: result.token,
+						balance: String(result.balance),
+						staked: String(result.staked),
+					};
+				}
+				return result;
 			}
 			const cli = client.cli;
 			if (!cli)
@@ -157,6 +182,18 @@ export function createTokenResource(client: NeunodeClient): TokenResource {
 				"--amount",
 				String(amount),
 			]);
+		},
+
+		async claimUnbonded(): Promise<TokenClaimUnbondedResult> {
+			if (client.http) {
+				return client.http.post<TokenClaimUnbondedResult>(
+					"/api/v1/tokens/claim-unbonded",
+				);
+			}
+			const cli = client.cli;
+			if (!cli)
+				throw new Error("HTTP or CLI transport required for token operations");
+			return cli.execute<TokenClaimUnbondedResult>(["token", "claim-unbonded"]);
 		},
 
 		async stakeStatus(): Promise<TokenStakeStatusResult> {

@@ -174,60 +174,52 @@ impl NeunodeDb {
     // Callers must use specific atomic routines or batch_put_raw, which routes by CF.
 
     pub fn batch_put_raw(&self, ops: &[(&str, &[u8], &[u8])]) -> Result<()> {
-        let mut ledger_batch = WriteBatch::default();
-        let mut network_batch = WriteBatch::default();
-        let mut graph_batch = WriteBatch::default();
-
-        for &(cf_name, key, value) in ops {
-            let cf = self.cf_handle(cf_name)?;
-            match self.partition_for_cf(cf_name)? {
-                Partition::Ledger => ledger_batch.put_cf(&cf, key, value),
-                Partition::Network => network_batch.put_cf(&cf, key, value),
-                Partition::Graph => graph_batch.put_cf(&cf, key, value),
-            }
-        }
-
-        // Batch operations are atomic within a single RocksDB instance.
-        // If ops span multiple partitions, writes are applied sequentially
-        // and a failure after the first DB write leaves partial state.
-        debug_assert!(
-            {
-                let partitions: Vec<_> =
-                    ops.iter().map(|&(cf_name, _, _)| self.partition_map.get(cf_name)).collect();
-                partitions.windows(2).all(|w| w[0] == w[1])
-            },
-            "batch_put_raw ops should target a single partition for atomicity"
-        );
-
-        self.ledger_db.write(ledger_batch)?;
-        self.network_db.write(network_batch)?;
-        self.graph_db.write(graph_batch)?;
-
-        for &(cf_name, key, value) in ops {
-            self.cache.insert(cf_name, key, value.to_vec());
-        }
-        Ok(())
+        self.batch_write_raw(ops, &[])
     }
 
     pub fn batch_delete_raw(&self, ops: &[(&str, &[u8])]) -> Result<()> {
-        let mut ledger_batch = WriteBatch::default();
-        let mut network_batch = WriteBatch::default();
-        let mut graph_batch = WriteBatch::default();
+        self.batch_write_raw(&[], ops)
+    }
 
-        for &(cf_name, key) in ops {
-            let cf = self.cf_handle(cf_name)?;
-            match self.partition_for_cf(cf_name)? {
-                Partition::Ledger => ledger_batch.delete_cf(&cf, key),
-                Partition::Network => network_batch.delete_cf(&cf, key),
-                Partition::Graph => graph_batch.delete_cf(&cf, key),
+    /// Atomically apply puts and deletes within one physical storage partition.
+    pub fn batch_write_raw(
+        &self,
+        puts: &[(&str, &[u8], &[u8])],
+        deletes: &[(&str, &[u8])],
+    ) -> Result<()> {
+        let mut partition = None;
+        for cf_name in puts
+            .iter()
+            .map(|(cf_name, _, _)| *cf_name)
+            .chain(deletes.iter().map(|(cf_name, _)| *cf_name))
+        {
+            let current = self.partition_for_cf(cf_name)?;
+            if partition.is_some_and(|expected| expected != current) {
+                return Err(StorageError::CrossPartitionBatch);
             }
+            partition = Some(current);
+        }
+        let Some(partition) = partition else {
+            return Ok(());
+        };
+
+        let mut batch = WriteBatch::default();
+        for &(cf_name, key, value) in puts {
+            batch.put_cf(&self.cf_handle(cf_name)?, key, value);
+        }
+        for &(cf_name, key) in deletes {
+            batch.delete_cf(&self.cf_handle(cf_name)?, key);
+        }
+        match partition {
+            Partition::Ledger => self.ledger_db.write(batch)?,
+            Partition::Network => self.network_db.write(batch)?,
+            Partition::Graph => self.graph_db.write(batch)?,
         }
 
-        self.ledger_db.write(ledger_batch)?;
-        self.network_db.write(network_batch)?;
-        self.graph_db.write(graph_batch)?;
-
-        for &(cf_name, key) in ops {
+        for &(cf_name, key, value) in puts {
+            self.cache.insert(cf_name, key, value.to_vec());
+        }
+        for &(cf_name, key) in deletes {
             self.cache.invalidate(cf_name, key);
         }
         Ok(())
@@ -294,7 +286,7 @@ mod tests {
     }
 
     #[test]
-    fn test_open_creates_all_20_cfs() {
+    fn test_open_creates_all_column_families() {
         let db = temp_db();
         for cf_name in cf::all_column_families() {
             assert!(db.cf_handle(cf_name).is_ok(), "CF '{cf_name}' should exist after open");
@@ -416,6 +408,32 @@ mod tests {
 
         assert_eq!(db.get_raw(cf::CF_CONFIG, b"bp_k1").unwrap(), Some(b"bp_v1".to_vec()));
         assert_eq!(db.get_raw(cf::CF_CONFIG, b"bp_k2").unwrap(), Some(b"bp_v2".to_vec()));
+    }
+
+    #[test]
+    fn test_batch_write_raw_combines_puts_and_deletes() {
+        let db = temp_db();
+        db.put_raw(cf::CF_CONFIG, b"old", b"value").unwrap();
+
+        db.batch_write_raw(&[(cf::CF_CONFIG, b"new", b"replacement")], &[(cf::CF_CONFIG, b"old")])
+            .unwrap();
+
+        assert_eq!(db.get_raw(cf::CF_CONFIG, b"old").unwrap(), None);
+        assert_eq!(db.get_raw(cf::CF_CONFIG, b"new").unwrap(), Some(b"replacement".to_vec()));
+    }
+
+    #[test]
+    fn test_batch_write_rejects_cross_partition_operations() {
+        let db = temp_db();
+        let error = db
+            .batch_write_raw(
+                &[(cf::CF_CONFIG, b"ledger", b"value")],
+                &[(cf::CF_FEED_STATE, b"graph")],
+            )
+            .unwrap_err();
+
+        assert!(matches!(error, StorageError::CrossPartitionBatch));
+        assert_eq!(db.get_raw(cf::CF_CONFIG, b"ledger").unwrap(), None);
     }
 
     #[test]

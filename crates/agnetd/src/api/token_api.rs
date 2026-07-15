@@ -7,12 +7,12 @@ use serde::{Deserialize, Serialize};
 
 use neunode_core::constants::token::{
     DECAY_BURN_PCT, DECAY_DEV_FUND_PCT, DECAY_STAKING_REWARDS_PCT, DECAY_TREASURY_PCT, MIN_STAKE,
-    UNBONDING_PERIOD_SECS,
 };
 use neunode_core::types::{ActivityLevel, TokenType};
 use neunode_storage::token_store::{
     TokenStore, TOKEN_BANDWIDTH, TOKEN_COMPUTE, TOKEN_STORAGE, TOKEN_TRAINING,
 };
+use neunode_storage::unbonding_store::UnbondingStore;
 use neunode_token::decay::DecayCalculator;
 
 use super::error::ApiError;
@@ -87,6 +87,7 @@ pub struct StakeResponse {
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct UnstakeResponse {
+    pub id: String,
     pub amount: u64,
     pub token: String,
     pub unbond_at: u64,
@@ -97,6 +98,23 @@ pub struct UnstakeResponse {
 pub struct StakeStatusResponse {
     pub total_staked: u128,
     pub entries: Vec<StakeEntry>,
+    pub unbonding: Vec<UnbondingPosition>,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct UnbondingPosition {
+    pub id: String,
+    pub token: String,
+    pub amount: u128,
+    pub created_at: u64,
+    pub unlock_at: u64,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct ClaimUnbondedResponse {
+    pub claimed_amount: u128,
+    pub claimed_positions: usize,
+    pub state: String,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -158,6 +176,10 @@ fn parse_token_type(s: &str) -> Result<TokenType, ApiError> {
             "invalid token type '{s}'. Must be one of: compute, train, bandwidth, storage"
         ))),
     }
+}
+
+fn current_timestamp() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
 }
 
 // ---------------------------------------------------------------------------
@@ -292,7 +314,7 @@ pub async fn stake(
         amount: body.amount,
         token: token_name,
         state: "Staked".to_string(),
-        unbonding_period_secs: UNBONDING_PERIOD_SECS,
+        unbonding_period_secs: state.config.app_config.tokens.unbonding_period_secs,
     }))
 }
 
@@ -314,11 +336,16 @@ pub async fn unstake(
     }
 
     let did = state.require_did()?;
-    let store = TokenStore::new(&state.db);
-
     let token_types = [TOKEN_COMPUTE, TOKEN_TRAINING, TOKEN_BANDWIDTH, TOKEN_STORAGE];
-    let (token_byte, _) = store.unstake_first(&did.0, &token_types, body.amount as u128).map_err(
-        |error| match error {
+    let entry = UnbondingStore::new(&state.db)
+        .begin(
+            &did.0,
+            &token_types,
+            body.amount as u128,
+            current_timestamp(),
+            state.config.app_config.tokens.unbonding_period_secs,
+        )
+        .map_err(|error| match error {
             neunode_storage::error::StorageError::InsufficientStakedBalance { .. } => {
                 ApiError::BadRequest(format!(
                     "no staked tokens found with sufficient balance to unstake {}",
@@ -326,9 +353,8 @@ pub async fn unstake(
                 ))
             }
             other => ApiError::Internal(other.to_string()),
-        },
-    )?;
-    let tt = match token_byte {
+        })?;
+    let tt = match entry.token_type {
         TOKEN_COMPUTE => TokenType::Compute,
         TOKEN_TRAINING => TokenType::Train,
         TOKEN_BANDWIDTH => TokenType::Bandwidth,
@@ -336,18 +362,35 @@ pub async fn unstake(
         _ => unreachable!("known token type selected"),
     };
 
-    let unbond_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        + UNBONDING_PERIOD_SECS;
-
     let token_name = token_type_display(&tt).to_string();
     Ok(types::ok(UnstakeResponse {
+        id: entry.id,
         amount: body.amount,
         token: token_name,
-        unbond_at,
+        unbond_at: entry.unlock_at,
         state: "Unbonding".to_string(),
+    }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/tokens/claim-unbonded",
+    responses(
+        (status = 200, description = "Matured unbonding positions claimed", body = ClaimUnbondedResponse)
+    ),
+    tag = "tokens",
+)]
+pub async fn claim_unbonded(
+    State(state): State<Arc<ApiState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let did = state.require_did()?;
+    let claimed = UnbondingStore::new(&state.db)
+        .claim_matured(&did.0, current_timestamp())
+        .map_err(|error| ApiError::Internal(error.to_string()))?;
+    Ok(types::ok(ClaimUnbondedResponse {
+        claimed_amount: claimed.total,
+        claimed_positions: claimed.entries.len(),
+        state: if claimed.entries.is_empty() { "NothingMatured" } else { "Claimed" }.to_string(),
     }))
 }
 
@@ -388,7 +431,26 @@ pub async fn stake_status(
         }
     }
 
-    Ok(types::ok(StakeStatusResponse { total_staked, entries }))
+    let unbonding = UnbondingStore::new(&state.db)
+        .list(&did.0)
+        .map_err(|error| ApiError::Internal(error.to_string()))?
+        .into_iter()
+        .map(|entry| UnbondingPosition {
+            id: entry.id,
+            token: match entry.token_type {
+                TOKEN_COMPUTE => "nCompute",
+                TOKEN_TRAINING => "nTrain",
+                TOKEN_BANDWIDTH => "nBandwidth",
+                TOKEN_STORAGE => "nStorage",
+                _ => "Unknown",
+            }
+            .to_string(),
+            amount: entry.amount,
+            created_at: entry.created_at,
+            unlock_at: entry.unlock_at,
+        })
+        .collect();
+    Ok(types::ok(StakeStatusResponse { total_staked, entries, unbonding }))
 }
 
 #[utoipa::path(

@@ -33,6 +33,7 @@ pub fn build_api_router() -> Router<Arc<ApiState>> {
         .route("/api/v1/tokens/transfer", post(super::token_api::transfer))
         .route("/api/v1/tokens/stake", post(super::token_api::stake))
         .route("/api/v1/tokens/unstake", post(super::token_api::unstake))
+        .route("/api/v1/tokens/claim-unbonded", post(super::token_api::claim_unbonded))
         .route("/api/v1/tokens/stake-status", get(super::token_api::stake_status))
         .route("/api/v1/tokens/decay-info", get(super::token_api::decay_info))
         // Inference

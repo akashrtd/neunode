@@ -1,7 +1,8 @@
 use anyhow::Result;
-use neunode_core::constants::token::{MIN_STAKE, UNBONDING_PERIOD_SECS};
+use neunode_core::constants::token::MIN_STAKE;
 use neunode_core::types::{ActivityLevel, TokenType};
 use neunode_storage::token_store::{TOKEN_BANDWIDTH, TOKEN_COMPUTE, TOKEN_STORAGE, TOKEN_TRAINING};
+use neunode_storage::unbonding_store::UnbondingStore;
 use neunode_token::decay::DecayCalculator;
 
 use crate::cli::{GlobalArgs, TokenCommands};
@@ -18,6 +19,7 @@ pub fn execute(cmd: &TokenCommands, args: &GlobalArgs, state: &mut AppState) -> 
         }
         TokenCommands::Stake { amount, token } => stake_tokens(*amount, token, &writer, state),
         TokenCommands::Unstake { amount } => unstake_tokens(*amount, &writer, state),
+        TokenCommands::ClaimUnbonded => claim_unbonded(&writer, state),
         TokenCommands::StakeStatus => show_stake_status(&writer, state),
         TokenCommands::DecayInfo => show_decay_info(&writer),
         TokenCommands::Seed { agent } => seed_tokens(agent.as_deref(), &writer, state),
@@ -118,11 +120,12 @@ fn stake_tokens(amount: u64, token: &str, writer: &OutputWriter, state: &AppStat
     let store = state.token_store();
     store.stake(&did.0, token_byte, amount as u128)?;
 
+    let unbonding_period_secs = state.config.app_config.tokens.unbonding_period_secs;
     let out = serde_json::json!({
         "amount": amount,
         "token": token_name,
         "state": "Staked",
-        "unbonding_period_secs": UNBONDING_PERIOD_SECS,
+        "unbonding_period_secs": unbonding_period_secs,
     });
 
     writer.write_json(&out);
@@ -136,17 +139,22 @@ fn unstake_tokens(amount: u64, writer: &OutputWriter, state: &AppState) -> Resul
     }
 
     let did = state.require_did()?;
-    let store = state.token_store();
-
     let token_types = [TOKEN_COMPUTE, TOKEN_TRAINING, TOKEN_BANDWIDTH, TOKEN_STORAGE];
-    let (token_byte, _) = match store.unstake_first(&did.0, &token_types, amount as u128) {
-        Ok(result) => result,
+    let now = current_timestamp();
+    let entry = match UnbondingStore::new(state.db()).begin(
+        &did.0,
+        &token_types,
+        amount as u128,
+        now,
+        state.config.app_config.tokens.unbonding_period_secs,
+    ) {
+        Ok(entry) => entry,
         Err(neunode_storage::error::StorageError::InsufficientStakedBalance { .. }) => {
             anyhow::bail!("no staked tokens found with sufficient balance to unstake {amount}")
         }
         Err(error) => return Err(error.into()),
     };
-    let tt = match token_byte {
+    let tt = match entry.token_type {
         TOKEN_COMPUTE => TokenType::Compute,
         TOKEN_TRAINING => TokenType::Train,
         TOKEN_BANDWIDTH => TokenType::Bandwidth,
@@ -154,22 +162,37 @@ fn unstake_tokens(amount: u64, writer: &OutputWriter, state: &AppState) -> Resul
         _ => unreachable!("known token type selected"),
     };
 
-    let unbond_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        + UNBONDING_PERIOD_SECS;
-
     let token_name = token_type_display(&tt).to_string();
     let out = serde_json::json!({
+        "id": entry.id,
         "amount": amount,
         "token": token_name,
-        "unbond_at": unbond_at,
+        "unbond_at": entry.unlock_at,
         "state": "Unbonding",
     });
 
     writer.write_json(&out);
-    writer.write_status(&format!("Unbonding {amount} {token_name} (available at {unbond_at})"));
+    writer.write_status(&format!(
+        "Unbonding {amount} {token_name} (claimable at {})",
+        entry.unlock_at
+    ));
+    Ok(())
+}
+
+fn claim_unbonded(writer: &OutputWriter, state: &AppState) -> Result<()> {
+    let did = state.require_did()?;
+    let claimed = UnbondingStore::new(state.db()).claim_matured(&did.0, current_timestamp())?;
+    let out = serde_json::json!({
+        "claimed_amount": claimed.total,
+        "claimed_positions": claimed.entries.len(),
+        "state": if claimed.entries.is_empty() { "NothingMatured" } else { "Claimed" },
+    });
+    writer.write_json(&out);
+    writer.write_status(&format!(
+        "Claimed {} tokens from {} matured position(s)",
+        claimed.total,
+        claimed.entries.len()
+    ));
     Ok(())
 }
 
@@ -186,6 +209,7 @@ fn show_stake_status(writer: &OutputWriter, state: &AppState) -> Result<()> {
 
     let mut total_staked: u128 = 0;
     let mut entries = Vec::new();
+    let pending = UnbondingStore::new(state.db()).list(&did.0)?;
 
     for (tt, byte) in &token_types {
         let bal = store.get_balance(&did.0, *byte)?;
@@ -199,17 +223,22 @@ fn show_stake_status(writer: &OutputWriter, state: &AppState) -> Result<()> {
         }
     }
 
-    if entries.is_empty() {
+    if entries.is_empty() && pending.is_empty() {
         writer.write_status("No tokens staked");
     } else {
         let out = serde_json::json!({
             "total_staked": total_staked,
             "entries": entries,
+            "unbonding": pending,
         });
         writer.write_json(&out);
         writer.write_status(&format!("Total staked: {total_staked}"));
     }
     Ok(())
+}
+
+fn current_timestamp() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
 }
 
 fn show_decay_info(writer: &OutputWriter) -> Result<()> {
@@ -436,12 +465,15 @@ mod tests {
         seed_balance(&state, TOKEN_COMPUTE, 300, 200);
         let writer = test_writer();
         unstake_tokens(100, &writer, &state).unwrap();
-        // Verify unstake: staked decreases, balance increases
+        // Unstaking decreases stake but remains non-spendable until maturity.
         let store = state.token_store();
         let did = state.active_did.as_ref().unwrap();
         let bal = store.get_balance(&did.0, TOKEN_COMPUTE).unwrap();
-        assert_eq!(bal.balance, 400);
+        assert_eq!(bal.balance, 300);
         assert_eq!(bal.staked, 100);
+        let pending = UnbondingStore::new(state.db()).list(&did.0).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].amount, 100);
     }
 
     #[test]
@@ -449,6 +481,20 @@ mod tests {
         let state = test_state();
         let writer = test_writer();
         assert!(unstake_tokens(0, &writer, &state).is_err());
+    }
+
+    #[test]
+    fn claim_unbonded_before_maturity_keeps_balance_locked() {
+        let state = test_state();
+        seed_balance(&state, TOKEN_COMPUTE, 300, 200);
+        unstake_tokens(100, &test_writer(), &state).unwrap();
+
+        claim_unbonded(&test_writer(), &state).unwrap();
+
+        let did = state.active_did.as_ref().unwrap();
+        let balance = state.token_store().get_balance(&did.0, TOKEN_COMPUTE).unwrap();
+        assert_eq!(balance.balance, 300);
+        assert_eq!(UnbondingStore::new(state.db()).list(&did.0).unwrap().len(), 1);
     }
 
     #[test]

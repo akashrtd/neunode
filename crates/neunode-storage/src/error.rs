@@ -37,6 +37,9 @@ pub enum StorageError {
 
     #[error("ledger mutation lock is poisoned")]
     LedgerLockPoisoned,
+
+    #[error("atomic batch cannot span storage partitions")]
+    CrossPartitionBatch,
 }
 
 pub type Result<T> = std::result::Result<T, StorageError>;

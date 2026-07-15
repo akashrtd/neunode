@@ -221,6 +221,34 @@ describe("createTokenResource", () => {
 		});
 	});
 
+	describe("claimUnbonded", () => {
+		it("should use HTTP transport", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				post: ReturnType<typeof vi.fn>;
+			};
+			http.post.mockResolvedValue({
+				claimed_amount: 200,
+				claimed_positions: 1,
+				state: "Claimed",
+			});
+			const resource = createTokenResource(dualClient);
+			await resource.claimUnbonded();
+			expect(http.post).toHaveBeenCalledWith("/api/v1/tokens/claim-unbonded");
+		});
+
+		it("should call token claim-unbonded via CLI", async () => {
+			execute.mockResolvedValue({
+				claimed_amount: 0,
+				claimed_positions: 0,
+				state: "NothingMatured",
+			});
+			const resource = createTokenResource(mockClient);
+			await resource.claimUnbonded();
+			expect(execute).toHaveBeenCalledWith(["token", "claim-unbonded"]);
+		});
+	});
+
 	describe("stakeStatus", () => {
 		it("should use HTTP transport", async () => {
 			const dualClient = makeMockClient({ withHttp: true, withCli: true });

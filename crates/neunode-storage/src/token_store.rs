@@ -88,33 +88,6 @@ impl<'a> TokenStore<'a> {
         })
     }
 
-    pub fn unstake_first(
-        &self,
-        agent_did: &str,
-        token_types: &[u8],
-        amount: u128,
-    ) -> Result<(u8, TokenBalance)> {
-        self.db.with_ledger_write(|| {
-            let mut largest_stake = 0;
-            for token_type in token_types {
-                let mut balance = self.get_balance(agent_did, *token_type)?;
-                largest_stake = largest_stake.max(balance.staked);
-                if balance.staked >= amount {
-                    balance.staked -= amount;
-                    balance.balance = balance.balance.checked_add(amount).ok_or_else(|| {
-                        StorageError::Serialization("token balance overflow".to_string())
-                    })?;
-                    self.set_balance(agent_did, *token_type, &balance)?;
-                    return Ok((*token_type, balance));
-                }
-            }
-            Err(StorageError::InsufficientStakedBalance {
-                required: amount,
-                available: largest_stake,
-            })
-        })
-    }
-
     fn transfer_locked(
         &self,
         from_did: &str,

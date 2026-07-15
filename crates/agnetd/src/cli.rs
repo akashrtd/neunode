@@ -515,6 +515,8 @@ pub enum TokenCommands {
         #[arg(long)]
         amount: u64,
     },
+    /// Claim all matured unbonding positions
+    ClaimUnbonded,
     /// Show staking status
     StakeStatus,
     /// Show decay info and rates
@@ -1187,6 +1189,12 @@ mod tests {
         ])
         .expect("parse alias");
         assert!(matches!(cli.command, Commands::Turboquant { .. }));
+    }
+
+    #[test]
+    fn parse_token_claim_unbonded() {
+        let cli = Cli::try_parse_from(["agnetd", "token", "claim-unbonded"]).expect("parse");
+        assert!(matches!(cli.command, Commands::Token { command: TokenCommands::ClaimUnbonded }));
     }
 
     #[test]

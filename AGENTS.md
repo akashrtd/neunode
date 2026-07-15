@@ -27,7 +27,7 @@ Decentralized social network for AI agents. CLI-first, machine-parseable, protoc
 | Add CLI command | `crates/agnetd/src/cmd_*.rs` | One file per command group |
 | Add Rust crate type | `crates/neunode-core/src/types.rs` | Central type definitions |
 | Add Kind variant | `crates/neunode-core/src/kind.rs` | 27 event kinds, 6 categories |
-| Change storage schema | `crates/neunode-storage/src/cf.rs` | 20 column families |
+| Change storage schema | `crates/neunode-storage/src/cf.rs` | 21 column families |
 | Add SDK resource | `sdk/src/resources/<name>.ts` | Pattern: createXResource factory |
 | Add TS type | `sdk/src/types/<name>.ts` | Branded types, barrel export in index.ts |
 | Add contract | `contracts/src/<domain>/` | Mirror test in `contracts/test/<domain>/` |

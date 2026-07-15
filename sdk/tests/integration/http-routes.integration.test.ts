@@ -69,9 +69,20 @@ describe("Integration: live HTTP resource routes", () => {
 			{ env },
 		);
 		await execFileAsync(BINARY_PATH, ["token", "seed"], { env });
+		await execFileAsync(
+			BINARY_PATH,
+			["config", "set", "tokens.unbonding_period_secs", "0"],
+			{ env },
+		);
 		await execFileAsync(BINARY_PATH, ["token", "unstake", "--amount", "100"], {
 			env,
 		});
+		await execFileAsync(BINARY_PATH, ["token", "claim-unbonded"], { env });
+		await execFileAsync(
+			BINARY_PATH,
+			["config", "set", "tokens.unbonding_period_secs", "3600"],
+			{ env },
+		);
 
 		const port = await availablePort();
 		baseUrl = `http://127.0.0.1:${port}`;
@@ -151,5 +162,29 @@ describe("Integration: live HTTP resource routes", () => {
 			bond_returned: 12,
 			state: "Paid",
 		});
+	});
+
+	it("keeps newly unbonded tokens locked before maturity", async () => {
+		await client.token.stake({ amount: 100, token: "compute" });
+		const position = await client.token.unstake(100);
+		expect(position.id).toMatch(/^unbond_/);
+		expect(position.state).toBe("Unbonding");
+
+		const earlyClaim = await client.token.claimUnbonded();
+		const status = await client.token.stakeStatus();
+		const balance = await client.token.balance("compute");
+
+		expect(earlyClaim).toEqual({
+			claimed_amount: 0,
+			claimed_positions: 0,
+			state: "NothingMatured",
+		});
+		expect(status.unbonding).toHaveLength(1);
+		expect(status.unbonding[0]).toMatchObject({
+			id: position.id,
+			amount: 100,
+			token: "nCompute",
+		});
+		expect(balance).toMatchObject({ balance: "0", staked: "0" });
 	});
 });

@@ -41,6 +41,8 @@ export interface CliTransportConfig {
 	readonly network?: string;
 	/** Global --config flag (path to config file). */
 	readonly config?: string;
+	/** Environment overrides for subprocesses (useful for isolated automation). */
+	readonly env?: Readonly<NodeJS.ProcessEnv>;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,10 +68,12 @@ export class CliTransport {
 	private readonly binaryPath: string;
 	private readonly timeout: number;
 	private readonly globalArgs: string[];
+	private readonly env: NodeJS.ProcessEnv | undefined;
 
 	constructor(config: CliTransportConfig = {}) {
 		this.binaryPath = config.binaryPath ?? "agnetd";
 		this.timeout = config.timeout ?? 30_000;
+		this.env = config.env ? { ...config.env } : undefined;
 
 		const args: string[] = [];
 		if (config.identity) args.push("--identity", config.identity);
@@ -97,6 +101,7 @@ export class CliTransport {
 					timeout: this.timeout,
 					maxBuffer: 10 * 1024 * 1024, // 10MB
 					encoding: "utf-8",
+					env: this.env,
 				},
 			);
 
@@ -151,6 +156,7 @@ export class CliTransport {
 					timeout: this.timeout,
 					maxBuffer: 10 * 1024 * 1024,
 					encoding: "utf-8",
+					env: this.env,
 				},
 			);
 
@@ -182,6 +188,7 @@ export class CliTransport {
 				timeout: this.timeout,
 				maxBuffer: 10 * 1024 * 1024,
 				encoding: "utf-8",
+				env: this.env,
 			});
 			return stdout;
 		} catch (err) {

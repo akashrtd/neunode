@@ -107,6 +107,7 @@ export { createReputationResource } from "./reputation.js";
 export type {
 	TokenAllBalancesResult,
 	TokenBalanceResult,
+	TokenClaimUnbondedResult,
 	TokenDecayInfoResult,
 	TokenResource,
 	TokenStakeParams,

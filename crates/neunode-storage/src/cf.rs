@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Column Family Definitions
 // ---------------------------------------------------------------------------
-// 20 column families organized by subsystem.
+// 21 column families organized by subsystem.
 //
 // Key schemas:
 //   feed_events: [did_hash(16) | sequence(u64 BE)]
@@ -21,6 +21,7 @@ pub const CF_REPUTATION: &str = "reputation";
 pub const CF_MODELS: &str = "models";
 pub const CF_TRAINING: &str = "training";
 pub const CF_BOUNTIES: &str = "bounties";
+pub const CF_UNBONDING: &str = "unbonding";
 pub const CF_P2P_STATE: &str = "p2p_state";
 pub const CF_MERKLE_NODES: &str = "merkle_nodes";
 pub const CF_SNAPSHOTS: &str = "snapshots";
@@ -32,7 +33,7 @@ pub const CF_KG_GSPO: &str = "gspo";
 pub const CF_KG_GPOS: &str = "gpos";
 pub const CF_KG_GOSP: &str = "gosp";
 
-/// All 20 column family names in canonical order.
+/// All 21 column family names in canonical order.
 pub fn all_column_families() -> Vec<&'static str> {
     let mut all = ledger_column_families();
     all.extend(network_column_families());
@@ -41,7 +42,16 @@ pub fn all_column_families() -> Vec<&'static str> {
 }
 
 pub fn ledger_column_families() -> Vec<&'static str> {
-    vec![CF_IDENTITY, CF_CONFIG, CF_TOKENS, CF_REPUTATION, CF_MODELS, CF_TRAINING, CF_BOUNTIES]
+    vec![
+        CF_IDENTITY,
+        CF_CONFIG,
+        CF_TOKENS,
+        CF_REPUTATION,
+        CF_MODELS,
+        CF_TRAINING,
+        CF_BOUNTIES,
+        CF_UNBONDING,
+    ]
 }
 
 pub fn network_column_families() -> Vec<&'static str> {
@@ -132,7 +142,7 @@ mod tests {
     #[test]
     fn test_all_cfs_count() {
         let cfs = all_column_families();
-        assert_eq!(cfs.len(), 20, "expected exactly 20 column families");
+        assert_eq!(cfs.len(), 21, "expected exactly 21 column families");
     }
 
     #[test]
