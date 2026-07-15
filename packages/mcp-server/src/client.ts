@@ -78,13 +78,13 @@ export class AgnetdClient {
     return this.get<IdentityResponse>("/api/v1/identity");
   }
 
-  async getIdentity(did: string): Promise<IdentityResponse> {
+  async getIdentity(did: string): Promise<IdentityListItem> {
     const list = await this.listIdentities();
     const match = list.find((item) => item.did === did);
     if (!match) {
       throw new AgnetdClientError(`identity '${did}' not found`, "NOT_FOUND");
     }
-    return this.whoami();
+    return match;
   }
 
   // -----------------------------------------------------------------------
@@ -110,14 +110,6 @@ export class AgnetdClient {
   }): Promise<ReadonlyArray<FeedEventResponse>> {
     const query = buildQuery(params);
     return this.get<ReadonlyArray<FeedEventResponse>>(`/api/v1/feed${query}`);
-  }
-
-  async searchFeeds(params: {
-    kind?: number;
-    author?: string;
-    limit?: number;
-  }): Promise<ReadonlyArray<FeedEventResponse>> {
-    return this.readFeed(params);
   }
 
   // -----------------------------------------------------------------------
@@ -285,15 +277,6 @@ export class AgnetdClient {
 
   async getModel(modelId: string): Promise<ModelResponse> {
     return this.get<ModelResponse>(`/api/v1/models/${encodeURIComponent(modelId)}`);
-  }
-
-  async setPricing(
-    modelId: string,
-    _pricing: { input_price?: number; output_price?: number },
-  ): Promise<ModelResponse> {
-    // The current agnetd API does not have a dedicated pricing endpoint;
-    // re-register the model to update pricing.
-    return this.getModel(modelId);
   }
 
   async getLineage(cid: string): Promise<unknown> {

@@ -206,29 +206,21 @@ describe("AgnetdClient", () => {
   // ---------------------------------------------------------------------------
 
   describe("getIdentity", () => {
-    it("finds identity from list and calls whoami", async () => {
+    it("returns the matching identity summary without substituting whoami", async () => {
       const listData = [
         { did: "did:key:other", status: "active" },
         { did: "did:key:target", status: "active" },
       ];
-      const whoamiData = { did: "did:key:target", method: "key", name: "target", ethereum: "0x1", peer_id: "peer1" };
-
-      fetchMock
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ data: listData, success: true }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ data: whoamiData, success: true }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        );
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: listData, success: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
 
       const result = await client.getIdentity("did:key:target");
-      expect(result).toEqual(whoamiData);
+      expect(result).toEqual({ did: "did:key:target", status: "active" });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
     it("throws NOT_FOUND when DID is not in the list", async () => {

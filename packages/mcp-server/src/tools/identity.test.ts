@@ -147,7 +147,7 @@ describe("identity tools", () => {
       const [schema] = requireToolCall(server, "neunode_get_identity");
       expect(schema["did"]!.parse("did:key:abc")).toBe("did:key:abc");
       expect(schema["did"]!.parse("any-string")).toBe("any-string");
-      expect(schema["did"]!.parse("")).toBe("");
+      expect(() => schema["did"]!.parse("")).toThrow();
       expect(() => schema["did"]!.parse(123)).toThrow();
     });
 

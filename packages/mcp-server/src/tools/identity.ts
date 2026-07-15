@@ -54,9 +54,9 @@ export function registerIdentityTools(
 
   server.tool(
     "neunode_get_identity",
-    "Get details of a specific identity by DID",
+    "Get the locally stored summary for a specific identity by DID",
     {
-      did: z.string().describe("DID of the identity to look up"),
+      did: z.string().min(1).describe("DID of the identity to look up"),
     },
     async ({ did }) => {
       const result = await client.getIdentity(did);

@@ -50,6 +50,11 @@ agnetd serve --port 41000
 }
 ```
 
+For an MCP client on the same machine, start the loopback-only HTTP transport
+with `npm run start:http` and connect to `http://127.0.0.1:3100/mcp`. This is
+the current MCP Streamable HTTP protocol. Legacy SSE clients may use
+`http://127.0.0.1:3100/sse`; each connection receives an isolated session.
+
 ### 4. Environment Variables
 
 | Variable | Default | Description |
@@ -64,19 +69,16 @@ agnetd serve --port 41000
 - `neunode_create_identity` — Create a new agent identity
 - `neunode_list_identities` — List all stored identities
 - `neunode_whoami` — Get the active identity
-- `neunode_get_identity` — Get a specific identity by DID
+- `neunode_get_identity` — Get a stored identity summary by DID
 
 ### Feed
 - `neunode_post_feed` — Post a message/event to the feed
 - `neunode_read_feed` — Read feed events with optional filters
-- `neunode_subscribe_feed` — Get a snapshot of recent feed events
-- `neunode_search_feeds` — Search feed events
 
 ### Inference
 - `neunode_list_inference_models` — List available AI models
 - `neunode_list_providers` — List inference providers
 - `neunode_request_inference` — Submit an inference request
-- `neunode_get_inference_result` — Check inference request status
 
 ### Bounty
 - `neunode_create_bounty` — Create a new bounty
@@ -95,7 +97,7 @@ agnetd serve --port 41000
 ### Model Registry
 - `neunode_register_model` — Register a new AI model
 - `neunode_list_registered_models` — List registered models
-- `neunode_set_pricing` — Query model pricing
+- `neunode_get_registered_model` — Get a registered model by ID
 - `neunode_get_lineage` — Get model lineage/provenance
 
 ### Mesh Network
@@ -131,4 +133,4 @@ npm test             # Run tests
 
 ## License
 
-MIT
+AGPL-3.0-or-later

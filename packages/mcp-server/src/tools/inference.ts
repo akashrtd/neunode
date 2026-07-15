@@ -76,25 +76,4 @@ export function registerInferenceTools(
     },
   );
 
-  server.tool(
-    "neunode_get_inference_result",
-    "Get the status and details of an inference request",
-    {
-      model: z.string().min(1).describe("Model ID from the original request"),
-      prompt: z
-        .string()
-        .optional()
-        .describe("Original prompt to check status (re-submits to check pricing)"),
-    },
-    async ({ model, prompt }) => {
-      const result = await client.requestInference({
-        model,
-        prompt: prompt ?? "status check",
-        max_tokens: 1,
-      });
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-      };
-    },
-  );
 }

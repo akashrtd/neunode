@@ -46,13 +46,13 @@ export function registerModelTools(
   );
 
   server.tool(
-    "neunode_set_pricing",
-    "Get pricing information for a registered model",
+    "neunode_get_registered_model",
+    "Get a registered model by its model ID",
     {
-      model_id: z.string().min(1).describe("Model ID to query pricing for"),
+      model_id: z.string().min(1).describe("Registered model ID"),
     },
     async ({ model_id }) => {
-      const result = await client.setPricing(model_id, {});
+      const result = await client.getModel(model_id);
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
       };
