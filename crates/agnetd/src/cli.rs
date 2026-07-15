@@ -606,6 +606,18 @@ pub enum ReputationCommands {
 
 #[derive(Subcommand, Debug)]
 pub enum InferenceCommands {
+    /// Advertise locally registered models under the active identity
+    RegisterProvider {
+        /// Human-readable provider name
+        #[arg(long)]
+        name: String,
+        /// Inference API endpoint
+        #[arg(long)]
+        endpoint: String,
+        /// Comma-separated model IDs previously added with `model push`
+        #[arg(long, required = true, value_delimiter = ',', num_args = 1..)]
+        models: Vec<String>,
+    },
     /// Request inference from a model
     Request {
         /// Model ID

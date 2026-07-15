@@ -6,12 +6,16 @@ use neunode_inference::router::{Router, RoutingStrategy};
 use neunode_storage::db::NeunodeDb;
 
 use crate::cli::{GlobalArgs, InferenceCommands};
+use crate::cmd_model::load_model;
 use crate::output::OutputWriter;
 use crate::state::AppState;
 
 pub fn execute(cmd: &InferenceCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
     let writer = OutputWriter::new(args.output);
     match cmd {
+        InferenceCommands::RegisterProvider { name, endpoint, models } => {
+            register_provider(name, endpoint, models, &writer, state)
+        }
         InferenceCommands::Request { model, prompt, max_tokens, temperature } => {
             request_inference(model, prompt, *max_tokens, Some(*temperature), &writer, state)
         }
@@ -28,7 +32,6 @@ pub fn execute(cmd: &InferenceCommands, args: &GlobalArgs, state: &mut AppState)
     }
 }
 
-#[cfg(test)]
 fn store_provider(db: &NeunodeDb, provider: &InferenceProvider) -> Result<()> {
     let key = format!("prov:{}", provider.did);
     let key_bytes = bincode::serialize(&key).map_err(|e| anyhow::anyhow!("key serialize: {e}"))?;
@@ -38,19 +41,78 @@ fn store_provider(db: &NeunodeDb, provider: &InferenceProvider) -> Result<()> {
     Ok(())
 }
 
-fn load_all_providers(db: &NeunodeDb) -> Vec<InferenceProvider> {
-    let entries = match db.prefix_scan(neunode_storage::cf::CF_MODELS, &[]) {
-        Ok(e) => e,
-        Err(_) => return Vec::new(),
+fn load_all_providers(db: &NeunodeDb) -> Result<Vec<InferenceProvider>> {
+    let entries = db.prefix_scan(neunode_storage::cf::CF_MODELS, &[])?;
+    let mut providers = Vec::new();
+    for (key, value) in entries {
+        let key = bincode::deserialize::<String>(&key)
+            .map_err(|e| anyhow::anyhow!("deserialize model-store key: {e}"))?;
+        if key.starts_with("prov:") {
+            providers.push(
+                bincode::deserialize::<InferenceProvider>(&value)
+                    .map_err(|e| anyhow::anyhow!("deserialize provider {key}: {e}"))?,
+            );
+        }
+    }
+    Ok(providers)
+}
+
+fn register_provider(
+    name: &str,
+    endpoint: &str,
+    model_ids: &[String],
+    writer: &OutputWriter,
+    state: &AppState,
+) -> Result<()> {
+    let name = name.trim();
+    let endpoint = endpoint.trim();
+    if name.is_empty() {
+        anyhow::bail!("provider name cannot be empty");
+    }
+    if endpoint.is_empty() {
+        anyhow::bail!("provider endpoint cannot be empty");
+    }
+    if model_ids.is_empty() {
+        anyhow::bail!("at least one model is required");
+    }
+
+    let did = state.require_did()?.clone();
+    let mut models = Vec::with_capacity(model_ids.len());
+    for model_id in model_ids {
+        let model_id = model_id.trim();
+        if model_id.is_empty() {
+            anyhow::bail!("model ID cannot be empty");
+        }
+        if models.iter().any(|model: &ModelInfo| model.id == model_id) {
+            anyhow::bail!("duplicate model ID: {model_id}");
+        }
+        let model = load_model(state.db(), model_id)?.ok_or_else(|| {
+            anyhow::anyhow!("model not found: {model_id}; add it with `agnetd model push` first")
+        })?;
+        models.push(model);
+    }
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| anyhow::anyhow!("system clock is before Unix epoch: {e}"))?
+        .as_secs();
+    let provider = InferenceProvider {
+        did: did.clone(),
+        name: name.to_string(),
+        endpoint: endpoint.to_string(),
+        models,
+        reputation_score: 0.0,
+        stake_amount: TokenAmount(0),
+        status: ProviderStatus::Online,
+        last_heartbeat: now,
+        total_requests_served: 0,
+        avg_latency_ms: 0,
     };
-    entries
-        .iter()
-        .filter(|(k, _)| {
-            let key_str = bincode::deserialize::<String>(k).unwrap_or_default();
-            key_str.starts_with("prov:")
-        })
-        .filter_map(|(_, v)| bincode::deserialize::<InferenceProvider>(v).ok())
-        .collect()
+    store_provider(state.db(), &provider)?;
+
+    writer.write_json(&provider);
+    writer.write_status(&format!("Registered inference provider {name} ({did})"));
+    Ok(())
 }
 
 fn request_inference(
@@ -96,7 +158,7 @@ fn request_inference(
 
     let estimated_tokens = request.estimate_tokens();
 
-    let providers = load_all_providers(state.db());
+    let providers = load_all_providers(state.db())?;
     let pricing_info = providers.iter().find_map(|p| p.find_model(model)).map(|m| {
         let cost =
             ((estimated_tokens as u128 * m.input_price_per_million.0 / 1_000_000).max(1)) as u64;
@@ -125,7 +187,7 @@ fn request_inference(
 }
 
 fn list_models(provider: Option<&str>, writer: &OutputWriter, state: &AppState) -> Result<()> {
-    let providers = load_all_providers(state.db());
+    let providers = load_all_providers(state.db())?;
 
     let mut models: Vec<&ModelInfo> = Vec::new();
     for p in &providers {
@@ -137,8 +199,7 @@ fn list_models(provider: Option<&str>, writer: &OutputWriter, state: &AppState) 
     }
 
     if models.is_empty() {
-        writer
-            .write_status("No models found — register providers with model push or P2P discovery");
+        writer.write_status("No models advertised — use `agnetd inference register-provider`");
         return Ok(());
     }
 
@@ -167,7 +228,7 @@ fn list_models(provider: Option<&str>, writer: &OutputWriter, state: &AppState) 
 }
 
 fn list_providers(model: Option<&str>, writer: &OutputWriter, state: &AppState) -> Result<()> {
-    let providers = load_all_providers(state.db());
+    let providers = load_all_providers(state.db())?;
 
     if providers.is_empty() {
         writer.write_status("No inference providers registered");
@@ -223,7 +284,7 @@ fn route_request(
         }
     };
 
-    let providers = load_all_providers(state.db());
+    let providers = load_all_providers(state.db())?;
 
     if providers.is_empty() {
         writer.write_status("No providers registered — routing unavailable");
@@ -265,7 +326,7 @@ fn show_pricing(
         anyhow::bail!("at least one of input_tokens or output_tokens must be > 0");
     }
 
-    let providers = load_all_providers(state.db());
+    let providers = load_all_providers(state.db())?;
     let model_info =
         providers.iter().find_map(|p| p.find_model(model)).cloned().unwrap_or_else(|| ModelInfo {
             id: model.to_string(),
@@ -454,9 +515,55 @@ mod tests {
         };
 
         store_provider(state.db(), &provider).unwrap();
-        let loaded = load_all_providers(state.db());
+        let loaded = load_all_providers(state.db()).unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].name, "test-provider");
         assert_eq!(loaded[0].did, provider.did);
+    }
+
+    #[test]
+    fn register_provider_uses_active_identity_and_local_models() {
+        let state = test_state();
+        let writer = test_writer();
+        crate::cmd_model::store_model(
+            state.db(),
+            &ModelInfo {
+                id: "neunode/local-model".to_string(),
+                base_model: None,
+                context_length: 4096,
+                input_price_per_million: TokenAmount(100),
+                output_price_per_million: TokenAmount(200),
+                capabilities: vec!["chat".to_string()],
+            },
+        )
+        .unwrap();
+        register_provider(
+            "local-provider",
+            "http://127.0.0.1:8081/v1",
+            &["neunode/local-model".to_string()],
+            &writer,
+            &state,
+        )
+        .unwrap();
+
+        let providers = load_all_providers(state.db()).unwrap();
+        assert_eq!(providers.len(), 1);
+        assert_eq!(providers[0].did, *state.require_did().unwrap());
+        assert_eq!(providers[0].models[0].id, "neunode/local-model");
+        assert_eq!(providers[0].reputation_score, 0.0);
+    }
+
+    #[test]
+    fn register_provider_rejects_unknown_and_duplicate_models() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(register_provider(
+            "local-provider",
+            "http://127.0.0.1:8081/v1",
+            &["missing".to_string()],
+            &writer,
+            &state,
+        )
+        .is_err());
     }
 }

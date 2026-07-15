@@ -21,7 +21,7 @@ pub fn execute(cmd: &ModelCommands, args: &GlobalArgs, state: &mut AppState) -> 
 // Model DB helpers
 // ---------------------------------------------------------------------------
 
-fn store_model(db: &NeunodeDb, model: &ModelInfo) -> Result<()> {
+pub(crate) fn store_model(db: &NeunodeDb, model: &ModelInfo) -> Result<()> {
     let key = format!("model:{}", model.id);
     let key_bytes = bincode::serialize(&key).map_err(|e| anyhow::anyhow!("key: {e}"))?;
     let value = bincode::serialize(model).map_err(|e| anyhow::anyhow!("serialize model: {e}"))?;
@@ -44,7 +44,7 @@ fn load_all_models(db: &NeunodeDb) -> Vec<ModelInfo> {
         .collect()
 }
 
-fn load_model(db: &NeunodeDb, model_id: &str) -> Result<Option<ModelInfo>> {
+pub(crate) fn load_model(db: &NeunodeDb, model_id: &str) -> Result<Option<ModelInfo>> {
     let key = format!("model:{model_id}");
     let key_bytes = bincode::serialize(&key).map_err(|e| anyhow::anyhow!("key: {e}"))?;
     match db.get_raw(neunode_storage::cf::CF_MODELS, &key_bytes)? {
