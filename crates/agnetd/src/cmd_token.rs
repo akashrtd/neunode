@@ -5,9 +5,10 @@ use neunode_storage::token_store::{TOKEN_BANDWIDTH, TOKEN_COMPUTE, TOKEN_STORAGE
 use neunode_storage::unbonding_store::UnbondingStore;
 use neunode_token::decay::DecayCalculator;
 
-use crate::cli::{GlobalArgs, TokenCommands};
+use crate::cli::{GlobalArgs, OutputFormat, TokenCommands};
 use crate::output::OutputWriter;
 use crate::state::AppState;
+use crate::token_wire::{TokenBalanceWire, TokenBalancesWire};
 use crate::util::{parse_token_type, token_type_display};
 
 pub fn execute(cmd: &TokenCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
@@ -43,25 +44,41 @@ fn show_balance(token: Option<&str>, writer: &OutputWriter, state: &AppState) ->
     if let Some(t) = token {
         let tt = parse_token_type(t)?;
         let bal = store.get_balance(&did.0, token_type_to_u8(&tt))?;
-        writer.write_value("token", token_type_display(&tt));
-        writer.write_value("balance", &bal.balance.to_string());
-        writer.write_value("staked", &bal.staked.to_string());
+        let response = TokenBalanceWire::new(token_type_display(&tt), bal.balance, bal.staked);
+        match writer.format() {
+            OutputFormat::Human => {
+                writer.write_value("token", &response.token);
+                writer.write_value("balance", &response.balance);
+                writer.write_value("staked", &response.staked);
+            }
+            OutputFormat::Json | OutputFormat::JsonCompact | OutputFormat::Ndjson => {
+                writer.write_json(&response);
+            }
+        }
     } else {
         let types =
             [TokenType::Compute, TokenType::Train, TokenType::Bandwidth, TokenType::Storage];
-        let headers = ["Token", "Balance", "Staked"];
-        let rows: Vec<Vec<String>> = types
+        let balances: Vec<TokenBalanceWire> = types
             .iter()
             .map(|tt| {
                 let bal = store.get_balance(&did.0, token_type_to_u8(tt)).unwrap_or_default();
-                vec![
-                    token_type_display(tt).to_string(),
-                    bal.balance.to_string(),
-                    bal.staked.to_string(),
-                ]
+                TokenBalanceWire::new(token_type_display(tt), bal.balance, bal.staked)
             })
             .collect();
-        writer.write_table(&headers, &rows);
+        match writer.format() {
+            OutputFormat::Human => {
+                let rows = balances
+                    .iter()
+                    .map(|entry| {
+                        vec![entry.token.clone(), entry.balance.clone(), entry.staked.clone()]
+                    })
+                    .collect::<Vec<_>>();
+                writer.write_table(&["Token", "Balance", "Staked"], &rows);
+            }
+            OutputFormat::Json | OutputFormat::JsonCompact | OutputFormat::Ndjson => {
+                writer.write_json(&TokenBalancesWire { balances });
+            }
+        }
     }
     Ok(())
 }

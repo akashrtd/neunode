@@ -77,14 +77,34 @@ describe("createTokenResource", () => {
 				staked: "100",
 			});
 			const resource = createTokenResource(dualClient);
-			await resource.balance("nCompute");
+			const result = await resource.balance("nCompute");
 			expect(http.get).toHaveBeenCalledWith(
 				"/api/v1/tokens/balance?token=nCompute",
 			);
+			expect(result).toEqual({
+				token: "nCompute",
+				balance: "1000",
+				staked: "100",
+			});
+		});
+
+		it("should preserve the canonical all-balances HTTP shape", async () => {
+			const dualClient = makeMockClient({ withHttp: true, withCli: true });
+			const http = dualClient.http as unknown as {
+				get: ReturnType<typeof vi.fn>;
+			};
+			const expected = {
+				balances: [{ token: "nCompute", balance: "1000", staked: "100" }],
+			};
+			http.get.mockResolvedValue(expected);
+			const resource = createTokenResource(dualClient);
+
+			expect(await resource.balance()).toEqual(expected);
+			expect(http.get).toHaveBeenCalledWith("/api/v1/tokens/balance");
 		});
 
 		it("should call execute with token balance (no token) via CLI", async () => {
-			execute.mockResolvedValue({ data: [] });
+			execute.mockResolvedValue({ balances: [] });
 			const resource = createTokenResource(mockClient);
 			await resource.balance();
 			expect(execute).toHaveBeenCalledWith(["token", "balance"]);

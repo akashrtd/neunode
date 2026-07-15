@@ -31,6 +31,7 @@ mod feed_wire;
 mod mesh_handle;
 mod output;
 mod state;
+mod token_wire;
 mod turboquant_service;
 mod util;
 

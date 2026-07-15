@@ -226,26 +226,32 @@ describe.sequential("Integration: Bounty Commands", () => {
 });
 
 // ===========================================================================
-// E. Token Commands (multi-envelope)
+// E. Token Commands (canonical wire contract)
 // ===========================================================================
 
-describe.sequential("Integration: Token Commands (multi-envelope)", () => {
+describe.sequential("Integration: Token Commands (canonical wire contract)", () => {
 	const transport = makeTransport();
 
-	it("should return token balance as multiple envelopes", async () => {
-		const results = await transport.executeMulti<Record<string, string>>([
-			"token",
-			"balance",
-			"--token",
-			"nCompute",
-		]);
-		expect(results).toHaveLength(3);
-		// First envelope: token name
-		expect(results[0]).toHaveProperty("token", "nCompute");
-		// Second envelope: balance
-		expect(results[1]).toHaveProperty("balance");
-		// Third envelope: staked
-		expect(results[2]).toHaveProperty("staked");
+	it("should return one lossless balance object", async () => {
+		const result = await transport.execute<{
+			token: string;
+			balance: string;
+			staked: string;
+		}>(["token", "balance", "--token", "nCompute"]);
+		expect(result).toEqual({ token: "nCompute", balance: "0", staked: "0" });
+	});
+
+	it("should return all balances in the same canonical shape", async () => {
+		const result = await transport.execute<{
+			balances: Array<{ token: string; balance: string; staked: string }>;
+		}>(["token", "balance"]);
+
+		expect(result.balances).toHaveLength(4);
+		expect(result.balances[0]).toEqual({
+			token: "nCompute",
+			balance: "0",
+			staked: "0",
+		});
 	});
 });
 

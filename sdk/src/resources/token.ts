@@ -7,7 +7,7 @@ export interface TokenBalanceResult {
 }
 
 export interface TokenAllBalancesResult {
-	data: Array<{ Token: string; Balance: string; Staked: string }>;
+	balances: TokenBalanceResult[];
 }
 
 export interface TokenTransferParams {
@@ -104,18 +104,9 @@ export function createTokenResource(client: NeunodeClient): TokenResource {
 				const qs = new URLSearchParams();
 				if (token) qs.set("token", token);
 				const query = qs.toString();
-				const result = await client.http.get<
-					| { token: string; balance: string | number; staked: string | number }
-					| TokenAllBalancesResult
-				>(query ? `/api/v1/tokens/balance?${query}` : "/api/v1/tokens/balance");
-				if ("balance" in result) {
-					return {
-						token: result.token,
-						balance: String(result.balance),
-						staked: String(result.staked),
-					};
-				}
-				return result;
+				return client.http.get<TokenBalanceResult | TokenAllBalancesResult>(
+					query ? `/api/v1/tokens/balance?${query}` : "/api/v1/tokens/balance",
+				);
 			}
 			const cli = client.cli;
 			if (!cli)

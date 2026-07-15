@@ -137,7 +137,7 @@ export class CliTransport {
 
 	/**
 	 * Execute an agnetd command that produces multiple JSON envelopes
-	 * (e.g., `token balance --token X` produces 3, `reputation factors` produces 4).
+	 * (e.g., legacy commands such as `reputation factors` produce multiple envelopes).
 	 * Returns an array of parsed data payloads.
 	 */
 	async executeMulti<T>(commandArgs: string[]): Promise<T[]> {

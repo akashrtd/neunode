@@ -18,6 +18,7 @@ use neunode_token::decay::DecayCalculator;
 use super::error::ApiError;
 use super::state::ApiState;
 use super::types;
+use crate::token_wire::{TokenBalanceWire, TokenBalancesWire};
 
 // ---------------------------------------------------------------------------
 // Request / Query types
@@ -55,18 +56,6 @@ pub struct BalanceQuery {
 // ---------------------------------------------------------------------------
 // Response types
 // ---------------------------------------------------------------------------
-
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct BalanceResponse {
-    pub token: String,
-    pub balance: u128,
-    pub staked: u128,
-}
-
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct AllBalancesResponse {
-    pub balances: Vec<BalanceResponse>,
-}
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct TransferResponse {
@@ -191,7 +180,7 @@ fn current_timestamp() -> u64 {
     path = "/api/v1/tokens/balance",
     params(BalanceQuery),
     responses(
-        (status = 200, description = "Token balance(s) retrieved", body = AllBalancesResponse)
+        (status = 200, description = "Token balance(s) retrieved", body = TokenBalancesWire)
     ),
     tag = "tokens",
 )]
@@ -208,11 +197,7 @@ pub async fn token_balance(
         let bal =
             store.get_balance(&did.0, token_byte).map_err(|e| ApiError::Internal(e.to_string()))?;
 
-        Ok(types::ok(BalanceResponse {
-            token: token_type_display(&tt).to_string(),
-            balance: bal.balance,
-            staked: bal.staked,
-        }))
+        Ok(types::ok(TokenBalanceWire::new(token_type_display(&tt), bal.balance, bal.staked)))
     } else {
         let all_tokens =
             [TokenType::Compute, TokenType::Train, TokenType::Bandwidth, TokenType::Storage];
@@ -222,13 +207,9 @@ pub async fn token_balance(
             let bal = store
                 .get_balance(&did.0, token_byte)
                 .map_err(|e| ApiError::Internal(e.to_string()))?;
-            balances.push(BalanceResponse {
-                token: token_type_display(tt).to_string(),
-                balance: bal.balance,
-                staked: bal.staked,
-            });
+            balances.push(TokenBalanceWire::new(token_type_display(tt), bal.balance, bal.staked));
         }
-        Ok(types::ok(AllBalancesResponse { balances }))
+        Ok(types::ok(TokenBalancesWire { balances }))
     }
 }
 

@@ -114,6 +114,18 @@ describe("Integration: live HTTP resource routes", () => {
 		expect(strategy).toEqual({ strategy: "mse", bits: 3.5 });
 	});
 
+	it("serves lossless canonical token balances", async () => {
+		const all = await client.token.balance();
+		expect(all).toEqual({
+			balances: [
+				{ token: "nCompute", balance: "100", staked: "0" },
+				{ token: "nTrain", balance: "0", staked: "50" },
+				{ token: "nBandwidth", balance: "0", staked: "50" },
+				{ token: "nStorage", balance: "0", staked: "50" },
+			],
+		});
+	});
+
 	it("serves the knowledge join-job operation", async () => {
 		const identity = await client.identity.show();
 		const result = await client.knowledge.joinJob({
