@@ -298,6 +298,7 @@ mod tests {
         cleanup(&path);
         let config = CliConfig::load(Some(path.to_str().unwrap())).expect("load");
         assert_eq!(config.app_config.agent.name, "default");
+        assert!(config.app_config.network.bootstrap_peers.is_empty());
         assert!(path.exists());
         cleanup(&path);
     }

@@ -221,11 +221,7 @@ name = "minimal"
         assert_eq!(config.agent.data_dir, "~/.neunode");
         assert_eq!(config.agent.log_level, "info");
         assert_eq!(config.network.listen_addr, "/ip4/0.0.0.0/tcp/0");
-        assert!(!config.network.bootstrap_peers.is_empty());
-        assert_eq!(
-            config.network.bootstrap_peers.len(),
-            crate::constants::p2p::DEFAULT_BOOTSTRAP_PEERS.len()
-        );
+        assert!(config.network.bootstrap_peers.is_empty());
         assert_eq!(config.network.mesh_degree, 6);
         assert!(config.network.enable_mdns);
         assert!(config.network.enable_relay);

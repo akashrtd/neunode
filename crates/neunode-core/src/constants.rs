@@ -17,14 +17,9 @@ pub mod p2p {
     /// Replace placeholder addresses with actual deployed node addresses
     /// before mainnet launch. Follows the IPFS/Bitcoin/Ethereum pattern
     /// of hardcoded seed nodes for initial network discovery.
-    pub const DEFAULT_BOOTSTRAP_PEERS: &[&str] = &[
-        // bootstrap-1.neunode.dev
-        "/dns4/bootstrap-1.neunode.dev/tcp/41000/p2p/PLACEHOLDER_PEER_ID_1",
-        // bootstrap-2.neunode.dev
-        "/dns4/bootstrap-2.neunode.dev/tcp/41000/p2p/PLACEHOLDER_PEER_ID_2",
-        // bootstrap-3.neunode.dev
-        "/dns4/bootstrap-3.neunode.dev/tcp/41000/p2p/PLACEHOLDER_PEER_ID_3",
-    ];
+    /// Production bootstrap nodes must be explicitly configured until stable,
+    /// monitored infrastructure and peer IDs are published.
+    pub const DEFAULT_BOOTSTRAP_PEERS: &[&str] = &[];
 }
 
 pub mod feed {
