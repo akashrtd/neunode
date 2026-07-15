@@ -27,6 +27,11 @@ pub fn test_state() -> AppState {
 
     let kr = Keyring::generate();
     let did = kr.to_did();
+    let document = neunode_identity::document::DidDocument::from_keyring(&kr).unwrap();
+    let document_json = document.to_json().unwrap();
+    neunode_storage::identity_store::IdentityStore::new(&db)
+        .put(did.as_str(), &document_json)
+        .unwrap();
 
     let config_path = dir.join("config.toml");
 

@@ -77,7 +77,7 @@ export interface LineageResource {
 	depth(cid: CID): Promise<LineageDepth>;
 	royalties(cid: CID, amount: number): Promise<readonly RoyaltyAllocation[]>;
 	hash(file: string): Promise<LineageHashResult>;
-	verify(cid: CID, signature: string): Promise<LineageVerifyResult>;
+	verify(cid: CID): Promise<LineageVerifyResult>;
 }
 
 export function createLineageResource(client: NeunodeClient): LineageResource {
@@ -124,10 +124,9 @@ export function createLineageResource(client: NeunodeClient): LineageResource {
 		async hash(file) {
 			return http().post<LineageHashResult>("/api/v1/lineage/hash", { file });
 		},
-		async verify(cid, signature) {
+		async verify(cid) {
 			return http().post<LineageVerifyResult>("/api/v1/lineage/verify", {
 				cid,
-				signature,
 			});
 		},
 	};

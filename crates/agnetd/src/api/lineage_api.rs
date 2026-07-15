@@ -4,17 +4,15 @@ use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use axum::Json;
 use neunode_lineage::{
-    compute_content_hash, compute_royalties as calc_royalties, ContributionType, LineageDag,
-    ModelMetadata, ModelNode,
+    compute_content_hash, compute_royalties as calc_royalties, ContributionType, ModelMetadata,
+    ModelNode,
 };
-use neunode_storage::cf::CF_MODELS;
 use serde::{Deserialize, Serialize};
 
 use super::error::ApiError;
 use super::state::ApiState;
 use super::types;
-
-const LINEAGE_PREFIX: &str = "lineage:";
+use crate::cmd_lineage::{load_model_node, rebuild_dag, sign_node, store_model_node, verify_node};
 
 // ---------------------------------------------------------------------------
 // Request / Response types
@@ -22,6 +20,10 @@ const LINEAGE_PREFIX: &str = "lineage:";
 
 fn default_contribution() -> String {
     "pre_training".to_string()
+}
+
+fn internal<T, E: std::fmt::Display>(result: Result<T, E>) -> Result<T, ApiError> {
+    result.map_err(|error| ApiError::Internal(error.to_string()))
 }
 
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
@@ -47,7 +49,6 @@ pub struct HashRequest {
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct VerifyRequest {
     pub cid: String,
-    pub signature: String,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -174,44 +175,6 @@ fn ct_label(ct: &ContributionType) -> String {
     }
 }
 
-fn store_model_node(db: &neunode_storage::db::NeunodeDb, node: &ModelNode) -> Result<(), ApiError> {
-    let key = format!("{LINEAGE_PREFIX}{}", node.cid);
-    let value = serde_json::to_vec(node).map_err(|e| ApiError::Internal(e.to_string()))?;
-    db.put_raw(CF_MODELS, key.as_bytes(), &value)?;
-    Ok(())
-}
-
-fn load_model_node(
-    db: &neunode_storage::db::NeunodeDb,
-    cid: &str,
-) -> Result<Option<ModelNode>, ApiError> {
-    let key = format!("{LINEAGE_PREFIX}{cid}");
-    match db.get_raw(CF_MODELS, key.as_bytes())? {
-        Some(bytes) => {
-            let node: ModelNode =
-                serde_json::from_slice(&bytes).map_err(|e| ApiError::Internal(e.to_string()))?;
-            Ok(Some(node))
-        }
-        None => Ok(None),
-    }
-}
-
-fn rebuild_dag(db: &neunode_storage::db::NeunodeDb) -> Result<LineageDag, ApiError> {
-    let all_kv = db.prefix_scan(CF_MODELS, LINEAGE_PREFIX.as_bytes())?;
-    let mut nodes: Vec<ModelNode> = Vec::new();
-    for (_k, v) in all_kv {
-        let node: ModelNode =
-            serde_json::from_slice(&v).map_err(|e| ApiError::Internal(e.to_string()))?;
-        nodes.push(node);
-    }
-    nodes.sort_by_key(|n| n.created_at);
-    let mut dag = LineageDag::new();
-    for node in nodes {
-        dag.register(node).map_err(|e| ApiError::Internal(e.to_string()))?;
-    }
-    Ok(dag)
-}
-
 fn model_node_to_summary(node: &ModelNode) -> ModelSummary {
     ModelSummary {
         cid: node.cid.clone(),
@@ -252,26 +215,28 @@ pub async fn register_lineage(
     }
 
     let did = state.require_did()?;
+    let keyring = state.require_keyring()?;
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
 
-    let node = ModelNode {
+    let mut node = ModelNode {
         cid: body.cid.clone(),
         parent_cids,
         contributor_did: did.0.clone(),
         contribution_type: ct.clone(),
-        signature: vec![0u8; 64],
+        signature: vec![],
         created_at: now_ms,
         metadata: ModelMetadata::default(),
     };
+    sign_node(&keyring, &did.0, &mut node).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let db = &state.db;
-    let mut dag = rebuild_dag(db)?;
+    let mut dag = rebuild_dag(db).map_err(|e| ApiError::Internal(e.to_string()))?;
     dag.register(node.clone()).map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
-    store_model_node(db, &node)?;
+    store_model_node(db, &node).map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(types::created(RegisterLineageResponse {
         cid: node.cid,
@@ -296,7 +261,7 @@ pub async fn show_lineage(
 ) -> Result<impl IntoResponse, ApiError> {
     validate_cid(&cid)?;
 
-    let node = load_model_node(&state.db, &cid)?
+    let node = internal(load_model_node(&state.db, &cid))?
         .ok_or_else(|| ApiError::NotFound(format!("model '{cid}' not found")))?;
 
     Ok(types::ok(LineageDetailResponse {
@@ -326,7 +291,7 @@ pub async fn show_parents(
 ) -> Result<impl IntoResponse, ApiError> {
     validate_cid(&cid)?;
 
-    let dag = rebuild_dag(&state.db)?;
+    let dag = internal(rebuild_dag(&state.db))?;
     let parents = dag.parents(&cid).map_err(|e| ApiError::NotFound(e.to_string()))?;
 
     let summaries: Vec<ModelSummary> = parents.iter().map(|n| model_node_to_summary(n)).collect();
@@ -347,7 +312,7 @@ pub async fn show_children(
 ) -> Result<impl IntoResponse, ApiError> {
     validate_cid(&cid)?;
 
-    let dag = rebuild_dag(&state.db)?;
+    let dag = internal(rebuild_dag(&state.db))?;
     let children = dag.children(&cid).map_err(|e| ApiError::NotFound(e.to_string()))?;
 
     let summaries: Vec<ModelSummary> = children.iter().map(|n| model_node_to_summary(n)).collect();
@@ -368,7 +333,7 @@ pub async fn show_ancestors(
 ) -> Result<impl IntoResponse, ApiError> {
     validate_cid(&cid)?;
 
-    let dag = rebuild_dag(&state.db)?;
+    let dag = internal(rebuild_dag(&state.db))?;
     let ancestors = dag.ancestors(&cid).map_err(|e| ApiError::NotFound(e.to_string()))?;
 
     let summaries: Vec<ModelSummary> = ancestors.iter().map(|n| model_node_to_summary(n)).collect();
@@ -389,7 +354,7 @@ pub async fn show_depth(
 ) -> Result<impl IntoResponse, ApiError> {
     validate_cid(&cid)?;
 
-    let dag = rebuild_dag(&state.db)?;
+    let dag = internal(rebuild_dag(&state.db))?;
     let depth = dag.lineage_depth(&cid).map_err(|e| ApiError::NotFound(e.to_string()))?;
 
     Ok(types::ok(DepthResponse { cid, lineage_depth: depth }))
@@ -411,7 +376,7 @@ pub async fn compute_royalties(
 ) -> Result<impl IntoResponse, ApiError> {
     validate_cid(&cid)?;
 
-    let dag = rebuild_dag(&state.db)?;
+    let dag = internal(rebuild_dag(&state.db))?;
     let allocs =
         calc_royalties(&dag, &cid, body.amount).map_err(|e| ApiError::NotFound(e.to_string()))?;
 
@@ -480,12 +445,10 @@ pub async fn verify_signature(
 ) -> Result<impl IntoResponse, ApiError> {
     validate_cid(&body.cid)?;
 
-    let node = load_model_node(&state.db, &body.cid)?
+    let node = internal(load_model_node(&state.db, &body.cid))?
         .ok_or_else(|| ApiError::NotFound(format!("model '{}' not found", body.cid)))?;
 
-    // Registration currently stores a placeholder rather than a DID-bound signature.
-    // Never report cryptographic verification until canonical signing is implemented.
-    let sig_valid = false;
+    let sig_valid = internal(verify_node(&state.db, &node))?;
     let fields_valid = !node.cid.is_empty() && !node.contributor_did.is_empty();
     let verified = sig_valid && fields_valid;
 
@@ -517,15 +480,17 @@ mod tests {
             capabilities: vec!["chat".to_string()],
         };
         crate::cmd_model::store_model(state.db(), &model).unwrap();
-        let node = ModelNode {
+        let mut node = ModelNode {
             cid: "sha256:aa".to_string(),
             parent_cids: vec![],
             contributor_did: state.require_did().unwrap().0.clone(),
             contribution_type: ContributionType::PreTraining,
-            signature: vec![0; 64],
+            signature: vec![],
             created_at: 1,
             metadata: ModelMetadata::default(),
         };
+        sign_node(state.require_keyring().unwrap(), &node.contributor_did.clone(), &mut node)
+            .unwrap();
         store_model_node(state.db(), &node).unwrap();
 
         let dag = rebuild_dag(state.db()).unwrap();

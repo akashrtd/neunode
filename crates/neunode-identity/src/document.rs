@@ -114,12 +114,30 @@ impl DidDocument {
     pub fn did(&self) -> Did {
         Did(self.id.clone())
     }
+
+    /// Resolve the Ed25519 verification key authorized by this DID document.
+    pub fn ed25519_verifying_key(&self) -> Result<ed25519_dalek::VerifyingKey> {
+        let method = self
+            .verification_method
+            .iter()
+            .find(|method| {
+                method.vm_type == ED25519_VM_TYPE
+                    && method.controller == self.id
+                    && self.authentication.contains(&method.id)
+            })
+            .ok_or_else(|| {
+                NeunodeError::InvalidPublicKey(
+                    "DID document has no authenticated Ed25519 verification method".into(),
+                )
+            })?;
+        crate::did::decode_ed25519_multibase(&method.public_key_multibase)
+    }
 }
 
 fn multibase_base58btc_ed25519(pubkey: &[u8; 32]) -> Result<String> {
     let vk = neunode_crypto::ed25519::verifying_key_from_bytes(pubkey)
         .map_err(|e| NeunodeError::InvalidPublicKey(e.to_string()))?;
-    Ok(crate::did::generate_did_key(&vk).as_str().trim_start_matches("did:key:").to_string())
+    Ok(crate::did::generate_did_key(&vk).as_str().trim_start_matches("did:key:z").to_string())
 }
 
 fn multibase_base58btc_secp256k1(pubkey_uncompressed: &[u8]) -> String {
@@ -170,6 +188,24 @@ mod tests {
     fn make_doc() -> DidDocument {
         let kr = Keyring::generate();
         DidDocument::from_keyring(&kr).unwrap()
+    }
+
+    #[test]
+    fn resolves_authenticated_ed25519_key() {
+        let keyring = Keyring::generate();
+        let document = DidDocument::from_keyring(&keyring).unwrap();
+        assert_eq!(
+            document.ed25519_verifying_key().unwrap().to_bytes(),
+            keyring.ed25519_public_key().to_bytes()
+        );
+    }
+
+    #[test]
+    fn rejects_ed25519_method_not_authorized_for_authentication() {
+        let keyring = Keyring::generate();
+        let mut document = DidDocument::from_keyring(&keyring).unwrap();
+        document.authentication.clear();
+        assert!(document.ed25519_verifying_key().is_err());
     }
 
     #[test]

@@ -34,7 +34,7 @@ describe("LineageResource", () => {
 		await client.lineage.depth(cid);
 		await client.lineage.royalties(cid, 10_000);
 		await client.lineage.hash("/tmp/model.bin");
-		await client.lineage.verify(cid, "signature");
+		await client.lineage.verify(cid);
 
 		expect(mock.requests[0]?.body).toEqual({
 			cid,
@@ -45,7 +45,7 @@ describe("LineageResource", () => {
 		});
 		expect(mock.requests[1]?.path).toBe("/api/v1/lineage/sha256%3Aaa%2Fbb");
 		expect(mock.requests[6]?.body).toEqual({ amount: 10_000 });
-		expect(mock.requests[8]?.body).toEqual({ cid, signature: "signature" });
+		expect(mock.requests[8]?.body).toEqual({ cid });
 	});
 
 	it("rejects lineage calls without HTTP", async () => {

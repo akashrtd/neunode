@@ -5,28 +5,31 @@ use neunode_crypto::hash::DOMAIN_MODEL_LINEAGE;
 use crate::types::ModelNode;
 
 pub fn sign_model_node(signing_key: &SigningKey, node: &ModelNode) -> Signature {
-    let payload = canonical_payload(node);
-    sign_domain(signing_key, DOMAIN_MODEL_LINEAGE, payload.as_bytes())
+    let payload = model_node_signing_payload(node);
+    sign_domain(signing_key, DOMAIN_MODEL_LINEAGE, &payload)
 }
 
 pub fn verify_model_node(verifying_key: &VerifyingKey, node: &ModelNode) -> bool {
-    let payload = canonical_payload(node);
+    let payload = model_node_signing_payload(node);
     let sig = match Signature::from_slice(&node.signature) {
         Ok(s) => s,
         Err(_) => return false,
     };
-    verify_domain(verifying_key, DOMAIN_MODEL_LINEAGE, payload.as_bytes(), &sig)
+    verify_domain(verifying_key, DOMAIN_MODEL_LINEAGE, &payload, &sig)
 }
 
-fn canonical_payload(node: &ModelNode) -> String {
+/// Canonical bytes covered by a model lineage signature.
+pub fn model_node_signing_payload(node: &ModelNode) -> Vec<u8> {
     let payload = serde_json::json!({
+        "version": 1,
         "cid": node.cid,
         "parent_cids": node.parent_cids,
         "contributor_did": node.contributor_did,
         "contribution_type": node.contribution_type,
         "created_at": node.created_at,
+        "metadata": node.metadata,
     });
-    serde_json::to_string(&payload).unwrap()
+    serde_json::to_vec(&payload).expect("serializing a ModelNode canonical payload cannot fail")
 }
 
 #[cfg(test)]
@@ -117,8 +120,8 @@ mod tests {
     #[test]
     fn canonical_payload_deterministic() {
         let node = make_test_node("sha256:abc", vec!["sha256:p1"], "did:agent:1", 100);
-        let p1 = canonical_payload(&node);
-        let p2 = canonical_payload(&node);
+        let p1 = model_node_signing_payload(&node);
+        let p2 = model_node_signing_payload(&node);
         assert_eq!(p1, p2);
     }
 
@@ -126,20 +129,18 @@ mod tests {
     fn canonical_payload_excludes_signature() {
         let mut node = make_test_node("sha256:abc", vec![], "did:agent:1", 100);
         node.signature = vec![0u8; 64];
-        let p1 = canonical_payload(&node);
+        let p1 = model_node_signing_payload(&node);
         node.signature = vec![255u8; 64];
-        let p2 = canonical_payload(&node);
+        let p2 = model_node_signing_payload(&node);
         assert_eq!(p1, p2);
     }
 
     #[test]
-    fn canonical_payload_excludes_metadata() {
-        let mut node = make_test_node("sha256:abc", vec![], "did:agent:1", 100);
-        node.metadata.dataset_hash = Some("sha256:ds".to_string());
-        let p1 = canonical_payload(&node);
-        node.metadata = ModelMetadata::default();
-        let p2 = canonical_payload(&node);
-        assert_eq!(p1, p2);
+    fn tampered_metadata_fails() {
+        let (sk, vk) = neunode_crypto::ed25519::generate_keypair();
+        let mut node = signed_node(&sk, "sha256:abc", vec![], "did:agent:1", 100);
+        node.metadata.dataset_hash = Some("sha256:injected".to_string());
+        assert!(!verify_model_node(&vk, &node));
     }
 
     #[test]
@@ -148,8 +149,8 @@ mod tests {
         node1.contribution_type = ContributionType::PreTraining;
         let mut node2 = make_test_node("sha256:abc", vec![], "did:agent:1", 100);
         node2.contribution_type = ContributionType::Merge { merge_method: "slerp".to_string() };
-        let p1 = canonical_payload(&node1);
-        let p2 = canonical_payload(&node2);
+        let p1 = model_node_signing_payload(&node1);
+        let p2 = model_node_signing_payload(&node2);
         assert_ne!(p1, p2, "different contribution types must produce different payloads");
     }
 

@@ -8,6 +8,8 @@ use crate::cli::{GlobalArgs, LineageCommands};
 use crate::output::OutputWriter;
 use crate::state::AppState;
 
+const LINEAGE_PREFIX: &str = "lineage:";
+
 pub fn execute(cmd: &LineageCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
     let writer = OutputWriter::new(args.output);
     match cmd {
@@ -93,38 +95,97 @@ fn validate_cid(cid: &str) -> Result<()> {
 }
 
 /// Store a model node as JSON in the `models` column family.
-fn store_model_node(db: &neunode_storage::db::NeunodeDb, node: &ModelNode) -> Result<()> {
-    let key = node.cid.as_bytes();
+pub(crate) fn store_model_node(
+    db: &neunode_storage::db::NeunodeDb,
+    node: &ModelNode,
+) -> Result<()> {
+    let key = format!("{LINEAGE_PREFIX}{}", node.cid);
     let value = serde_json::to_vec(node)?;
-    db.put_raw(CF_MODELS, key, &value)?;
+    db.put_raw(CF_MODELS, key.as_bytes(), &value)?;
     Ok(())
 }
 
 /// Load a single model node by CID from the `models` CF.
-fn load_model_node(db: &neunode_storage::db::NeunodeDb, cid: &str) -> Result<Option<ModelNode>> {
-    let key = cid.as_bytes();
-    match db.get_raw(CF_MODELS, key)? {
+pub(crate) fn load_model_node(
+    db: &neunode_storage::db::NeunodeDb,
+    cid: &str,
+) -> Result<Option<ModelNode>> {
+    let key = format!("{LINEAGE_PREFIX}{cid}");
+    match db.get_raw(CF_MODELS, key.as_bytes())? {
         Some(bytes) => {
             let node: ModelNode = serde_json::from_slice(&bytes)?;
             Ok(Some(node))
         }
-        None => Ok(None),
+        None => match db.get_raw(CF_MODELS, cid.as_bytes())? {
+            Some(bytes) => Ok(Some(serde_json::from_slice(&bytes)?)),
+            None => Ok(None),
+        },
     }
 }
 
-fn rebuild_dag(db: &neunode_storage::db::NeunodeDb) -> Result<LineageDag> {
-    let all_kv = db.prefix_scan(CF_MODELS, &[])?;
-    let mut nodes: Vec<ModelNode> = Vec::new();
+pub(crate) fn rebuild_dag(db: &neunode_storage::db::NeunodeDb) -> Result<LineageDag> {
+    let mut all_kv = db.prefix_scan(CF_MODELS, b"sha256:")?;
+    all_kv.extend(db.prefix_scan(CF_MODELS, LINEAGE_PREFIX.as_bytes())?);
+    let mut nodes_by_cid = std::collections::HashMap::new();
     for (_k, v) in all_kv {
         let node: ModelNode = serde_json::from_slice(&v)?;
-        nodes.push(node);
+        nodes_by_cid.insert(node.cid.clone(), node);
     }
-    nodes.sort_by_key(|n| n.created_at);
     let mut dag = LineageDag::new();
-    for node in nodes {
-        dag.register(node)?;
+    while !nodes_by_cid.is_empty() {
+        let mut ready: Vec<String> = nodes_by_cid
+            .iter()
+            .filter(|(_, node)| node.parent_cids.iter().all(|parent| dag.contains(parent)))
+            .map(|(cid, _)| cid.clone())
+            .collect();
+        ready.sort();
+        if ready.is_empty() {
+            let unresolved = nodes_by_cid.keys().cloned().collect::<Vec<_>>().join(", ");
+            anyhow::bail!("lineage contains missing parents or a cycle: {unresolved}");
+        }
+        for cid in ready {
+            let node = nodes_by_cid
+                .remove(&cid)
+                .ok_or_else(|| anyhow::anyhow!("lineage reconstruction lost node {cid}"))?;
+            if !verify_node(db, &node)? {
+                anyhow::bail!("invalid lineage signature for {cid}");
+            }
+            dag.register(node)?;
+        }
     }
     Ok(dag)
+}
+
+pub(crate) fn sign_node(
+    keyring: &neunode_identity::keyring::Keyring,
+    expected_did: &str,
+    node: &mut ModelNode,
+) -> Result<()> {
+    if keyring.to_did().as_str() != expected_did || node.contributor_did != expected_did {
+        anyhow::bail!("active keyring does not control lineage contributor DID");
+    }
+    let payload = neunode_lineage::sigchain::model_node_signing_payload(node);
+    node.signature = keyring
+        .sign_ed25519_domain(neunode_crypto::hash::DOMAIN_MODEL_LINEAGE, &payload)
+        .to_bytes()
+        .to_vec();
+    Ok(())
+}
+
+pub(crate) fn verify_node(db: &neunode_storage::db::NeunodeDb, node: &ModelNode) -> Result<bool> {
+    let store = neunode_storage::identity_store::IdentityStore::new(db);
+    let document_json = store
+        .get::<String>(&node.contributor_did)?
+        .ok_or_else(|| anyhow::anyhow!("DID document not found: {}", node.contributor_did))?;
+    let document = neunode_identity::document::DidDocument::from_json(&document_json)
+        .map_err(|e| anyhow::anyhow!("invalid DID document for {}: {e}", node.contributor_did))?;
+    if document.id != node.contributor_did {
+        anyhow::bail!("DID document subject does not match lineage contributor");
+    }
+    let verifying_key = document
+        .ed25519_verifying_key()
+        .map_err(|e| anyhow::anyhow!("cannot resolve contributor verification key: {e}"))?;
+    Ok(neunode_lineage::sigchain::verify_model_node(&verifying_key, node))
 }
 
 // ---------------------------------------------------------------------------
@@ -156,20 +217,22 @@ fn register_model(
     }
 
     let contributor = state.require_did()?.clone();
+    let keyring = state.require_keyring()?;
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
 
-    let node = ModelNode {
+    let mut node = ModelNode {
         cid: cid.to_string(),
         parent_cids,
         contributor_did: contributor.0.clone(),
         contribution_type: ct.clone(),
-        signature: vec![0u8; 64],
+        signature: vec![],
         created_at: now_ms,
         metadata: ModelMetadata::default(),
     };
+    sign_node(keyring, &contributor.0, &mut node)?;
 
     // Rebuild DAG and validate registration.
     let db = state.db();
@@ -400,8 +463,7 @@ fn verify_signature(cid: &str, writer: &OutputWriter, state: &AppState) -> Resul
     let node =
         load_model_node(db, cid)?.ok_or_else(|| anyhow::anyhow!("model '{cid}' not found"))?;
 
-    // Check structural validity: signature length must be 64 bytes.
-    let sig_valid = node.signature.len() == 64;
+    let sig_valid = verify_node(db, &node)?;
     // Check that CID, contributor_did are non-empty.
     let fields_valid = !node.cid.is_empty() && !node.contributor_did.is_empty();
 
@@ -437,6 +499,12 @@ mod tests {
     use crate::testutil::{human_writer, json_writer as test_writer, test_state};
     use neunode_lineage::ContributionType;
 
+    fn persist_active_document(state: &AppState) {
+        let keyring = state.require_keyring().unwrap();
+        let document = neunode_identity::document::DidDocument::from_keyring(keyring).unwrap();
+        state.identity_store().put(document.id.as_str(), &document.to_json().unwrap()).unwrap();
+    }
+
     // ---- Register tests ----
 
     #[test]
@@ -450,8 +518,70 @@ mod tests {
         assert!(loaded.is_some());
         let node = loaded.unwrap();
         assert_eq!(node.cid, "sha256:abc123");
+        assert_eq!(node.signature.len(), 64);
         assert!(node.parent_cids.is_empty());
         assert!(matches!(node.contribution_type, ContributionType::PreTraining));
+    }
+
+    #[test]
+    fn registered_node_verifies_against_contributor_did_document() {
+        let state = test_state();
+        persist_active_document(&state);
+        register_model("sha256:a123", None, "pre_training", None, None, &test_writer(), &state)
+            .unwrap();
+        let node = load_model_node(state.db(), "sha256:a123").unwrap().unwrap();
+        assert!(verify_node(state.db(), &node).unwrap());
+
+        let mut tampered = node;
+        tampered.contribution_type =
+            ContributionType::Merge { merge_method: "malicious".to_string() };
+        assert!(!verify_node(state.db(), &tampered).unwrap());
+    }
+
+    #[test]
+    fn legacy_raw_cid_records_remain_readable() {
+        let state = test_state();
+        let mut node = ModelNode {
+            cid: "sha256:c123".to_string(),
+            parent_cids: vec![],
+            contributor_did: state.require_did().unwrap().0.clone(),
+            contribution_type: ContributionType::PreTraining,
+            signature: vec![],
+            created_at: 1,
+            metadata: ModelMetadata::default(),
+        };
+        sign_node(state.require_keyring().unwrap(), &node.contributor_did.clone(), &mut node)
+            .unwrap();
+        state
+            .db()
+            .put_raw(CF_MODELS, node.cid.as_bytes(), &serde_json::to_vec(&node).unwrap())
+            .unwrap();
+
+        assert_eq!(load_model_node(state.db(), &node.cid).unwrap().unwrap().cid, node.cid);
+        assert_eq!(rebuild_dag(state.db()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn verification_rejects_substituted_did_document_key() {
+        let state = test_state();
+        persist_active_document(&state);
+        register_model("sha256:b123", None, "pre_training", None, None, &test_writer(), &state)
+            .unwrap();
+        let node = load_model_node(state.db(), "sha256:b123").unwrap().unwrap();
+
+        let attacker = neunode_identity::keyring::Keyring::generate();
+        let mut document =
+            neunode_identity::document::DidDocument::from_keyring(&attacker).unwrap();
+        let contributor = node.contributor_did.clone();
+        document.id = contributor.clone();
+        for method in &mut document.verification_method {
+            let fragment = method.id.rsplit_once('#').map(|(_, value)| value).unwrap_or("keys-1");
+            method.id = format!("{contributor}#{fragment}");
+            method.controller = contributor.clone();
+        }
+        document.authentication = vec![format!("{contributor}#keys-1")];
+        state.identity_store().put(&contributor, &document.to_json().unwrap()).unwrap();
+        assert!(!verify_node(state.db(), &node).unwrap());
     }
 
     #[test]
@@ -891,6 +1021,7 @@ mod tests {
     #[test]
     fn verify_model_valid() {
         let state = test_state();
+        persist_active_document(&state);
         let writer = test_writer();
         register_model("sha256:7000", None, "pre_training", None, None, &writer, &state).unwrap();
 
@@ -989,6 +1120,7 @@ mod tests {
     #[test]
     fn three_level_dag_full_workflow() {
         let state = test_state();
+        persist_active_document(&state);
         let writer = test_writer();
 
         register_model("sha256:8000", None, "pre_training", None, None, &writer, &state).unwrap();

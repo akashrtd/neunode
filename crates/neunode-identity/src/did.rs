@@ -67,6 +67,24 @@ fn base58btc_decode(encoded: &str) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// Decode an Ed25519 public key encoded as a `z`-prefixed multibase value.
+pub fn decode_ed25519_multibase(value: &str) -> Result<ed25519_dalek::VerifyingKey> {
+    let encoded = value.strip_prefix('z').ok_or_else(|| {
+        NeunodeError::InvalidPublicKey("Ed25519 multibase key must start with 'z'".into())
+    })?;
+    // Versions before 0.1.0 accidentally emitted a second multibase prefix.
+    let encoded = encoded.strip_prefix('z').unwrap_or(encoded);
+    let decoded = base58btc_decode(encoded)?;
+    if decoded.len() != 34 || decoded[0] != 0xed || decoded[1] != 0x01 {
+        return Err(NeunodeError::InvalidPublicKey("invalid Ed25519 multicodec payload".into()));
+    }
+    let bytes: [u8; 32] = decoded[2..]
+        .try_into()
+        .map_err(|_| NeunodeError::InvalidPublicKey("invalid Ed25519 key length".into()))?;
+    neunode_crypto::ed25519::verifying_key_from_bytes(&bytes)
+        .map_err(|e| NeunodeError::InvalidPublicKey(e.to_string()))
+}
+
 fn varint_encode(value: u64) -> Vec<u8> {
     let mut out = Vec::new();
     let mut v = value;

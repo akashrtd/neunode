@@ -244,10 +244,10 @@ describe("Integration: live HTTP resource routes", () => {
 			parent_cids: [root],
 			signature_length: 64,
 		});
-		expect(await client.lineage.verify(child, "00")).toMatchObject({
+		expect(await client.lineage.verify(child)).toMatchObject({
 			cid: child,
-			signature_valid: false,
-			verified: false,
+			signature_valid: true,
+			verified: true,
 		});
 	});
 

@@ -83,6 +83,11 @@ impl Keyring {
         ed25519::sign(&self.ed25519_signing, message)
     }
 
+    /// Sign a domain-separated payload with Ed25519.
+    pub fn sign_ed25519_domain(&self, domain: &[u8], message: &[u8]) -> ed25519_dalek::Signature {
+        ed25519::sign_domain(&self.ed25519_signing, domain, message)
+    }
+
     /// Sign a message with secp256k1 (raw ECDSA, SHA-256 challenge).
     pub fn sign_secp256k1(&self, message: &[u8]) -> neunode_crypto::secp256k1::Signature {
         secp256k1::sign_message(&self.secp256k1_signing, message)
