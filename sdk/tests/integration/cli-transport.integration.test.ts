@@ -219,7 +219,52 @@ describe("Integration: Token Commands (multi-envelope)", () => {
 });
 
 // ===========================================================================
-// F. Reputation Commands
+// F. TurboQuant transport parity
+// ===========================================================================
+
+describe("Integration: TurboQuant Commands", () => {
+	const transport = makeTransport();
+
+	it("selects the same compression strategy exposed over HTTP", async () => {
+		const result = await transport.execute<{
+			strategy: string;
+			bits?: number;
+		}>([
+			"turboquant",
+			"compress",
+			"--profile",
+			"kv_cache",
+			"--dimension",
+			"4096",
+			"--target-bits",
+			"3.5",
+		]);
+		expect(result).toEqual({ strategy: "mse", bits: 3.5 });
+	});
+
+	it("generates codebooks through the CLI transport", async () => {
+		const result = await transport.execute<{
+			bits: number;
+			levels: number[];
+			dimension: number;
+		}>([
+			"turboquant",
+			"generate-codebook",
+			"--bits",
+			"2",
+			"--dimension",
+			"256",
+			"--num-samples",
+			"32",
+		]);
+		expect(result.bits).toBe(2);
+		expect(result.levels).toHaveLength(4);
+		expect(result.dimension).toBe(256);
+	});
+});
+
+// ===========================================================================
+// G. Reputation Commands
 // ===========================================================================
 
 describe("Integration: Reputation Commands", () => {

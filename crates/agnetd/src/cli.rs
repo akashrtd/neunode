@@ -165,6 +165,12 @@ pub enum Commands {
         #[command(subcommand)]
         command: DiscoverCommands,
     },
+    /// Select and configure TurboQuant compression (alias: tq)
+    #[command(alias = "tq")]
+    Turboquant {
+        #[command(subcommand)]
+        command: TurboquantCommands,
+    },
     /// Real-time dashboard (alias: d)
     #[command(alias = "d")]
     Dashboard,
@@ -837,6 +843,49 @@ pub enum VerifyCommands {
 }
 
 #[derive(Subcommand, Debug)]
+pub enum TurboquantCommands {
+    /// Select the compression strategy for a workload profile
+    Compress {
+        /// Workload profile: gradient, kv_cache, or custom
+        #[arg(long)]
+        profile: String,
+        /// Vector dimension
+        #[arg(long)]
+        dimension: usize,
+        /// Worker count for gradient profiles
+        #[arg(long)]
+        workers: Option<usize>,
+        /// Available bandwidth in Mbps for gradient profiles
+        #[arg(long)]
+        bandwidth_mbps: Option<f64>,
+        /// Desired bits per element for KV-cache profiles
+        #[arg(long)]
+        target_bits: Option<f32>,
+        /// Exact bit width for custom profiles
+        #[arg(long)]
+        bits: Option<u8>,
+    },
+    /// Generate a deterministic scalar quantization codebook
+    GenerateCodebook {
+        /// Bits per quantized value
+        #[arg(long)]
+        bits: u32,
+        /// Vector dimension
+        #[arg(long)]
+        dimension: usize,
+        /// Maximum Lloyd-Max iterations
+        #[arg(long)]
+        max_iterations: Option<u32>,
+        /// MSE convergence threshold
+        #[arg(long)]
+        convergence_threshold: Option<f64>,
+        /// Distribution sample count
+        #[arg(long)]
+        num_samples: Option<usize>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 pub enum DiscoverCommands {
     /// Search for agents matching capabilities
     Search {
@@ -1096,6 +1145,48 @@ mod tests {
     fn parse_train_alias() {
         let cli = Cli::try_parse_from(["agnetd", "t", "list"]).expect("parse alias");
         assert!(matches!(cli.command, Commands::Train { .. }));
+    }
+
+    #[test]
+    fn parse_turboquant_compress() {
+        let cli = Cli::try_parse_from([
+            "agnetd",
+            "turboquant",
+            "compress",
+            "--profile",
+            "kv_cache",
+            "--dimension",
+            "4096",
+            "--target-bits",
+            "3.5",
+        ])
+        .expect("parse");
+        match cli.command {
+            Commands::Turboquant { command } => match command {
+                TurboquantCommands::Compress { profile, dimension, target_bits, .. } => {
+                    assert_eq!(profile, "kv_cache");
+                    assert_eq!(dimension, 4096);
+                    assert_eq!(target_bits, Some(3.5));
+                }
+                _ => panic!("expected Compress"),
+            },
+            _ => panic!("expected Turboquant"),
+        }
+    }
+
+    #[test]
+    fn parse_turboquant_alias() {
+        let cli = Cli::try_parse_from([
+            "agnetd",
+            "tq",
+            "generate-codebook",
+            "--bits",
+            "4",
+            "--dimension",
+            "256",
+        ])
+        .expect("parse alias");
+        assert!(matches!(cli.command, Commands::Turboquant { .. }));
     }
 
     #[test]

@@ -22,6 +22,7 @@ mod cmd_security;
 mod cmd_serve;
 mod cmd_token;
 mod cmd_train;
+mod cmd_turboquant;
 mod cmd_verify;
 mod config;
 mod error;
@@ -29,6 +30,7 @@ mod feed_wire;
 mod mesh_handle;
 mod output;
 mod state;
+mod turboquant_service;
 mod util;
 
 #[cfg(test)]
@@ -101,6 +103,7 @@ fn main() -> ExitCode {
         Commands::Discover { command } => {
             cmd_discover::execute(command, &global_args, &mut app_state)
         }
+        Commands::Turboquant { command } => cmd_turboquant::execute(command, &global_args),
         Commands::Dashboard => rt.block_on(cmd_dashboard::execute(&global_args, &mut app_state)),
         Commands::Serve { port } => {
             rt.block_on(cmd_serve::execute(*port, &global_args, &mut app_state))
