@@ -6,7 +6,7 @@
  * is not available (e.g., CI without a Rust build step).
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -64,6 +64,33 @@ describe.sequential("Integration: Binary & Envelope Format", () => {
 		]);
 		expect(result).toHaveProperty("agent.name");
 		expect(result).toHaveProperty("storage.db_path");
+	});
+
+	it("should run agents with isolated databases concurrently", async () => {
+		const root = mkdtempSync(join(tmpdir(), "neunode-isolated-agents-"));
+		const dbA = join(root, "agent-a-db");
+		const dbB = join(root, "agent-b-db");
+		try {
+			const common = {
+				binaryPath: BINARY_PATH ?? "agnetd",
+				timeout: 15_000,
+				env: INTEGRATION_ENV,
+			};
+			const agentA = new CliTransport({ ...common, dbPath: dbA });
+			const agentB = new CliTransport({ ...common, dbPath: dbB });
+
+			const [resultA, resultB] = await Promise.all([
+				agentA.execute<Record<string, unknown>>(["config", "list"]),
+				agentB.execute<Record<string, unknown>>(["config", "list"]),
+			]);
+
+			expect(resultA).toHaveProperty("storage.db_path");
+			expect(resultB).toHaveProperty("storage.db_path");
+			expect(existsSync(dbA)).toBe(true);
+			expect(existsSync(dbB)).toBe(true);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 });
 

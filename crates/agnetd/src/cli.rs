@@ -12,6 +12,10 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "PATH")]
     pub config: Option<String>,
 
+    /// Override the RocksDB directory for this agent process
+    #[arg(long, global = true, value_name = "PATH")]
+    pub db_path: Option<String>,
+
     /// Network to connect to
     #[arg(long, global = true, default_value = "testnet")]
     pub network: String,
@@ -43,6 +47,7 @@ pub enum OutputFormat {
 pub struct GlobalArgs {
     pub output: OutputFormat,
     pub config: Option<String>,
+    pub db_path: Option<String>,
     pub network: String,
     pub identity: Option<String>,
     pub verbose: bool,
@@ -53,6 +58,7 @@ impl GlobalArgs {
         Self {
             output: cli.output,
             config: cli.config.clone(),
+            db_path: cli.db_path.clone(),
             network: cli.network.clone(),
             identity: cli.identity.clone(),
             verbose: cli.verbose,
@@ -1217,12 +1223,15 @@ mod tests {
             "json",
             "--network",
             "mainnet",
+            "--db-path",
+            "/tmp/neunode-agent-a",
             "--verbose",
             "version",
         ])
         .expect("parse globals");
         assert!(matches!(cli.output, OutputFormat::Json));
         assert_eq!(cli.network, "mainnet");
+        assert_eq!(cli.db_path.as_deref(), Some("/tmp/neunode-agent-a"));
         assert!(cli.verbose);
     }
 

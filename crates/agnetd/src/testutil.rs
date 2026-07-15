@@ -37,6 +37,7 @@ pub fn test_state() -> AppState {
 
     AppState {
         db: Arc::new(db),
+        db_path: dir,
         config: CliConfig::load(config_path.to_str()).unwrap(),
         active_keyring: Some(kr),
         active_did: Some(did),

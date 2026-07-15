@@ -131,6 +131,20 @@ describe("CliTransport", () => {
 			expect(args).toContain("--config");
 			expect(args).toContain("/tmp/agnetd.toml");
 		});
+
+		it("should pass global --db-path flag", () => {
+			const transport = new CliTransport({ dbPath: "/tmp/neunode-agent-a" });
+			mockExecFile.mockResolvedValue({
+				stdout: '{"data":{},"success":true}',
+				stderr: "",
+			});
+			transport.execute(["config", "list"]);
+			const call = mockExecFile.mock.calls[0];
+			expect(call).toBeDefined();
+			const args = (call as [string, string[], unknown])[1];
+			expect(args).toContain("--db-path");
+			expect(args).toContain("/tmp/neunode-agent-a");
+		});
 	});
 
 	describe("execute", () => {

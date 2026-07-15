@@ -12,6 +12,7 @@ use neunode_storage::token_store::TokenStore;
 
 pub struct AppState {
     pub(crate) db: Arc<NeunodeDb>,
+    pub(crate) db_path: PathBuf,
     pub config: crate::config::CliConfig,
     pub active_keyring: Option<Keyring>,
     pub active_did: Option<Did>,
@@ -22,23 +23,34 @@ pub struct AppState {
 impl AppState {
     pub fn init(cli: &crate::cli::Cli) -> Result<Self> {
         let config = crate::config::CliConfig::load(cli.config.as_deref())?;
-        Self::init_with_config(config, cli.identity.as_deref())
+        Self::init_with_config(config, cli.identity.as_deref(), cli.db_path.as_deref())
     }
 
     pub fn init_from_globals(args: &crate::cli::GlobalArgs) -> Result<Self> {
         let config = crate::config::CliConfig::load(args.config.as_deref())?;
-        Self::init_with_config(config, args.identity.as_deref())
+        Self::init_with_config(config, args.identity.as_deref(), args.db_path.as_deref())
     }
 
     fn init_with_config(
         config: crate::config::CliConfig,
         identity_override: Option<&str>,
+        db_path_override: Option<&str>,
     ) -> Result<Self> {
-        let db_path = expand_db_path(&config.app_config.storage.db_path);
+        if db_path_override.is_some_and(|path| path.trim().is_empty()) {
+            anyhow::bail!("--db-path cannot be empty");
+        }
+        let db_path =
+            expand_db_path(db_path_override.unwrap_or(config.app_config.storage.db_path.as_str()));
         std::fs::create_dir_all(&db_path)
             .with_context(|| format!("failed to create DB directory {}", db_path.display()))?;
 
-        let db = NeunodeDb::open(&db_path)?;
+        let db = NeunodeDb::open(&db_path).with_context(|| {
+            format!(
+                "failed to open database at {}; if another agnetd process owns it, use that \
+                 daemon's HTTP API or select an isolated store with --db-path",
+                db_path.display()
+            )
+        })?;
 
         let selected_identity = identity_override.or(config.active_identity.as_deref());
         let (active_keyring, active_did) = match selected_identity {
@@ -50,7 +62,14 @@ impl AppState {
             None => (None, None),
         };
 
-        Ok(Self { db: Arc::new(db), config, active_keyring, active_did, mesh_handle: None })
+        Ok(Self {
+            db: Arc::new(db),
+            db_path,
+            config,
+            active_keyring,
+            active_did,
+            mesh_handle: None,
+        })
     }
 
     pub fn identity_store(&self) -> IdentityStore<'_> {
@@ -90,7 +109,7 @@ impl AppState {
     }
 
     pub fn data_dir(&self) -> PathBuf {
-        expand_db_path(&self.config.app_config.storage.db_path)
+        self.db_path.clone()
     }
 
     pub(crate) fn set_mesh_handle(&mut self, handle: crate::mesh_handle::MeshHandle) {

@@ -41,6 +41,8 @@ export interface CliTransportConfig {
 	readonly network?: string;
 	/** Global --config flag (path to config file). */
 	readonly config?: string;
+	/** Global --db-path flag for an isolated per-agent RocksDB directory. */
+	readonly dbPath?: string;
 	/** Environment overrides for subprocesses (useful for isolated automation). */
 	readonly env?: Readonly<NodeJS.ProcessEnv>;
 }
@@ -79,6 +81,7 @@ export class CliTransport {
 		if (config.identity) args.push("--identity", config.identity);
 		if (config.network) args.push("--network", config.network);
 		if (config.config) args.push("--config", config.config);
+		if (config.dbPath) args.push("--db-path", config.dbPath);
 		this.globalArgs = args;
 	}
 

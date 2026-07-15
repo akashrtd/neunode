@@ -381,6 +381,7 @@ mod tests {
 
         let state = AppState {
             db: Arc::new(db),
+            db_path: dir,
             config: CliConfig::load(None).unwrap(),
             active_keyring: None,
             active_did: None,
