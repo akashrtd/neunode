@@ -668,12 +668,12 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
     // ─── Pay Bounty ───────────────────────────────────────────────────────
 
     /// @notice Release payment after acceptance (backward-compatible, no fees)
-    function payBounty(bytes32 id) external {
+    function payBounty(bytes32 id) external nonReentrant {
         _payBounty(id, false);
     }
 
     /// @notice Release payment after acceptance with fee splitting
-    function payBountyWithFees(bytes32 id) external {
+    function payBountyWithFees(bytes32 id) external nonReentrant {
         _payBounty(id, true);
     }
 

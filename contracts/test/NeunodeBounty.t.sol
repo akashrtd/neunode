@@ -5,6 +5,48 @@ import "forge-std/Test.sol";
 import "../src/NeunodeBounty.sol";
 import "../src/tokens/ComputeToken.sol";
 
+contract ReentrantPayoutToken is ERC20 {
+    address public payoutTarget;
+    bytes32 public payoutId;
+    bool public attackArmed;
+    bool public attackWithFees;
+    bool public reentrySucceeded;
+    bytes4 public reentryRevertSelector;
+
+    constructor() ERC20("Reentrant Payout Token", "RPT") {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    function arm(address target, bytes32 id, bool withFees) external {
+        payoutTarget = target;
+        payoutId = id;
+        attackWithFees = withFees;
+        attackArmed = true;
+    }
+
+    function transfer(address to, uint256 amount) public override returns (bool) {
+        bool transferred = super.transfer(to, amount);
+        if (attackArmed && msg.sender == payoutTarget) {
+            attackArmed = false;
+            bytes memory revertData;
+            bytes memory callData = attackWithFees
+                ? abi.encodeCall(NeunodeBounty.payBountyWithFees, (payoutId))
+                : abi.encodeCall(NeunodeBounty.payBounty, (payoutId));
+            (reentrySucceeded, revertData) = payoutTarget.call(callData);
+            if (revertData.length >= 4) {
+                bytes4 selector;
+                assembly ("memory-safe") {
+                    selector := mload(add(revertData, 32))
+                }
+                reentryRevertSelector = selector;
+            }
+        }
+        return transferred;
+    }
+}
+
 /// @title NeunodeBountyTest — Tests for bounty state machine
 contract NeunodeBountyTest is Test {
     NeunodeBounty public bounty;
@@ -273,6 +315,54 @@ contract NeunodeBountyTest is Test {
 
         assertEq(uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Paid));
         assertEq(token.balanceOf(provider) - providerBalBefore, REWARD);
+    }
+
+    function testPayBountyRejectsMaliciousTokenReentry() public {
+        ReentrantPayoutToken maliciousToken = _prepareMaliciousPayout();
+        maliciousToken.arm(address(bounty), BOUNTY_ID, false);
+        bounty.payBounty(BOUNTY_ID);
+
+        _assertMaliciousReentryBlocked(maliciousToken, REWARD);
+    }
+
+    function testPayBountyWithFeesRejectsMaliciousTokenReentry() public {
+        ReentrantPayoutToken maliciousToken = _prepareMaliciousPayout();
+        maliciousToken.arm(address(bounty), BOUNTY_ID, true);
+        bounty.payBountyWithFees(BOUNTY_ID);
+
+        _assertMaliciousReentryBlocked(maliciousToken, (REWARD * 9400) / 10_000);
+    }
+
+    function _assertMaliciousReentryBlocked(
+        ReentrantPayoutToken maliciousToken,
+        uint256 expectedProviderPayout
+    ) internal view {
+        assertFalse(maliciousToken.reentrySucceeded());
+        assertEq(
+            maliciousToken.reentryRevertSelector(),
+            bytes4(keccak256("ReentrancyGuardReentrantCall()"))
+        );
+        assertEq(maliciousToken.balanceOf(provider), expectedProviderPayout);
+        assertEq(uint8(bounty.getBountyState(BOUNTY_ID)), uint8(NeunodeBounty.BountyState.Paid));
+    }
+
+    function _prepareMaliciousPayout() internal returns (ReentrantPayoutToken maliciousToken) {
+        maliciousToken = new ReentrantPayoutToken();
+        maliciousToken.mint(requester, REWARD);
+
+        vm.startPrank(requester);
+        maliciousToken.approve(address(bounty), REWARD);
+        bounty.createBounty(BOUNTY_ID, REWARD, address(maliciousToken), claimDeadline, workDeadline);
+        vm.stopPrank();
+
+        vm.prank(provider);
+        bounty.claimBounty(BOUNTY_ID);
+        vm.prank(provider);
+        bounty.submitWork(BOUNTY_ID, _commitment());
+        vm.prank(provider);
+        bounty.revealWork(BOUNTY_ID, ARTIFACT_HASH, SALT);
+        vm.prank(requester);
+        bounty.acceptSubmission(BOUNTY_ID);
     }
 
     // ─── Accept Submission ────────────────────────────────────────────────
