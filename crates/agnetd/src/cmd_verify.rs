@@ -3,9 +3,10 @@ use neunode_verification::bisection::BisectionSolver;
 use neunode_verification::gauntlet::{Gauntlet, GauntletConfig, GauntletTest};
 use neunode_verification::repops::{DeterministicExecutor, RepOpsResult};
 use neunode_verification::spot_check::{SpotCheckConfig, SpotChecker};
-use neunode_verification::tee::{TeeQuote, TeeType, TeeVerifier};
+use neunode_verification::tee_amd::{AmdGeneration, AmdSnpPolicy, AmdSnpVerifier, AmdTcb};
+use neunode_verification::tee_intel::{IntelTdxPolicy, IntelTdxVerifier};
 
-use crate::cli::{GlobalArgs, VerifyCommands};
+use crate::cli::{AmdGenerationArg, GlobalArgs, TeeVerifyCommands, VerifyCommands};
 use crate::output::OutputWriter;
 use crate::state::AppState;
 
@@ -24,9 +25,7 @@ pub fn execute(cmd: &VerifyCommands, args: &GlobalArgs, state: &mut AppState) ->
         VerifyCommands::Bisection { claimant, challenger } => {
             run_bisection(claimant, challenger, &writer, state)
         }
-        VerifyCommands::Tee { measurement, nonce, tee_type } => {
-            verify_tee(measurement, nonce, tee_type, &writer, state)
-        }
+        VerifyCommands::Tee { command } => verify_tee(command, &writer, state),
         VerifyCommands::Status => show_status(&writer, state),
     }
 }
@@ -200,57 +199,113 @@ fn run_bisection(
     Ok(())
 }
 
-fn verify_tee(
-    measurement: &str,
-    nonce_hex: &str,
-    tee_type_str: &str,
-    writer: &OutputWriter,
-    _state: &AppState,
-) -> Result<()> {
-    if measurement.is_empty() {
-        anyhow::bail!("measurement hash cannot be empty");
-    }
-    if nonce_hex.is_empty() {
-        anyhow::bail!("nonce cannot be empty");
-    }
-
-    let tee_type = parse_tee_type(tee_type_str)?;
-    let nonce_bytes =
-        hex::decode(nonce_hex).map_err(|e| anyhow::anyhow!("invalid nonce hex: {e}"))?;
-
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64;
-
-    let quote = TeeQuote {
-        tee_type,
-        measurement_hash: measurement.to_string(),
-        signer_public_key: vec![0x01, 0x02, 0x03, 0x04],
-        timestamp_ms: now_ms,
-        nonce: nonce_bytes.clone(),
-        raw_quote: vec![],
-    };
-
-    let verifier = TeeVerifier::new();
-    let attestation = verifier.verify_quote(&quote, measurement, &nonce_bytes)?;
-
-    let out = serde_json::json!({
-        "verified": attestation.verified,
-        "tee_type": format!("{:?}", attestation.quote.tee_type),
-        "measurement_hash": attestation.quote.measurement_hash,
-        "verification_timestamp_ms": attestation.verification_timestamp_ms,
-        "verifier_id": attestation.verifier_id,
-        "is_fresh": verifier.is_quote_fresh(&quote, 300),
-    });
-
-    writer.write_json(&out);
-    if attestation.verified {
-        writer.write_status(&format!("TEE attestation verified ({})", format_tee_type(tee_type)));
-    } else {
-        writer.write_error("TEE attestation verification failed");
+fn verify_tee(command: &TeeVerifyCommands, writer: &OutputWriter, _state: &AppState) -> Result<()> {
+    match command {
+        TeeVerifyCommands::Intel { quote, collateral, mr_td, report_data, now_secs } => {
+            let raw_quote = read_evidence(quote, "Intel TDX quote")?;
+            let collateral_json = read_evidence(collateral, "Intel DCAP collateral")?;
+            let policy = IntelTdxPolicy::strict(
+                decode_fixed_hex(mr_td, "MR_TD")?,
+                decode_fixed_hex(report_data, "REPORT_DATA")?,
+            );
+            let verified_at = trusted_time(*now_secs)?;
+            let claims = IntelTdxVerifier::production().verify_json(
+                &raw_quote,
+                &collateral_json,
+                &policy,
+                verified_at,
+            )?;
+            writer.write_json(&serde_json::json!({
+                "verified": true,
+                "tee_type": "intel_tdx",
+                "claims": claims,
+            }));
+            writer.write_status("TEE attestation verified (Intel TDX)");
+        }
+        TeeVerifyCommands::Amd {
+            report,
+            ark,
+            ask,
+            vek,
+            generation,
+            measurement,
+            report_data,
+            min_bootloader,
+            min_tee,
+            min_snp,
+            min_microcode,
+            min_fmc,
+            allow_smt,
+            allow_migration,
+            now_secs,
+        } => {
+            let generation = amd_generation(*generation);
+            if generation == AmdGeneration::Turin && min_fmc.is_none() {
+                anyhow::bail!("--min-fmc is required for AMD Turin verification");
+            }
+            let mut policy = AmdSnpPolicy::strict(
+                decode_fixed_hex(measurement, "measurement")?,
+                decode_fixed_hex(report_data, "REPORT_DATA")?,
+                AmdTcb {
+                    bootloader: *min_bootloader,
+                    tee: *min_tee,
+                    snp: *min_snp,
+                    microcode: *min_microcode,
+                    fmc: *min_fmc,
+                },
+            );
+            policy.allow_smt = *allow_smt;
+            policy.allow_migration = *allow_migration;
+            let verified_at = trusted_time(*now_secs)?;
+            let claims = AmdSnpVerifier::production_vcek(generation).verify_der(
+                &read_evidence(report, "AMD SEV-SNP report")?,
+                &read_evidence(ark, "AMD ARK certificate")?,
+                &read_evidence(ask, "AMD ASK certificate")?,
+                &read_evidence(vek, "AMD VEK certificate")?,
+                &policy,
+                verified_at,
+            )?;
+            writer.write_json(&serde_json::json!({
+                "verified": true,
+                "tee_type": "amd_sev_snp",
+                "claims": claims,
+            }));
+            writer.write_status("TEE attestation verified (AMD SEV-SNP)");
+        }
     }
     Ok(())
+}
+
+fn read_evidence(path: &str, label: &str) -> Result<Vec<u8>> {
+    std::fs::read(path).map_err(|error| anyhow::anyhow!("failed to read {label} '{path}': {error}"))
+}
+
+fn decode_fixed_hex<const N: usize>(value: &str, label: &str) -> Result<[u8; N]> {
+    let decoded = hex::decode(value.strip_prefix("0x").unwrap_or(value))
+        .map_err(|error| anyhow::anyhow!("invalid {label} hex: {error}"))?;
+    decoded.try_into().map_err(|bytes: Vec<u8>| {
+        anyhow::anyhow!("{label} must be exactly {N} bytes, got {}", bytes.len())
+    })
+}
+
+fn trusted_time(explicit: Option<u64>) -> Result<u64> {
+    explicit.map_or_else(
+        || {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|duration| duration.as_secs())
+                .map_err(|error| anyhow::anyhow!("system clock is before Unix epoch: {error}"))
+        },
+        Ok,
+    )
+}
+
+fn amd_generation(generation: AmdGenerationArg) -> AmdGeneration {
+    match generation {
+        AmdGenerationArg::Milan => AmdGeneration::Milan,
+        AmdGenerationArg::Genoa => AmdGeneration::Genoa,
+        AmdGenerationArg::Turin => AmdGeneration::Turin,
+    }
 }
 
 fn show_status(writer: &OutputWriter, _state: &AppState) -> Result<()> {
@@ -304,30 +359,6 @@ fn build_repops_result(hashes: &[String]) -> RepOpsResult {
             hash_count: (hashes.len() - 1) as u32,
             reproducible: true,
         }
-    }
-}
-
-fn parse_tee_type(s: &str) -> Result<TeeType> {
-    match s.to_lowercase().as_str() {
-        "intel_tdx" | "intel-tdx" | "tdx" => Ok(TeeType::IntelTdx),
-        "amd_sev" | "amd-sev" | "sev" => Ok(TeeType::AmdSev),
-        "nvidia_ccn" | "nvidia-ccn" | "nvidia" => Ok(TeeType::NvidiaCcn),
-        "apple_se" | "apple-se" | "apple_secure_enclave" | "apple" => {
-            Ok(TeeType::AppleSecureEnclave)
-        }
-        _ => anyhow::bail!(
-            "unknown TEE type '{}'. Valid: intel_tdx, amd_sev, nvidia_ccn, apple_se",
-            s
-        ),
-    }
-}
-
-fn format_tee_type(tt: TeeType) -> &'static str {
-    match tt {
-        TeeType::IntelTdx => "Intel TDX",
-        TeeType::AmdSev => "AMD SEV",
-        TeeType::NvidiaCcn => "NVIDIA CC",
-        TeeType::AppleSecureEnclave => "Apple Secure Enclave",
     }
 }
 
@@ -528,63 +559,10 @@ mod tests {
     // --- TEE tests ---
 
     #[test]
-    fn tee_verification_fails_closed_without_vendor_verifier() {
-        let state = test_state();
-        let writer = test_writer();
-        let result = verify_tee("abc123", "aabbccdd", "intel_tdx", &writer, &state);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn tee_amd_sev_type() {
-        let state = test_state();
-        let writer = test_writer();
-        let result = verify_tee("measurement", "ff", "amd_sev", &writer, &state);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn tee_nvidia_type() {
-        let state = test_state();
-        let writer = test_writer();
-        let result = verify_tee("measurement", "ff", "nvidia_ccn", &writer, &state);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn tee_apple_se_type() {
-        let state = test_state();
-        let writer = test_writer();
-        let result = verify_tee("measurement", "ff", "apple_se", &writer, &state);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn tee_empty_measurement_fails() {
-        let state = test_state();
-        let writer = test_writer();
-        assert!(verify_tee("", "aabb", "intel_tdx", &writer, &state).is_err());
-    }
-
-    #[test]
-    fn tee_empty_nonce_fails() {
-        let state = test_state();
-        let writer = test_writer();
-        assert!(verify_tee("abc", "", "intel_tdx", &writer, &state).is_err());
-    }
-
-    #[test]
-    fn tee_invalid_nonce_hex_fails() {
-        let state = test_state();
-        let writer = test_writer();
-        assert!(verify_tee("abc", "zzzz", "intel_tdx", &writer, &state).is_err());
-    }
-
-    #[test]
-    fn tee_unknown_type_fails() {
-        let state = test_state();
-        let writer = test_writer();
-        assert!(verify_tee("abc", "ff", "unknown_tee", &writer, &state).is_err());
+    fn tee_policy_hex_is_exact_length() {
+        assert_eq!(decode_fixed_hex::<2>("0x0102", "test").unwrap(), [1, 2]);
+        assert!(decode_fixed_hex::<2>("01", "test").is_err());
+        assert!(decode_fixed_hex::<2>("zzzz", "test").is_err());
     }
 
     // --- Status tests ---
@@ -633,19 +611,6 @@ mod tests {
     #[test]
     fn parse_comma_hashes_only_commas_fails() {
         assert!(parse_comma_hashes(",,,,").is_err());
-    }
-
-    #[test]
-    fn parse_tee_type_intel_tdx() {
-        assert!(matches!(parse_tee_type("intel_tdx").unwrap(), TeeType::IntelTdx));
-    }
-
-    #[test]
-    fn parse_tee_type_aliases() {
-        assert!(matches!(parse_tee_type("tdx").unwrap(), TeeType::IntelTdx));
-        assert!(matches!(parse_tee_type("sev").unwrap(), TeeType::AmdSev));
-        assert!(matches!(parse_tee_type("nvidia").unwrap(), TeeType::NvidiaCcn));
-        assert!(matches!(parse_tee_type("apple").unwrap(), TeeType::AppleSecureEnclave));
     }
 
     #[test]

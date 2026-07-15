@@ -40,6 +40,13 @@ pub enum OutputFormat {
     Ndjson,
 }
 
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub enum AmdGenerationArg {
+    Milan,
+    Genoa,
+    Turin,
+}
+
 /// Global flags shared across all commands.
 /// Extracted from Cli for cleaner function signatures.
 #[derive(Debug, Clone)]
@@ -846,20 +853,83 @@ pub enum VerifyCommands {
         #[arg(long)]
         challenger: String,
     },
-    /// Verify a TEE attestation quote (unavailable until vendor verification is configured)
+    /// Verify raw vendor TEE evidence against an explicit relying-party policy
     Tee {
-        /// Expected measurement hash
-        #[arg(long)]
-        measurement: String,
-        /// Nonce in hex
-        #[arg(long)]
-        nonce: String,
-        /// TEE type (intel_tdx|amd_sev|nvidia_ccn|apple_se)
-        #[arg(long, default_value = "intel_tdx")]
-        tee_type: String,
+        #[command(subcommand)]
+        command: TeeVerifyCommands,
     },
     /// Show available verification layers
     Status,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum TeeVerifyCommands {
+    /// Verify an Intel TDX quote with complete DCAP collateral
+    Intel {
+        /// Raw binary TDX quote
+        #[arg(long, value_name = "PATH")]
+        quote: String,
+        /// DCAP QuoteCollateralV3 JSON
+        #[arg(long, value_name = "PATH")]
+        collateral: String,
+        /// Expected 48-byte MR_TD in hex
+        #[arg(long)]
+        mr_td: String,
+        /// Expected 64-byte challenge-bound REPORT_DATA in hex
+        #[arg(long)]
+        report_data: String,
+        /// Trusted Unix verification time; defaults to the current system time
+        #[arg(long)]
+        now_secs: Option<u64>,
+    },
+    /// Verify an AMD SEV-SNP report with a DER certificate chain
+    Amd {
+        /// Raw binary SEV-SNP attestation report
+        #[arg(long, value_name = "PATH")]
+        report: String,
+        /// AMD ARK certificate in DER form
+        #[arg(long, value_name = "PATH")]
+        ark: String,
+        /// AMD ASK certificate in DER form
+        #[arg(long, value_name = "PATH")]
+        ask: String,
+        /// AMD VCEK or configured VEK certificate in DER form
+        #[arg(long, value_name = "PATH")]
+        vek: String,
+        /// Processor generation associated with the certificate chain
+        #[arg(long, value_enum)]
+        generation: AmdGenerationArg,
+        /// Expected 48-byte launch measurement in hex
+        #[arg(long)]
+        measurement: String,
+        /// Expected 64-byte challenge-bound REPORT_DATA in hex
+        #[arg(long)]
+        report_data: String,
+        /// Minimum bootloader security version
+        #[arg(long)]
+        min_bootloader: u8,
+        /// Minimum TEE security version
+        #[arg(long)]
+        min_tee: u8,
+        /// Minimum SNP security version
+        #[arg(long)]
+        min_snp: u8,
+        /// Minimum microcode security version
+        #[arg(long)]
+        min_microcode: u8,
+        /// Minimum FMC security version (required for Turin)
+        #[arg(long)]
+        min_fmc: Option<u8>,
+        /// Permit SMT-enabled guests; disabled by default
+        #[arg(long)]
+        allow_smt: bool,
+        /// Permit migration-enabled guests; disabled by default
+        #[arg(long)]
+        allow_migration: bool,
+        /// Trusted Unix verification time; defaults to the current system time
+        #[arg(long)]
+        now_secs: Option<u64>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -1297,5 +1367,79 @@ mod tests {
     fn parse_init_alias() {
         let cli = Cli::try_parse_from(["agnetd", "ini", "--yes"]).expect("parse alias");
         assert!(matches!(cli.command, Commands::Init { yes: true }));
+    }
+
+    #[test]
+    fn parse_intel_tee_verification() {
+        let cli = Cli::try_parse_from([
+            "agnetd",
+            "verify",
+            "tee",
+            "intel",
+            "--quote",
+            "quote.bin",
+            "--collateral",
+            "collateral.json",
+            "--mr-td",
+            &"11".repeat(48),
+            "--report-data",
+            &"22".repeat(64),
+            "--now-secs",
+            "1751000000",
+        ])
+        .expect("parse Intel TDX verification");
+        assert!(matches!(
+            cli.command,
+            Commands::Verify {
+                command: VerifyCommands::Tee {
+                    command: TeeVerifyCommands::Intel { now_secs: Some(1_751_000_000), .. }
+                }
+            }
+        ));
+    }
+
+    #[test]
+    fn parse_amd_tee_verification_is_strict_by_default() {
+        let cli = Cli::try_parse_from([
+            "agnetd",
+            "verify",
+            "tee",
+            "amd",
+            "--report",
+            "report.bin",
+            "--ark",
+            "ark.der",
+            "--ask",
+            "ask.der",
+            "--vek",
+            "vcek.der",
+            "--generation",
+            "milan",
+            "--measurement",
+            &"11".repeat(48),
+            "--report-data",
+            &"22".repeat(64),
+            "--min-bootloader",
+            "3",
+            "--min-tee",
+            "0",
+            "--min-snp",
+            "8",
+            "--min-microcode",
+            "115",
+        ])
+        .expect("parse AMD SEV-SNP verification");
+        assert!(matches!(
+            cli.command,
+            Commands::Verify {
+                command: VerifyCommands::Tee {
+                    command: TeeVerifyCommands::Amd {
+                        allow_smt: false,
+                        allow_migration: false,
+                        ..
+                    }
+                }
+            }
+        ));
     }
 }
