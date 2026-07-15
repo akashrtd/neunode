@@ -828,7 +828,7 @@ pub enum VerifyCommands {
         #[arg(long)]
         challenger: String,
     },
-    /// Verify a TEE attestation quote
+    /// Verify a TEE attestation quote (unavailable until vendor verification is configured)
     Tee {
         /// Expected measurement hash
         #[arg(long)]

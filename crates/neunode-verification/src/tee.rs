@@ -43,7 +43,10 @@ pub struct TeeAttestation {
     pub verifier_id: String,
 }
 
-/// Verifies TEE attestation quotes (Phase 2: simulated).
+/// Verifies TEE attestation quotes.
+///
+/// Production builds fail closed until a vendor-backed verifier is configured.
+/// The `tee-sim` feature is intended only for explicit development and testing.
 pub struct TeeVerifier;
 
 impl TeeVerifier {
@@ -53,7 +56,7 @@ impl TeeVerifier {
 
     /// Verifies a TEE attestation quote.
     ///
-    /// With the `tee-sim` feature (included in defaults), this performs a simulated
+    /// With the opt-in `tee-sim` feature, this performs a simulated
     /// verification checking measurement hash and nonce match. Without `tee-sim`,
     /// this returns an error — production TEE verification is not yet implemented.
     #[cfg(feature = "tee-sim")]
@@ -71,7 +74,7 @@ impl TeeVerifier {
             quote: quote.clone(),
             verified,
             verification_timestamp_ms: now_ms(),
-            verifier_id: "tee_verifier".to_string(),
+            verifier_id: "tee_simulator_untrusted".to_string(),
         })
     }
 
@@ -117,15 +120,17 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "tee-sim")]
     fn verify_quote_match() {
         let verifier = TeeVerifier::new();
         let quote = sample_quote(now_ms());
         let attestation = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]).unwrap();
         assert!(attestation.verified);
-        assert_eq!(attestation.verifier_id, "tee_verifier");
+        assert_eq!(attestation.verifier_id, "tee_simulator_untrusted");
     }
 
     #[test]
+    #[cfg(feature = "tee-sim")]
     fn verify_quote_mismatch_measurement() {
         let verifier = TeeVerifier::new();
         let quote = sample_quote(now_ms());
@@ -134,6 +139,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "tee-sim")]
     fn verify_quote_mismatch_nonce() {
         let verifier = TeeVerifier::new();
         let quote = sample_quote(now_ms());
@@ -191,6 +197,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "tee-sim")]
     fn attestation_serde_roundtrip() {
         let verifier = TeeVerifier::new();
         let quote = sample_quote(1700000000000);
@@ -202,6 +209,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "tee-sim")]
     fn different_tee_types() {
         let verifier = TeeVerifier::new();
         for tt in
@@ -214,6 +222,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "tee-sim")]
     fn raw_quote_preserved() {
         let verifier = TeeVerifier::new();
         let quote = sample_quote(now_ms());
@@ -222,6 +231,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "tee-sim")]
     fn signer_public_key_preserved() {
         let verifier = TeeVerifier::new();
         let quote = sample_quote(now_ms());
@@ -230,6 +240,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "tee-sim")]
     fn nonce_mismatch() {
         let verifier = TeeVerifier::new();
         let mut quote = sample_quote(now_ms());
@@ -237,6 +248,15 @@ mod tests {
         let att = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]).unwrap();
         assert!(!att.verified);
         assert_eq!(att.quote.measurement_hash, "abc123");
+    }
+
+    #[test]
+    #[cfg(not(feature = "tee-sim"))]
+    fn production_build_fails_closed() {
+        let verifier = TeeVerifier::new();
+        let quote = sample_quote(now_ms());
+        let error = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]).unwrap_err();
+        assert!(error.to_string().contains("production TEE verification not yet implemented"));
     }
 
     #[test]

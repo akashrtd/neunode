@@ -259,7 +259,7 @@ fn show_status(writer: &OutputWriter, _state: &AppState) -> Result<()> {
         ("RepOps", "Bitwise reproducibility check", "enabled"),
         ("PeerReview", "2-of-3 reviewer committee", "enabled"),
         ("Bisection", "Verde-style dispute resolution", "enabled"),
-        ("TEE", "Trusted execution environment proof", "enabled"),
+        ("TEE", "Vendor-backed trusted execution proof", "unavailable"),
         ("ZK", "Zero-knowledge proof (placeholder)", "disabled"),
         ("Arbitration", "Kleros-style final arbitration", "disabled"),
     ];
@@ -528,11 +528,11 @@ mod tests {
     // --- TEE tests ---
 
     #[test]
-    fn tee_valid_attestation() {
+    fn tee_verification_fails_closed_without_vendor_verifier() {
         let state = test_state();
         let writer = test_writer();
         let result = verify_tee("abc123", "aabbccdd", "intel_tdx", &writer, &state);
-        assert!(result.is_ok());
+        assert!(result.is_err());
     }
 
     #[test]
@@ -540,7 +540,7 @@ mod tests {
         let state = test_state();
         let writer = test_writer();
         let result = verify_tee("measurement", "ff", "amd_sev", &writer, &state);
-        assert!(result.is_ok());
+        assert!(result.is_err());
     }
 
     #[test]
@@ -548,7 +548,7 @@ mod tests {
         let state = test_state();
         let writer = test_writer();
         let result = verify_tee("measurement", "ff", "nvidia_ccn", &writer, &state);
-        assert!(result.is_ok());
+        assert!(result.is_err());
     }
 
     #[test]
@@ -556,7 +556,7 @@ mod tests {
         let state = test_state();
         let writer = test_writer();
         let result = verify_tee("measurement", "ff", "apple_se", &writer, &state);
-        assert!(result.is_ok());
+        assert!(result.is_err());
     }
 
     #[test]
