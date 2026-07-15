@@ -9,3 +9,4 @@ pub mod gossipsub;
 pub mod node;
 pub mod peer_auth;
 pub mod peer_score;
+pub mod private_feed;

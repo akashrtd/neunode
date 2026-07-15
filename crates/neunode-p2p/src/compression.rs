@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn oversized_raw_payload_is_rejected() {
-        let error = decode(&vec![0; 33], 32).unwrap_err();
+        let error = decode(&[0; 33], 32).unwrap_err();
         assert!(error.to_string().contains("exceeds maximum"));
     }
 

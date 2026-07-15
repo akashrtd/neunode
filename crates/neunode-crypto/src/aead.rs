@@ -1,5 +1,5 @@
 use aes_gcm::aead::generic_array::GenericArray;
-use aes_gcm::aead::{Aead, KeyInit, OsRng};
+use aes_gcm::aead::{Aead, KeyInit, OsRng, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
 
 use crate::CryptoError;
@@ -59,13 +59,25 @@ fn whoami() -> String {
 /// Encrypt plaintext using AES-256-GCM with the provided key.
 /// Returns `[nonce (12 bytes) | ciphertext + tag]`.
 pub fn encrypt(key: &[u8; 32], plaintext: &[u8]) -> std::result::Result<Vec<u8>, CryptoError> {
+    encrypt_with_aad(key, plaintext, &[])
+}
+
+/// Encrypt plaintext with authenticated, unencrypted context.
+///
+/// The same AAD must be supplied to [`decrypt_with_aad`]. Use this to bind ciphertext to protocol
+/// metadata such as a feed topic without duplicating that metadata inside the encrypted payload.
+pub fn encrypt_with_aad(
+    key: &[u8; 32],
+    plaintext: &[u8],
+    aad: &[u8],
+) -> std::result::Result<Vec<u8>, CryptoError> {
     let cipher = Aes256Gcm::new(GenericArray::from_slice(key));
     let mut nonce_bytes = [0u8; NONCE_SIZE];
     use rand::RngCore;
     OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
     let ciphertext = cipher
-        .encrypt(nonce, plaintext)
+        .encrypt(nonce, Payload { msg: plaintext, aad })
         .map_err(|e| CryptoError::SerializationError(format!("encryption failed: {e}")))?;
 
     let mut output = Vec::with_capacity(NONCE_SIZE + ciphertext.len());
@@ -76,6 +88,15 @@ pub fn encrypt(key: &[u8; 32], plaintext: &[u8]) -> std::result::Result<Vec<u8>,
 
 /// Decrypt data encrypted by `encrypt`. Expects `[nonce (12 bytes) | ciphertext + tag]`.
 pub fn decrypt(key: &[u8; 32], data: &[u8]) -> std::result::Result<Vec<u8>, CryptoError> {
+    decrypt_with_aad(key, data, &[])
+}
+
+/// Decrypt ciphertext created by [`encrypt_with_aad`], authenticating its protocol context.
+pub fn decrypt_with_aad(
+    key: &[u8; 32],
+    data: &[u8],
+    aad: &[u8],
+) -> std::result::Result<Vec<u8>, CryptoError> {
     if data.len() < NONCE_SIZE + 16 {
         return Err(CryptoError::SerializationError("ciphertext too short".to_string()));
     }
@@ -83,7 +104,7 @@ pub fn decrypt(key: &[u8; 32], data: &[u8]) -> std::result::Result<Vec<u8>, Cryp
     let nonce = Nonce::from_slice(nonce_bytes);
     let cipher = Aes256Gcm::new(GenericArray::from_slice(key));
     cipher
-        .decrypt(nonce, ciphertext)
+        .decrypt(nonce, Payload { msg: ciphertext, aad })
         .map_err(|e| CryptoError::SerializationError(format!("decryption failed: {e}")))
 }
 
@@ -170,6 +191,14 @@ mod tests {
         let last = encrypted.len() - 1;
         encrypted[last] ^= 0xFF;
         assert!(decrypt(&key, &encrypted).is_err());
+    }
+
+    #[test]
+    fn aad_roundtrip_and_context_mismatch() {
+        let key = [0x42; 32];
+        let encrypted = encrypt_with_aad(&key, b"private payload", b"topic/a").unwrap();
+        assert_eq!(decrypt_with_aad(&key, &encrypted, b"topic/a").unwrap(), b"private payload");
+        assert!(decrypt_with_aad(&key, &encrypted, b"topic/b").is_err());
     }
 
     #[test]

@@ -13,6 +13,7 @@ use crate::catchup::{CatchupRequest, CatchupResponse, CATCHUP_TOPIC};
 use crate::compression;
 use crate::error::{P2pError, Result};
 use crate::gossipsub::all_category_topics;
+use crate::private_feed::{PrivateFeedEnvelope, PrivateFeedKey};
 
 const MAX_WIRE_PAYLOAD_SIZE: usize = 1024 * 1024;
 
@@ -80,6 +81,20 @@ impl P2pNode {
             .publish(topic, wire_data)
             .map_err(|e| P2pError::PublishFailed(format!("publish failed: {e}")))?;
         Ok(())
+    }
+
+    /// Publish an end-to-end encrypted gossip payload.
+    ///
+    /// Noise protects each transport hop; this envelope additionally prevents relays and topic
+    /// subscribers without the shared topic key from reading the application payload.
+    pub fn publish_private(
+        &mut self,
+        topic: &str,
+        data: &[u8],
+        key: &PrivateFeedKey,
+    ) -> Result<()> {
+        let frame = PrivateFeedEnvelope::seal(topic, key, data)?.encode();
+        self.publish(topic, &frame)
     }
 
     pub fn subscribe(&mut self, topic: &str) -> Result<()> {
