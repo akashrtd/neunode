@@ -5,8 +5,12 @@ export interface ContractAddresses {
 	readonly trainingToken: Address;
 	readonly bandwidthToken: Address;
 	readonly storageToken: Address;
+	readonly resourceAmm: Address;
 	readonly neunodeIdentity: Address;
 	readonly neunodeRegistry: Address;
+	readonly neunodeReputation: Address;
+	readonly neunodeSlashing: Address;
+	readonly stakingEscrow: Address;
 	readonly neunodeBounty: Address;
 	readonly neunodeEscrow: Address;
 	readonly bountyReview: Address;
@@ -24,8 +28,12 @@ export const chainAddresses: Record<number, ContractAddresses> = {
 		trainingToken: "0x0000000000000000000000000000000000000002" as Address,
 		bandwidthToken: "0x0000000000000000000000000000000000000003" as Address,
 		storageToken: "0x0000000000000000000000000000000000000004" as Address,
+		resourceAmm: "0x0000000000000000000000000000000000000016" as Address,
 		neunodeIdentity: "0x0000000000000000000000000000000000000005" as Address,
 		neunodeRegistry: "0x0000000000000000000000000000000000000006" as Address,
+		neunodeReputation: "0x0000000000000000000000000000000000000017" as Address,
+		neunodeSlashing: "0x0000000000000000000000000000000000000018" as Address,
+		stakingEscrow: "0x0000000000000000000000000000000000000019" as Address,
 		neunodeBounty: "0x0000000000000000000000000000000000000007" as Address,
 		neunodeEscrow: "0x0000000000000000000000000000000000000008" as Address,
 		bountyReview: "0x0000000000000000000000000000000000000009" as Address,

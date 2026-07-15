@@ -23,6 +23,7 @@ contract DeploymentTopologyTest is Test {
         assertGt(address(deployment.reputation()).code.length, 0);
         assertGt(address(deployment.slashing()).code.length, 0);
         assertGt(address(deployment.stakingEscrow()).code.length, 0);
+        assertGt(address(deployment.resourceAmm()).code.length, 0);
 
         assertEq(address(deployment.registry().identity()), address(deployment.identity()));
         assertEq(address(deployment.identity().stakeSource()), address(deployment.computeToken()));
@@ -40,6 +41,10 @@ contract DeploymentTopologyTest is Test {
         assertEq(
             address(deployment.royaltySplitter().registry()), address(deployment.modelRegistry())
         );
+        (uint256 reserveCompute, uint256 reserveStorage) = deployment.resourceAmm()
+            .getReserves(address(deployment.computeToken()), address(deployment.storageToken()));
+        assertEq(reserveCompute, 1_000_000e18);
+        assertEq(reserveStorage, 1_000_000e18);
     }
 
     function test_assignsOperationalAndGovernancePermissions() public view {
@@ -75,12 +80,16 @@ contract DeploymentTopologyTest is Test {
                 .hasRole(deployment.reputation().ACTIVITY_ORACLE_ROLE(), deployer)
         );
         assertTrue(deployment.slashing().hasRole(deployment.slashing().REPORTER_ROLE(), deployer));
+        assertTrue(
+            deployment.resourceAmm().hasRole(deployment.resourceAmm().TREASURY_ROLE(), governance)
+        );
 
         assertTrue(deployment.governance().allowedTargets(address(deployment.identity())));
         assertTrue(deployment.governance().allowedTargets(address(deployment.reputation())));
         assertTrue(deployment.governance().allowedTargets(address(deployment.slashing())));
         assertTrue(deployment.governance().allowedTargets(address(deployment.stakingEscrow())));
         assertTrue(deployment.governance().allowedTargets(address(deployment.bounty())));
+        assertTrue(deployment.governance().allowedTargets(address(deployment.resourceAmm())));
     }
 
     function test_slashingAtomicallyUpdatesStakeAndReputation() public {

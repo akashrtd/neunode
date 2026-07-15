@@ -17,6 +17,7 @@ import "../src/governance/NeunodeGovernance.sol";
 import "../src/reputation/NeunodeReputation.sol";
 import "../src/slashing/NeunodeSlashing.sol";
 import "../src/escrow/StakingEscrow.sol";
+import "../src/exchange/ResourceAMM.sol";
 import "../src/diamond/Diamond.sol";
 import "../src/diamond/DiamondCutFacet.sol";
 import "../src/diamond/DiamondLoupeFacet.sol";
@@ -30,6 +31,7 @@ contract Deploy is Script {
     TrainingToken public trainingToken;
     BandwidthToken public bandwidthToken;
     StorageToken public storageToken;
+    ResourceAMM public resourceAmm;
 
     // ─── Core ────────────────────────────────────────────────────────────
     NeunodeIdentity public identity;
@@ -64,6 +66,7 @@ contract Deploy is Script {
     uint256 constant EXECUTION_WINDOW = 14 days;
     uint256 constant MIN_REGISTRATION_STAKE = 100e18;
     uint256 constant STAKE_FACTOR_TARGET = 10_000e18;
+    uint256 constant AMM_PAIR_SEED = 1_000_000e18;
 
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
@@ -76,13 +79,23 @@ contract Deploy is Script {
         bandwidthToken = new BandwidthToken();
         storageToken = new StorageToken();
 
-        // ── 2. Deploy identity (no constructor args) ────────────────────
+        // ── 2. Seed all six resource-token markets from treasury ────────
+        address[4] memory resourceTokens = [
+            address(computeToken),
+            address(trainingToken),
+            address(bandwidthToken),
+            address(storageToken)
+        ];
+        resourceAmm = new ResourceAMM(resourceTokens, deployer);
+        _seedResourceMarkets(deployer);
+
+        // ── 3. Deploy identity (no constructor args) ────────────────────
         identity = new NeunodeIdentity();
 
-        // ── 3. Deploy registry (needs identity address) ─────────────────
+        // ── 4. Deploy registry (needs identity address) ─────────────────
         registry = new NeunodeRegistry(address(identity));
 
-        // ── 4. Deploy reputation, staking, and slashing ─────────────────
+        // ── 5. Deploy reputation, staking, and slashing ─────────────────
         reputation = new NeunodeReputation();
         stakingEscrow = new StakingEscrow(address(computeToken));
         slashing = new NeunodeSlashing(address(computeToken));
@@ -98,7 +111,7 @@ contract Deploy is Script {
         computeToken.grantRole(computeToken.GOVERNANCE_ROLE(), address(slashing));
         reputation.grantRole(reputation.SLASHING_ROLE(), address(slashing));
 
-        // ── 5. Deploy bounty system ─────────────────────────────────────
+        // ── 6. Deploy bounty system ─────────────────────────────────────
         bounty = new NeunodeBounty();
         escrow = new NeunodeEscrow();
         review = new BountyReview();
@@ -109,11 +122,11 @@ contract Deploy is Script {
         escrow.registerBountyContract(address(bounty));
         review.grantRole(review.DEFAULT_ADMIN_ROLE(), address(bounty));
 
-        // ── 6. Deploy royalty system ────────────────────────────────────
+        // ── 7. Deploy royalty system ────────────────────────────────────
         modelRegistry = new ModelRegistry();
         royaltySplitter = new RoyaltySplitter(address(modelRegistry));
 
-        // ── 7. Deploy governance (uses nCompute for voting) ─────────────
+        // ── 8. Deploy governance (uses nCompute for voting) ─────────────
         governance = new NeunodeGovernance(
             address(computeToken), // voting token
             VOTING_DELAY,
@@ -126,7 +139,7 @@ contract Deploy is Script {
 
         _wireGovernance(deployer);
 
-        // ── 8. Deploy diamond proxy with loupe + cut facets ─────────────
+        // ── 9. Deploy diamond proxy with loupe + cut facets ─────────────
         diamondCutFacet = new DiamondCutFacet();
         diamondLoupeFacet = new DiamondLoupeFacet();
 
@@ -164,6 +177,7 @@ contract Deploy is Script {
         console.log("TrainingToken:", address(trainingToken));
         console.log("BandwidthToken:", address(bandwidthToken));
         console.log("StorageToken:", address(storageToken));
+        console.log("ResourceAMM:", address(resourceAmm));
         console.log("");
         console.log("=== Core ===");
         console.log("NeunodeIdentity:", address(identity));
@@ -204,6 +218,8 @@ contract Deploy is Script {
         bandwidthToken.grantRole(bandwidthToken.GOVERNANCE_ROLE(), governanceAddress);
         storageToken.grantRole(storageToken.DEFAULT_ADMIN_ROLE(), governanceAddress);
         storageToken.grantRole(storageToken.GOVERNANCE_ROLE(), governanceAddress);
+        resourceAmm.grantRole(resourceAmm.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        resourceAmm.grantRole(resourceAmm.TREASURY_ROLE(), governanceAddress);
 
         bounty.grantRole(bounty.DEFAULT_ADMIN_ROLE(), governanceAddress);
         bounty.grantRole(bounty.ADMIN_ROLE(), governanceAddress);
@@ -235,6 +251,7 @@ contract Deploy is Script {
         governance.setAllowedTarget(address(trainingToken), true);
         governance.setAllowedTarget(address(bandwidthToken), true);
         governance.setAllowedTarget(address(storageToken), true);
+        governance.setAllowedTarget(address(resourceAmm), true);
         governance.setAllowedTarget(address(identity), true);
         governance.setAllowedTarget(address(bounty), true);
         governance.setAllowedTarget(address(escrow), true);
@@ -244,5 +261,37 @@ contract Deploy is Script {
         governance.setAllowedTarget(address(reputation), true);
         governance.setAllowedTarget(address(slashing), true);
         governance.setAllowedTarget(address(stakingEscrow), true);
+    }
+
+    function _seedResourceMarkets(address treasury) internal {
+        uint256 treasuryAmount = AMM_PAIR_SEED * 3;
+        computeToken.mint(treasury, treasuryAmount);
+        trainingToken.mint(treasury, treasuryAmount);
+        bandwidthToken.mint(treasury, treasuryAmount);
+        storageToken.mint(treasury, treasuryAmount);
+
+        computeToken.approve(address(resourceAmm), treasuryAmount);
+        trainingToken.approve(address(resourceAmm), treasuryAmount);
+        bandwidthToken.approve(address(resourceAmm), treasuryAmount);
+        storageToken.approve(address(resourceAmm), treasuryAmount);
+
+        resourceAmm.seedPool(
+            address(computeToken), address(trainingToken), AMM_PAIR_SEED, AMM_PAIR_SEED
+        );
+        resourceAmm.seedPool(
+            address(computeToken), address(bandwidthToken), AMM_PAIR_SEED, AMM_PAIR_SEED
+        );
+        resourceAmm.seedPool(
+            address(computeToken), address(storageToken), AMM_PAIR_SEED, AMM_PAIR_SEED
+        );
+        resourceAmm.seedPool(
+            address(trainingToken), address(bandwidthToken), AMM_PAIR_SEED, AMM_PAIR_SEED
+        );
+        resourceAmm.seedPool(
+            address(trainingToken), address(storageToken), AMM_PAIR_SEED, AMM_PAIR_SEED
+        );
+        resourceAmm.seedPool(
+            address(bandwidthToken), address(storageToken), AMM_PAIR_SEED, AMM_PAIR_SEED
+        );
     }
 }

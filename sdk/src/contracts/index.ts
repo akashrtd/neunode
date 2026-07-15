@@ -19,6 +19,7 @@ export { neunodeReputationAbi } from "./abi/neunode-reputation.js";
 export { neunodeSlashingAbi } from "./abi/neunode-slashing.js";
 export { neunodeTokenAbi } from "./abi/neunode-token.js";
 export { royaltySplitterAbi } from "./abi/royalty-splitter.js";
+export { resourceAmmAbi } from "./abi/resource-amm.js";
 export { stakingEscrowAbi } from "./abi/staking-escrow.js";
 export { storageTokenAbi } from "./abi/storage-token.js";
 export { trainingTokenAbi } from "./abi/training-token.js";
@@ -44,6 +45,7 @@ export {
 	getNeunodeSlashing,
 	getNeunodeToken,
 	getRoyaltySplitter,
+	getResourceAmm,
 	getStakingEscrow,
 	getStorageToken,
 	getTrainingToken,

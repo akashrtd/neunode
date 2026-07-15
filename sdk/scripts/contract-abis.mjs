@@ -33,6 +33,7 @@ const outputs = [
 	["neunode-slashing.ts", [["neunodeSlashingAbi", "NeunodeSlashing"]]],
 	["neunode-token.ts", [["neunodeTokenAbi", "NeunodeToken"]]],
 	["royalty-splitter.ts", [["royaltySplitterAbi", "RoyaltySplitter"]]],
+	["resource-amm.ts", [["resourceAmmAbi", "ResourceAMM"]]],
 	["staking-escrow.ts", [["stakingEscrowAbi", "StakingEscrow"]]],
 	[
 		"storage-token.ts",

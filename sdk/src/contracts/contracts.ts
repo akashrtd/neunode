@@ -18,6 +18,7 @@ import { neunodeReputationAbi } from "./abi/neunode-reputation.js";
 import { neunodeSlashingAbi } from "./abi/neunode-slashing.js";
 import { neunodeTokenAbi } from "./abi/neunode-token.js";
 import { royaltySplitterAbi } from "./abi/royalty-splitter.js";
+import { resourceAmmAbi } from "./abi/resource-amm.js";
 import { stakingEscrowAbi } from "./abi/staking-escrow.js";
 import { storageTokenAbi } from "./abi/storage-token.js";
 import { trainingTokenAbi } from "./abi/training-token.js";
@@ -127,6 +128,11 @@ export function getModelRegistry(client: Client, address: Addr) {
 /** Get a typed contract instance for the royalty splitter contract. */
 export function getRoyaltySplitter(client: Client, address: Addr) {
 	return makeContract(royaltySplitterAbi, client, address);
+}
+
+/** Get a contract instance for the resource-token constant-product AMM. */
+export function getResourceAmm(client: Client, address: Addr) {
+	return makeContract(resourceAmmAbi, client, address);
 }
 
 /** Get a typed contract instance for the Neunode governance contract. */
