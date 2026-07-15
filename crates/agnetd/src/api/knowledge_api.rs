@@ -48,6 +48,13 @@ pub struct RegisterBountyRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JoinJobRequest {
+    pub did: String,
+    pub job_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct KnowledgeQueryResult {
     pub subject: String,
     pub predicate: String,
@@ -74,6 +81,13 @@ pub struct ModelRegistrationResponse {
 pub struct BountyRegistrationResponse {
     pub id: String,
     pub required_capabilities: Vec<String>,
+    pub triples_inserted: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct JoinJobResponse {
+    pub agent: String,
+    pub job: String,
     pub triples_inserted: usize,
 }
 
@@ -259,6 +273,45 @@ pub async fn register_bounty(
     Ok(types::created(BountyRegistrationResponse {
         id: body.id,
         required_capabilities: caps,
+        triples_inserted: batch.len(),
+    }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/knowledge/join-job",
+    request_body = JoinJobRequest,
+    responses(
+        (status = 201, description = "Agent joined training job", body = JoinJobResponse),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "No active identity"),
+    ),
+    tag = "knowledge",
+)]
+pub async fn join_job(
+    State(state): State<Arc<ApiState>>,
+    Json(body): Json<JoinJobRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    if body.did.is_empty() {
+        return Err(ApiError::BadRequest("agent DID cannot be empty".into()));
+    }
+    if body.job_id.is_empty() {
+        return Err(ApiError::BadRequest("job ID cannot be empty".into()));
+    }
+
+    let keyring = state.require_keyring()?;
+    let payload =
+        neunode_knowledge::authorization::canonical_join_training_job(&body.did, &body.job_id);
+    let auth = sign_mutation(&keyring, &body.did, &payload)?;
+
+    let db = &state.db;
+    let dict = neunode_knowledge::StringDictionary::new(db);
+    let batch = neunode_knowledge::join_training_job(&dict, &body.did, &body.job_id)?;
+    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
+
+    Ok(types::created(JoinJobResponse {
+        agent: body.did,
+        job: body.job_id,
         triples_inserted: batch.len(),
     }))
 }

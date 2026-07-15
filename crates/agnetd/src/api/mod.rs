@@ -1,5 +1,6 @@
 pub mod bounty_api;
 pub mod config_api;
+pub mod discovery_api;
 pub mod error;
 pub mod feed_api;
 pub mod health_api;
@@ -15,6 +16,7 @@ pub mod routes;
 pub mod state;
 pub mod token_api;
 pub mod train_api;
+pub mod turboquant_api;
 pub mod types;
 
 pub use health_api::health_handler;

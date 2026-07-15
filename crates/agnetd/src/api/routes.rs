@@ -41,6 +41,12 @@ pub fn build_api_router() -> Router<Arc<ApiState>> {
         .route("/api/v1/inference/providers", get(super::inference_api::list_providers))
         .route("/api/v1/inference/route", get(super::inference_api::show_route))
         .route("/api/v1/inference/pricing", get(super::inference_api::show_pricing))
+        // Discovery
+        .route("/api/v1/discovery/search", get(super::discovery_api::search_agents))
+        .route("/api/v1/discovery/complement", get(super::discovery_api::complement_agents))
+        .route("/api/v1/discovery/gaps", get(super::discovery_api::capability_gaps))
+        .route("/api/v1/discovery/score", get(super::discovery_api::score_agent))
+        .route("/api/v1/discovery/weights", get(super::discovery_api::scoring_weights))
         // Mesh
         .route("/api/v1/mesh/status", get(super::mesh_api::mesh_status))
         .route("/api/v1/mesh/peers", get(super::mesh_api::list_peers))
@@ -51,6 +57,7 @@ pub fn build_api_router() -> Router<Arc<ApiState>> {
         .route("/api/v1/knowledge/register-agent", post(super::knowledge_api::register_agent))
         .route("/api/v1/knowledge/register-model", post(super::knowledge_api::register_model))
         .route("/api/v1/knowledge/register-bounty", post(super::knowledge_api::register_bounty))
+        .route("/api/v1/knowledge/join-job", post(super::knowledge_api::join_job))
         .route("/api/v1/knowledge/classes", get(super::knowledge_api::list_classes))
         .route("/api/v1/knowledge/predicates", get(super::knowledge_api::list_predicates))
         // Reputation
@@ -85,6 +92,9 @@ pub fn build_api_router() -> Router<Arc<ApiState>> {
         .route("/api/v1/train/worker-register", post(super::train_api::register_worker))
         .route("/api/v1/train/workers", get(super::train_api::list_workers))
         .route("/api/v1/train/coordinator-status", get(super::train_api::coordinator_status))
+        // TurboQuant
+        .route("/api/v1/turboquant/compress", post(super::turboquant_api::select_strategy))
+        .route("/api/v1/turboquant/codebook", post(super::turboquant_api::generate_codebook))
         // Config
         .route(
             "/api/v1/config",

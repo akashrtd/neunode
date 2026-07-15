@@ -159,7 +159,7 @@ export function createTrainResource(client: NeunodeClient): TrainResource {
 
 		async list(): Promise<TrainListResult> {
 			if (client.http) {
-				return client.http.get<TrainListResult>("/api/v1/train/list");
+				return client.http.get<TrainListResult>("/api/v1/train/jobs");
 			}
 			const cli = client.cli;
 			if (!cli)

@@ -202,7 +202,7 @@ describe("createTrainResource", () => {
 			http.get.mockResolvedValue({ data: [] });
 			const resource = createTrainResource(dualClient);
 			await resource.list();
-			expect(http.get).toHaveBeenCalledWith("/api/v1/train/list");
+			expect(http.get).toHaveBeenCalledWith("/api/v1/train/jobs");
 		});
 
 		it("should call execute with train list via CLI", async () => {

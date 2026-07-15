@@ -25,6 +25,7 @@ neunode-knowledge = { path = "../neunode-knowledge" }
 neunode-lineage = { path = "../neunode-lineage" }
 neunode-verification = { path = "../neunode-verification" }
 neunode-discovery = { path = "../neunode-discovery" }
+neunode-turboquant = { path = "../neunode-turboquant" }
 clap = { workspace = true }
 comfy-table = { workspace = true }
 indicatif = { workspace = true }

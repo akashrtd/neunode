@@ -96,6 +96,7 @@ dependencies = [
  "neunode-storage",
  "neunode-token",
  "neunode-training",
+ "neunode-turboquant",
  "neunode-verification",
  "openssl-sys",
  "ratatui",
