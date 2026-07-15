@@ -406,8 +406,13 @@ contract DiamondTest is Test {
         _cut(removeCuts, address(0), "");
 
         // Call should revert
-        (bool success,) = address(diamond).staticcall(abi.encodeWithSelector(GET_VALUE_SELECTOR));
+        (bool success, bytes memory revertData) =
+            address(diamond).staticcall(abi.encodeWithSelector(GET_VALUE_SELECTOR));
         assertFalse(success);
+        assertEq(
+            revertData,
+            abi.encodeWithSelector(Diamond.FunctionNotFound.selector, GET_VALUE_SELECTOR)
+        );
     }
 
     // ─── 14. Gas: adding 10 facets in single cut is under 500k ────────────

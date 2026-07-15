@@ -684,6 +684,19 @@ contract BountyIntegrationTest is Test {
         bounty.processReviewResult(BOUNTY_ID);
     }
 
+    function testRevertProcessReviewWithoutReviewContract() public {
+        _createBountyWithDeadlines();
+        _claimAndSubmit();
+
+        address[3] memory reviewers = [reviewer1, reviewer2, reviewer3];
+        vm.prank(requester);
+        bounty.startReview(BOUNTY_ID, reviewers);
+        bounty.setReviewContract(address(0));
+
+        vm.expectRevert(NeunodeBounty.ReviewContractNotSet.selector);
+        bounty.processReviewResult(BOUNTY_ID);
+    }
+
     // ─── Escrow Integration ───────────────────────────────────────────────
 
     function testEscrowIsFundedAfterBountyFlow() public {

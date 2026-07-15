@@ -154,6 +154,7 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
     error AlreadyRevealed(bytes32 bountyId);
     error SubmissionNotRevealed(bytes32 bountyId);
     error NotSubmitter(bytes32 bountyId, address caller);
+    error ReviewContractNotSet();
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
@@ -778,28 +779,26 @@ contract NeunodeBounty is AccessControl, ReentrancyGuard {
         }
 
         // Check review contract resolution
-        if (address(reviewContract) == address(0)) revert("no review contract set");
-        if (address(reviewContract) != address(0)) {
-            if (!IBountyReview(reviewContract).isResolved(id)) revert ReviewNotResolved(id);
+        if (address(reviewContract) == address(0)) revert ReviewContractNotSet();
+        if (!IBountyReview(reviewContract).isResolved(id)) revert ReviewNotResolved(id);
 
-            if (IBountyReview(reviewContract).isAccepted(id)) {
-                bounty.state = BountyState.Accepted;
-                emit BountyAccepted(id);
-            } else {
-                bounty.state = BountyState.Rejected;
-                activeCount--;
+        if (IBountyReview(reviewContract).isAccepted(id)) {
+            bounty.state = BountyState.Accepted;
+            emit BountyAccepted(id);
+        } else {
+            bounty.state = BountyState.Rejected;
+            activeCount--;
 
-                // Refund reward to requester
-                IERC20(bounty.rewardToken).safeTransfer(bounty.requester, bounty.reward);
-                // Return provider bond
-                if (providerBonds[id] > 0) {
-                    uint256 bond = providerBonds[id];
-                    providerBonds[id] = 0;
-                    IERC20(bounty.rewardToken).safeTransfer(bounty.provider, bond);
-                }
-
-                emit BountyRejected(id);
+            // Refund reward to requester
+            IERC20(bounty.rewardToken).safeTransfer(bounty.requester, bounty.reward);
+            // Return provider bond
+            if (providerBonds[id] > 0) {
+                uint256 bond = providerBonds[id];
+                providerBonds[id] = 0;
+                IERC20(bounty.rewardToken).safeTransfer(bounty.provider, bond);
             }
+
+            emit BountyRejected(id);
         }
     }
 

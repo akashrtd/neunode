@@ -92,6 +92,10 @@ contract NeunodeGovernance is AccessControl, Pausable, IGovernance {
     error ExecutionFailed(uint256 proposalId);
     error NotAuthorized(address caller);
     error TargetNotAllowed(address target);
+    error InvalidVoteType(uint8 support);
+    error VotingDelayBelowMinimum(uint256 provided, uint256 minimum);
+    error VotingPeriodBelowMinimum(uint256 provided, uint256 minimum);
+    error TimelockBelowMinimum(uint256 provided, uint256 minimum);
 
     // ─── Constructor ──────────────────────────────────────────────────────
 
@@ -200,7 +204,7 @@ contract NeunodeGovernance is AccessControl, Pausable, IGovernance {
         internal
         returns (uint256 weight)
     {
-        require(support <= 2, "invalid vote type");
+        if (support > 2) revert InvalidVoteType(support);
         Proposal storage p = _proposals[proposalId];
         if (p.id == 0) revert ProposalNotFound(proposalId);
         if (state(proposalId) != ProposalState.Active) {
@@ -342,14 +346,18 @@ contract NeunodeGovernance is AccessControl, Pausable, IGovernance {
 
     /// @notice Update voting delay (GOVERNANCE_ROLE only)
     function setVotingDelay(uint256 newVotingDelay) external onlyRole(GOVERNANCE_ROLE) {
-        require(newVotingDelay >= MIN_VOTING_DELAY, "voting delay below minimum");
+        if (newVotingDelay < MIN_VOTING_DELAY) {
+            revert VotingDelayBelowMinimum(newVotingDelay, MIN_VOTING_DELAY);
+        }
         votingDelay = newVotingDelay;
         emit GovernanceParametersUpdated(msg.sender);
     }
 
     /// @notice Update voting period (GOVERNANCE_ROLE only)
     function setVotingPeriod(uint256 newVotingPeriod) external onlyRole(GOVERNANCE_ROLE) {
-        require(newVotingPeriod >= MIN_VOTING_PERIOD, "voting period below minimum");
+        if (newVotingPeriod < MIN_VOTING_PERIOD) {
+            revert VotingPeriodBelowMinimum(newVotingPeriod, MIN_VOTING_PERIOD);
+        }
         votingPeriod = newVotingPeriod;
         emit GovernanceParametersUpdated(msg.sender);
     }
@@ -368,7 +376,9 @@ contract NeunodeGovernance is AccessControl, Pausable, IGovernance {
 
     /// @notice Update timelock duration (GOVERNANCE_ROLE only)
     function setTimelock(uint256 newTimelock) external onlyRole(GOVERNANCE_ROLE) {
-        require(newTimelock >= MIN_TIMELOCK, "timelock below minimum");
+        if (newTimelock < MIN_TIMELOCK) {
+            revert TimelockBelowMinimum(newTimelock, MIN_TIMELOCK);
+        }
         timelock = newTimelock;
         emit GovernanceParametersUpdated(msg.sender);
     }

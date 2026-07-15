@@ -499,6 +499,11 @@ contract RoyaltySystemTest is Test {
         splitter.setProtocolRoyaltyBps(5001);
     }
 
+    function testRevertSetMaxLineageDepthZero() public {
+        vm.expectRevert(abi.encodeWithSelector(RoyaltySplitter.InvalidMaxLineageDepth.selector, 0));
+        splitter.setMaxLineageDepth(0);
+    }
+
     function testRevertNonAdminSetProtocolRoyaltyBps() public {
         vm.prank(outsider);
         vm.expectRevert(

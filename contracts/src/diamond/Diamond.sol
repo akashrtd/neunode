@@ -9,6 +9,9 @@ import "./LibDiamond.sol";
 /// @notice Routes function calls to appropriate facets via delegatecall.
 ///         Supports upgradeable facets through the DiamondCut pattern.
 contract Diamond {
+    /// @notice Raised when no facet is registered for a function selector.
+    error FunctionNotFound(bytes4 selector);
+
     // ─── Constructor ──────────────────────────────────────────────────────
 
     /// @notice Deploy the diamond with initial facet configuration
@@ -41,7 +44,7 @@ contract Diamond {
             ds.slot := position
         }
         address facet = ds.selectorToFacet[msg.sig].facetAddress;
-        require(facet != address(0), "Diamond: Function does not exist");
+        if (facet == address(0)) revert FunctionNotFound(msg.sig);
 
         assembly {
             calldatacopy(0, 0, calldatasize())

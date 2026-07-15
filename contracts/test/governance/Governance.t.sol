@@ -778,14 +778,39 @@ contract GovernanceTest is Test {
 
     function testRevertVotingDelayBelowMinimum() public {
         vm.prank(governanceAdmin);
-        vm.expectRevert("voting delay below minimum");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                NeunodeGovernance.VotingDelayBelowMinimum.selector, 12 hours, 1 days
+            )
+        );
         gov.setVotingDelay(12 hours);
     }
 
     function testRevertVotingPeriodBelowMinimum() public {
         vm.prank(governanceAdmin);
-        vm.expectRevert("voting period below minimum");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                NeunodeGovernance.VotingPeriodBelowMinimum.selector, 1 days, 3 days
+            )
+        );
         gov.setVotingPeriod(1 days);
+    }
+
+    function testRevertTimelockBelowMinimum() public {
+        vm.prank(governanceAdmin);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                NeunodeGovernance.TimelockBelowMinimum.selector, 12 hours, 1 days
+            )
+        );
+        gov.setTimelock(12 hours);
+    }
+
+    function testRevertInvalidVoteType() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(NeunodeGovernance.InvalidVoteType.selector, uint8(3))
+        );
+        gov.castVote(999, 3);
     }
 
     function testSetVotingDelayAtMinimum() public {
