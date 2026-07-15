@@ -6,12 +6,17 @@
 //! verified, and relying-party measurement/challenge policy is applied last.
 
 use der::Decode;
+use openssl::{
+    asn1::Asn1Time,
+    x509::{CrlStatus, X509Crl, X509},
+};
 use sev::{
     certs::snp::{ca, Certificate, Chain, Verifiable},
     firmware::guest::AttestationReport,
     parser::ByteParser,
     Generation,
 };
+use sha2::{Digest, Sha384};
 use x509_cert::{ext::Extension, Certificate as X509Certificate};
 
 use crate::error::{Result, VerificationError};
@@ -22,6 +27,8 @@ const OID_SNP: &str = "1.3.6.1.4.1.3704.1.3.3";
 const OID_UCODE: &str = "1.3.6.1.4.1.3704.1.3.8";
 const OID_FMC: &str = "1.3.6.1.4.1.3704.1.3.9";
 const OID_HW_ID: &str = "1.3.6.1.4.1.3704.1.4";
+const OID_PRODUCT_NAME: &str = "1.3.6.1.4.1.3704.1.2";
+const OID_CSP_ID: &str = "1.3.6.1.4.1.3704.1.5";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -92,12 +99,71 @@ pub struct AmdSnpClaims {
 pub struct AmdSnpVerifier {
     generation: AmdGeneration,
     trusted_ca: ca::Chain,
+    endorsement: AmdEndorsement,
+}
+
+enum AmdEndorsement {
+    Vcek,
+    Vlek { expected_product_name: String, expected_csp_id: String, crl_der: Vec<u8> },
 }
 
 impl AmdSnpVerifier {
     /// Construct a verifier pinned to AMD's built-in production ARK and ASK.
     pub fn production_vcek(generation: AmdGeneration) -> Self {
-        Self { generation, trusted_ca: generation.vendor_generation().into() }
+        Self {
+            generation,
+            trusted_ca: generation.vendor_generation().into(),
+            endorsement: AmdEndorsement::Vcek,
+        }
+    }
+
+    /// Construct a VLEK verifier with an explicitly pinned AMD VLEK root.
+    ///
+    /// AMD VLEK uses a distinct ARK → ASVK → VLEK hierarchy. The caller must
+    /// provision the expected ARK SHA-384 digest independently from the evidence,
+    /// the complete current AMD CRL, and exact CSP/product identities.
+    pub fn pinned_vlek(
+        generation: AmdGeneration,
+        ark_der: &[u8],
+        asvk_der: &[u8],
+        crl_der: &[u8],
+        expected_ark_sha384: [u8; 48],
+        expected_product_name: String,
+        expected_csp_id: String,
+    ) -> Result<Self> {
+        if generation == AmdGeneration::Turin {
+            return Err(tee_error(
+                "AMD VLEK certificate specification does not yet define Turin trust semantics",
+            ));
+        }
+        if expected_product_name.is_empty() || expected_csp_id.is_empty() {
+            return Err(tee_error("VLEK product name and CSP identity cannot be empty"));
+        }
+        let actual_digest: [u8; 48] = Sha384::digest(ark_der).into();
+        if actual_digest != expected_ark_sha384 {
+            return Err(tee_error(format!(
+                "VLEK ARK pin mismatch: expected {}, got {}",
+                hex::encode(expected_ark_sha384),
+                hex::encode(actual_digest)
+            )));
+        }
+        X509Crl::from_der(crl_der)
+            .map_err(|error| tee_error(format!("invalid AMD VLEK CRL: {error}")))?;
+        let trusted_ca = ca::Chain {
+            ark: Certificate::from_der(ark_der)
+                .map_err(|error| tee_error(format!("invalid AMD VLEK ARK: {error}")))?,
+            ask: Certificate::from_der(asvk_der)
+                .map_err(|error| tee_error(format!("invalid AMD ASVK: {error}")))?,
+        };
+        Ok(Self {
+            generation,
+            trusted_ca,
+            endorsement: AmdEndorsement::Vlek {
+                expected_product_name,
+                expected_csp_id,
+                crl_der: crl_der.to_vec(),
+            },
+        })
     }
 
     pub fn verify(
@@ -120,7 +186,13 @@ impl AmdSnpVerifier {
         (chain, report).verify().map_err(|error| {
             tee_error(format!("SEV-SNP chain/report signature failed: {error}"))
         })?;
-        verify_vcek_extensions(&chain.vek, report, self.generation)?;
+        match &self.endorsement {
+            AmdEndorsement::Vcek => verify_vcek_extensions(&chain.vek, report, self.generation)?,
+            AmdEndorsement::Vlek { expected_product_name, expected_csp_id, crl_der } => {
+                verify_vlek_extensions(&chain.vek, report, expected_product_name, expected_csp_id)?;
+                verify_vlek_crl(crl_der, &chain.ca.ark, &chain.ca.ask, &chain.vek, now_secs)?;
+            }
+        }
         verify_policy(report, policy)?;
 
         Ok(AmdSnpClaims {
@@ -213,6 +285,88 @@ fn verify_vcek_extensions(
     Ok(())
 }
 
+fn verify_vlek_extensions(
+    vek: &Certificate,
+    report: &AttestationReport,
+    expected_product_name: &str,
+    expected_csp_id: &str,
+) -> Result<()> {
+    let der = vek
+        .to_der()
+        .map_err(|error| tee_error(format!("failed to encode VLEK certificate: {error}")))?;
+    let certificate = X509Certificate::from_der(&der)
+        .map_err(|error| tee_error(format!("failed to parse VLEK certificate: {error}")))?;
+
+    require_integer_extension(&certificate, OID_BOOTLOADER, report.reported_tcb.bootloader)?;
+    require_integer_extension(&certificate, OID_TEE, report.reported_tcb.tee)?;
+    require_integer_extension(&certificate, OID_SNP, report.reported_tcb.snp)?;
+    require_integer_extension(&certificate, OID_UCODE, report.reported_tcb.microcode)?;
+    require_ia5_extension(&certificate, OID_PRODUCT_NAME, expected_product_name)?;
+    require_ia5_extension(&certificate, OID_CSP_ID, expected_csp_id)?;
+    if extension_optional(&certificate, OID_HW_ID).is_some() {
+        return Err(tee_error("VLEK certificate unexpectedly contains a chip HW_ID"));
+    }
+    Ok(())
+}
+
+fn verify_vlek_crl(
+    crl_der: &[u8],
+    ark: &Certificate,
+    asvk: &Certificate,
+    vlek: &Certificate,
+    now_secs: u64,
+) -> Result<()> {
+    let crl = X509Crl::from_der(crl_der)
+        .map_err(|error| tee_error(format!("invalid AMD VLEK CRL: {error}")))?;
+    let ark = openssl_certificate(ark, "VLEK ARK")?;
+    let asvk = openssl_certificate(asvk, "ASVK")?;
+    let vlek = openssl_certificate(vlek, "VLEK")?;
+    let ark_key = ark
+        .public_key()
+        .map_err(|error| tee_error(format!("failed to read VLEK ARK public key: {error}")))?;
+    if !crl
+        .verify(&ark_key)
+        .map_err(|error| tee_error(format!("failed to verify AMD VLEK CRL: {error}")))?
+    {
+        return Err(tee_error("AMD VLEK CRL signature is invalid"));
+    }
+
+    let now = Asn1Time::from_unix(
+        i64::try_from(now_secs).map_err(|_| tee_error("verification time exceeds i64"))?,
+    )
+    .map_err(|error| tee_error(format!("invalid VLEK verification time: {error}")))?;
+    if crl
+        .last_update()
+        .compare(&now)
+        .map_err(|error| tee_error(format!("failed to compare VLEK CRL time: {error}")))?
+        .is_gt()
+    {
+        return Err(tee_error("AMD VLEK CRL is not valid yet"));
+    }
+    let next_update =
+        crl.next_update().ok_or_else(|| tee_error("AMD VLEK CRL does not contain nextUpdate"))?;
+    if next_update
+        .compare(&now)
+        .map_err(|error| tee_error(format!("failed to compare VLEK CRL expiry: {error}")))?
+        .is_lt()
+    {
+        return Err(tee_error("AMD VLEK CRL has expired"));
+    }
+    for (label, certificate) in [("ASVK", &asvk), ("VLEK", &vlek)] {
+        if !matches!(crl.get_by_cert(certificate), CrlStatus::NotRevoked) {
+            return Err(tee_error(format!("AMD {label} certificate is revoked")));
+        }
+    }
+    Ok(())
+}
+
+fn openssl_certificate(certificate: &Certificate, label: &str) -> Result<X509> {
+    let der = certificate
+        .to_der()
+        .map_err(|error| tee_error(format!("failed to encode {label}: {error}")))?;
+    X509::from_der(&der).map_err(|error| tee_error(format!("failed to parse {label}: {error}")))
+}
+
 fn verify_policy(report: &AttestationReport, policy: &AmdSnpPolicy) -> Result<()> {
     if report.measurement != policy.expected_measurement {
         return Err(tee_error(format!(
@@ -267,14 +421,14 @@ fn report_tcb(report: &AttestationReport) -> AmdTcb {
 }
 
 fn extension<'a>(certificate: &'a X509Certificate, oid: &str) -> Result<&'a Extension> {
-    certificate
-        .tbs_certificate
-        .extensions
-        .as_ref()
-        .and_then(|extensions| {
-            extensions.iter().find(|extension| extension.extn_id.to_string() == oid)
-        })
+    extension_optional(certificate, oid)
         .ok_or_else(|| tee_error(format!("VCEK is missing required extension {oid}")))
+}
+
+fn extension_optional<'a>(certificate: &'a X509Certificate, oid: &str) -> Option<&'a Extension> {
+    certificate.tbs_certificate.extensions.as_ref().and_then(|extensions| {
+        extensions.iter().find(|extension| extension.extn_id.to_string() == oid)
+    })
 }
 
 fn require_integer_extension(certificate: &X509Certificate, oid: &str, expected: u8) -> Result<()> {
@@ -305,6 +459,19 @@ fn require_octet_extension(
     }
 }
 
+fn require_ia5_extension(certificate: &X509Certificate, oid: &str, expected: &str) -> Result<()> {
+    let value = extension(certificate, oid)?.extn_value.as_bytes();
+    let actual = parse_der_ia5(value)
+        .ok_or_else(|| tee_error(format!("invalid VLEK IA5String extension {oid}")))?;
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(tee_error(format!(
+            "VLEK extension {oid} mismatch: expected '{expected}', got '{actual}'"
+        )))
+    }
+}
+
 fn parse_der_u8(value: &[u8]) -> Option<u8> {
     match value {
         [0x02, 0x01, byte] => Some(*byte),
@@ -321,6 +488,16 @@ fn parse_der_octets(value: &[u8]) -> Option<&[u8]> {
         bytes if bytes.len() == 64 => Some(bytes),
         _ => None,
     }
+}
+
+fn parse_der_ia5(value: &[u8]) -> Option<&str> {
+    let [0x16, length, bytes @ ..] = value else {
+        return None;
+    };
+    if usize::from(*length) != bytes.len() || !bytes.is_ascii() {
+        return None;
+    }
+    std::str::from_utf8(bytes).ok()
 }
 
 fn tee_error(reason: impl Into<String>) -> VerificationError {
@@ -359,6 +536,17 @@ mod tests {
         }
     }
 
+    fn milan_vlek_ca() -> (Vec<u8>, Vec<u8>, Vec<u8>, [u8; 48]) {
+        let certificates =
+            X509::stack_from_pem(include_bytes!("tee_amd_vlek_milan_chain.pem")).unwrap();
+        assert_eq!(certificates.len(), 2);
+        let asvk_der = certificates[0].to_der().unwrap();
+        let ark_der = certificates[1].to_der().unwrap();
+        let crl_der = hex::decode(include_str!("tee_amd_vlek_milan_crl.hex").trim()).unwrap();
+        let pin = Sha384::digest(&ark_der).into();
+        (ark_der, asvk_der, crl_der, pin)
+    }
+
     #[test]
     fn verifies_vendor_milan_report_end_to_end() {
         let (report, chain) = milan_fixture();
@@ -392,6 +580,86 @@ mod tests {
             .unwrap();
 
         assert_eq!(claims.measurement, report.measurement);
+    }
+
+    #[test]
+    fn accepts_pinned_amd_milan_vlek_ca_and_crl() {
+        let (ark_der, asvk_der, crl_der, pin) = milan_vlek_ca();
+
+        let verifier = AmdSnpVerifier::pinned_vlek(
+            AmdGeneration::Milan,
+            &ark_der,
+            &asvk_der,
+            &crl_der,
+            pin,
+            "Milan-B0".to_string(),
+            "cloud.example".to_string(),
+        )
+        .unwrap();
+
+        assert!(matches!(verifier.endorsement, AmdEndorsement::Vlek { .. }));
+    }
+
+    #[test]
+    fn rejects_unpinned_vlek_root() {
+        let (ark_der, asvk_der, crl_der, mut pin) = milan_vlek_ca();
+        pin[0] ^= 1;
+
+        let error = AmdSnpVerifier::pinned_vlek(
+            AmdGeneration::Milan,
+            &ark_der,
+            &asvk_der,
+            &crl_der,
+            pin,
+            "Milan-B0".to_string(),
+            "cloud.example".to_string(),
+        )
+        .err()
+        .unwrap();
+
+        assert!(error.to_string().contains("ARK pin mismatch"));
+    }
+
+    #[test]
+    fn validates_signed_and_current_vlek_crl() {
+        let (ark_der, asvk_der, crl_der, _) = milan_vlek_ca();
+        let ark = Certificate::from_der(&ark_der).unwrap();
+        let asvk = Certificate::from_der(&asvk_der).unwrap();
+
+        verify_vlek_crl(&crl_der, &ark, &asvk, &asvk, 1_783_000_000).unwrap();
+        let error = verify_vlek_crl(&crl_der, &ark, &asvk, &asvk, 1_800_000_000).unwrap_err();
+        assert!(error.to_string().contains("CRL has expired"));
+    }
+
+    #[test]
+    fn rejects_tampered_vlek_crl_signature() {
+        let (ark_der, asvk_der, mut crl_der, _) = milan_vlek_ca();
+        let ark = Certificate::from_der(&ark_der).unwrap();
+        let asvk = Certificate::from_der(&asvk_der).unwrap();
+        *crl_der.last_mut().unwrap() ^= 1;
+
+        let error = verify_vlek_crl(&crl_der, &ark, &asvk, &asvk, 1_783_000_000).unwrap_err();
+
+        assert!(error.to_string().contains("CRL signature is invalid"));
+    }
+
+    #[test]
+    fn rejects_turin_vlek_until_amd_defines_its_certificate_profile() {
+        let (ark_der, asvk_der, crl_der, pin) = milan_vlek_ca();
+
+        let error = AmdSnpVerifier::pinned_vlek(
+            AmdGeneration::Turin,
+            &ark_der,
+            &asvk_der,
+            &crl_der,
+            pin,
+            "Turin-A0".to_string(),
+            "cloud.example".to_string(),
+        )
+        .err()
+        .unwrap();
+
+        assert!(error.to_string().contains("does not yet define Turin"));
     }
 
     #[test]
@@ -431,6 +699,14 @@ mod tests {
         assert_eq!(parse_der_octets(&[7; 64]), Some(&[7; 64][..]));
         assert_eq!(parse_der_octets(&[0x04, 0x04, 1, 2, 3]), None);
         assert_eq!(parse_der_octets(&[0x05, 0x03, 1, 2, 3]), None);
+    }
+
+    #[test]
+    fn parses_strict_der_ia5_strings() {
+        assert_eq!(parse_der_ia5(&[0x16, 0x05, b'M', b'i', b'l', b'a', b'n']), Some("Milan"));
+        assert_eq!(parse_der_ia5(&[0x16, 0x04, b'M', b'i', b'l', b'a', b'n']), None);
+        assert_eq!(parse_der_ia5(&[0x0c, 0x05, b'M', b'i', b'l', b'a', b'n']), None);
+        assert_eq!(parse_der_ia5(&[0x16, 0x01, 0xff]), None);
     }
 
     #[test]
