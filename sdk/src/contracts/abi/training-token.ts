@@ -1,7 +1,6 @@
-import { neunodeTokenAbi } from "./neunode-token.js";
+// Generated from Foundry artifacts by scripts/contract-abis.mjs.
+// Do not edit manually.
 
-/**
- * TrainingToken ABI — nTrain (training units).
- * Source: contracts/src/tokens/TrainingToken.sol
- */
-export const trainingTokenAbi = neunodeTokenAbi;
+import { computeTokenAbi } from "./compute-token.js";
+
+export const trainingTokenAbi = computeTokenAbi;

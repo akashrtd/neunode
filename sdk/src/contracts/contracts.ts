@@ -14,8 +14,11 @@ import { neunodeEscrowAbi } from "./abi/neunode-escrow.js";
 import { neunodeGovernanceAbi } from "./abi/neunode-governance.js";
 import { neunodeIdentityAbi } from "./abi/neunode-identity.js";
 import { neunodeRegistryAbi } from "./abi/neunode-registry.js";
+import { neunodeReputationAbi } from "./abi/neunode-reputation.js";
+import { neunodeSlashingAbi } from "./abi/neunode-slashing.js";
 import { neunodeTokenAbi } from "./abi/neunode-token.js";
 import { royaltySplitterAbi } from "./abi/royalty-splitter.js";
+import { stakingEscrowAbi } from "./abi/staking-escrow.js";
 import { storageTokenAbi } from "./abi/storage-token.js";
 import { trainingTokenAbi } from "./abi/training-token.js";
 
@@ -84,6 +87,21 @@ export function getNeunodeIdentity(client: Client, address: Addr) {
 /** Get a typed contract instance for the Neunode agent registry. */
 export function getNeunodeRegistry(client: Client, address: Addr) {
 	return makeContract(neunodeRegistryAbi, client, address);
+}
+
+/** Get a contract instance for the on-chain reputation registry. */
+export function getNeunodeReputation(client: Client, address: Addr) {
+	return makeContract(neunodeReputationAbi, client, address);
+}
+
+/** Get a contract instance for the slashing coordinator. */
+export function getNeunodeSlashing(client: Client, address: Addr) {
+	return makeContract(neunodeSlashingAbi, client, address);
+}
+
+/** Get a contract instance for the inactivity staking escrow. */
+export function getStakingEscrow(client: Client, address: Addr) {
+	return makeContract(stakingEscrowAbi, client, address);
 }
 
 /** Get a typed contract instance for the Neunode bounty contract. */

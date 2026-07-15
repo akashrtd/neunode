@@ -1,138 +1,494 @@
-/**
- * Diamond ABIs — EIP-2535 Diamond proxy, Cut facet, and Loupe facet.
- * Source: contracts/src/diamond/Diamond.sol, DiamondCutFacet.sol, DiamondLoupeFacet.sol
- * Also includes LibDiamond errors.
- */
+// Generated from Foundry artifacts by scripts/contract-abis.mjs.
+// Do not edit manually.
 
-export const diamondCutFacetAbi = [
-	// IDiamondCut
+export const diamondAbi = [
 	{
-		type: "function" as const,
-		name: "diamondCut",
+		type: "constructor",
 		inputs: [
 			{
 				name: "_diamondCut",
 				type: "tuple[]",
+				internalType: "struct IDiamondCut.FacetCut[]",
 				components: [
-					{ name: "facetAddress", type: "address" },
-					{ name: "action", type: "uint8" },
-					{ name: "functionSelectors", type: "bytes4[]" },
+					{
+						name: "facetAddress",
+						type: "address",
+						internalType: "address",
+					},
+					{
+						name: "action",
+						type: "uint8",
+						internalType: "enum IDiamondCut.FacetCutAction",
+					},
+					{
+						name: "functionSelectors",
+						type: "bytes4[]",
+						internalType: "bytes4[]",
+					},
 				],
 			},
-			{ name: "_init", type: "address" },
-			{ name: "_calldata", type: "bytes" },
+			{
+				name: "_init",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "_calldata",
+				type: "bytes",
+				internalType: "bytes",
+			},
+			{
+				name: "_owner",
+				type: "address",
+				internalType: "address",
+			},
 		],
-		outputs: [],
 		stateMutability: "nonpayable",
 	},
 	{
-		type: "event" as const,
+		type: "fallback",
+		stateMutability: "payable",
+	},
+	{
+		type: "receive",
+		stateMutability: "payable",
+	},
+	{
+		type: "event",
 		name: "DiamondCut",
 		inputs: [
 			{
 				name: "_diamondCut",
 				type: "tuple[]",
-				components: [
-					{ name: "facetAddress", type: "address" },
-					{ name: "action", type: "uint8" },
-					{ name: "functionSelectors", type: "bytes4[]" },
-				],
 				indexed: false,
+				internalType: "struct IDiamondCut.FacetCut[]",
+				components: [
+					{
+						name: "facetAddress",
+						type: "address",
+						internalType: "address",
+					},
+					{
+						name: "action",
+						type: "uint8",
+						internalType: "enum IDiamondCut.FacetCutAction",
+					},
+					{
+						name: "functionSelectors",
+						type: "bytes4[]",
+						internalType: "bytes4[]",
+					},
+				],
 			},
-			{ name: "_init", type: "address", indexed: false },
-			{ name: "_calldata", type: "bytes", indexed: false },
+			{
+				name: "_init",
+				type: "address",
+				indexed: false,
+				internalType: "address",
+			},
+			{
+				name: "_calldata",
+				type: "bytes",
+				indexed: false,
+				internalType: "bytes",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "event",
+		name: "OwnershipTransferred",
+		inputs: [
+			{
+				name: "previousOwner",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "newOwner",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "error",
+		name: "FacetAddressNotZeroForRemove",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "FacetAddressZeroForAdd",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "InitReverted",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "NoSelectorsProvided",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "SameFacetForReplace",
+		inputs: [
+			{
+				name: "selector",
+				type: "bytes4",
+				internalType: "bytes4",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "SelectorAlreadyExists",
+		inputs: [
+			{
+				name: "selector",
+				type: "bytes4",
+				internalType: "bytes4",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "SelectorNotFound",
+		inputs: [
+			{
+				name: "selector",
+				type: "bytes4",
+				internalType: "bytes4",
+			},
+		],
+	},
+] as const;
+
+export const diamondCutFacetAbi = [
+	{
+		type: "function",
+		name: "diamondCut",
+		inputs: [
+			{
+				name: "_diamondCut",
+				type: "tuple[]",
+				internalType: "struct IDiamondCut.FacetCut[]",
+				components: [
+					{
+						name: "facetAddress",
+						type: "address",
+						internalType: "address",
+					},
+					{
+						name: "action",
+						type: "uint8",
+						internalType: "enum IDiamondCut.FacetCutAction",
+					},
+					{
+						name: "functionSelectors",
+						type: "bytes4[]",
+						internalType: "bytes4[]",
+					},
+				],
+			},
+			{
+				name: "_init",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "_calldata",
+				type: "bytes",
+				internalType: "bytes",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "event",
+		name: "DiamondCut",
+		inputs: [
+			{
+				name: "_diamondCut",
+				type: "tuple[]",
+				indexed: false,
+				internalType: "struct IDiamondCut.FacetCut[]",
+				components: [
+					{
+						name: "facetAddress",
+						type: "address",
+						internalType: "address",
+					},
+					{
+						name: "action",
+						type: "uint8",
+						internalType: "enum IDiamondCut.FacetCutAction",
+					},
+					{
+						name: "functionSelectors",
+						type: "bytes4[]",
+						internalType: "bytes4[]",
+					},
+				],
+			},
+			{
+				name: "_init",
+				type: "address",
+				indexed: false,
+				internalType: "address",
+			},
+			{
+				name: "_calldata",
+				type: "bytes",
+				indexed: false,
+				internalType: "bytes",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "error",
+		name: "FacetAddressNotZeroForRemove",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "FacetAddressZeroForAdd",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "InitReverted",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "NoSelectorsProvided",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "NotContractOwner",
+		inputs: [
+			{
+				name: "caller",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "owner",
+				type: "address",
+				internalType: "address",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "SameFacetForReplace",
+		inputs: [
+			{
+				name: "selector",
+				type: "bytes4",
+				internalType: "bytes4",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "SelectorAlreadyExists",
+		inputs: [
+			{
+				name: "selector",
+				type: "bytes4",
+				internalType: "bytes4",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "SelectorNotFound",
+		inputs: [
+			{
+				name: "selector",
+				type: "bytes4",
+				internalType: "bytes4",
+			},
 		],
 	},
 ] as const;
 
 export const diamondLoupeFacetAbi = [
-	// IDiamondLoupe
 	{
-		type: "function" as const,
+		type: "function",
+		name: "facetAddress",
+		inputs: [
+			{
+				name: "_functionSelector",
+				type: "bytes4",
+				internalType: "bytes4",
+			},
+		],
+		outputs: [
+			{
+				name: "",
+				type: "address",
+				internalType: "address",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "facetAddresses",
+		inputs: [],
+		outputs: [
+			{
+				name: "",
+				type: "address[]",
+				internalType: "address[]",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "facetFunctionSelectors",
+		inputs: [
+			{
+				name: "_facet",
+				type: "address",
+				internalType: "address",
+			},
+		],
+		outputs: [
+			{
+				name: "",
+				type: "bytes4[]",
+				internalType: "bytes4[]",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
 		name: "facets",
 		inputs: [],
 		outputs: [
 			{
 				name: "",
 				type: "tuple[]",
+				internalType: "struct IDiamondLoupe.Facet[]",
 				components: [
-					{ name: "facetAddress", type: "address" },
-					{ name: "functionSelectors", type: "bytes4[]" },
+					{
+						name: "facetAddress",
+						type: "address",
+						internalType: "address",
+					},
+					{
+						name: "functionSelectors",
+						type: "bytes4[]",
+						internalType: "bytes4[]",
+					},
 				],
 			},
 		],
 		stateMutability: "view",
 	},
-	{
-		type: "function" as const,
-		name: "facetFunctionSelectors",
-		inputs: [{ name: "_facet", type: "address" }],
-		outputs: [{ name: "", type: "bytes4[]" }],
-		stateMutability: "view",
-	},
-	{
-		type: "function" as const,
-		name: "facetAddresses",
-		inputs: [],
-		outputs: [{ name: "", type: "address[]" }],
-		stateMutability: "view",
-	},
-	{
-		type: "function" as const,
-		name: "facetAddress",
-		inputs: [{ name: "_functionSelector", type: "bytes4" }],
-		outputs: [{ name: "", type: "address" }],
-		stateMutability: "view",
-	},
-] as const;
-
-export const diamondAbi = [
-	...diamondCutFacetAbi,
-	...diamondLoupeFacetAbi,
 ] as const;
 
 export const libDiamondErrors = [
 	{
-		type: "error" as const,
-		name: "NotContractOwner",
+		type: "event",
+		name: "OwnershipTransferred",
 		inputs: [
-			{ name: "caller", type: "address" },
-			{ name: "owner", type: "address" },
+			{
+				name: "previousOwner",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "newOwner",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
 		],
+		anonymous: false,
 	},
 	{
-		type: "error" as const,
-		name: "NoSelectorsProvided",
-		inputs: [],
-	},
-	{
-		type: "error" as const,
-		name: "FacetAddressZeroForAdd",
-		inputs: [],
-	},
-	{
-		type: "error" as const,
+		type: "error",
 		name: "FacetAddressNotZeroForRemove",
 		inputs: [],
 	},
 	{
-		type: "error" as const,
-		name: "SelectorAlreadyExists",
-		inputs: [{ name: "selector", type: "bytes4" }],
+		type: "error",
+		name: "FacetAddressZeroForAdd",
+		inputs: [],
 	},
 	{
-		type: "error" as const,
-		name: "SelectorNotFound",
-		inputs: [{ name: "selector", type: "bytes4" }],
-	},
-	{
-		type: "error" as const,
-		name: "SameFacetForReplace",
-		inputs: [{ name: "selector", type: "bytes4" }],
-	},
-	{
-		type: "error" as const,
+		type: "error",
 		name: "InitReverted",
 		inputs: [],
+	},
+	{
+		type: "error",
+		name: "NoSelectorsProvided",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "NotContractOwner",
+		inputs: [
+			{
+				name: "caller",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "owner",
+				type: "address",
+				internalType: "address",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "SameFacetForReplace",
+		inputs: [
+			{
+				name: "selector",
+				type: "bytes4",
+				internalType: "bytes4",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "SelectorAlreadyExists",
+		inputs: [
+			{
+				name: "selector",
+				type: "bytes4",
+				internalType: "bytes4",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "SelectorNotFound",
+		inputs: [
+			{
+				name: "selector",
+				type: "bytes4",
+				internalType: "bytes4",
+			},
+		],
 	},
 ] as const;

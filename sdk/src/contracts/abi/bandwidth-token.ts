@@ -1,7 +1,6 @@
-import { neunodeTokenAbi } from "./neunode-token.js";
+// Generated from Foundry artifacts by scripts/contract-abis.mjs.
+// Do not edit manually.
 
-/**
- * BandwidthToken ABI — nBandwidth (transfer volume).
- * Source: contracts/src/tokens/BandwidthToken.sol
- */
-export const bandwidthTokenAbi = neunodeTokenAbi;
+import { computeTokenAbi } from "./compute-token.js";
+
+export const bandwidthTokenAbi = computeTokenAbi;

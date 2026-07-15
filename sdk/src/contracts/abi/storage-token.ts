@@ -1,7 +1,6 @@
-import { neunodeTokenAbi } from "./neunode-token.js";
+// Generated from Foundry artifacts by scripts/contract-abis.mjs.
+// Do not edit manually.
 
-/**
- * StorageToken ABI — nStorage (disk space).
- * Source: contracts/src/tokens/StorageToken.sol
- */
-export const storageTokenAbi = neunodeTokenAbi;
+import { computeTokenAbi } from "./compute-token.js";
+
+export const storageTokenAbi = computeTokenAbi;

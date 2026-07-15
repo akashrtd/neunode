@@ -1,369 +1,938 @@
-/**
- * NeunodeEscrow ABI — Bilateral escrow for bounty payments.
- * Source: contracts/src/NeunodeEscrow.sol
- * Inherited: AccessControl, IBountyEscrow
- */
+// Generated from Foundry artifacts by scripts/contract-abis.mjs.
+// Do not edit manually.
 
 export const neunodeEscrowAbi = [
-	// AccessControl
 	{
-		type: "function" as const,
-		name: "hasRole",
-		inputs: [
-			{ name: "role", type: "bytes32" },
-			{ name: "account", type: "address" },
-		],
-		outputs: [{ name: "", type: "bool" }],
-		stateMutability: "view",
-	},
-	{
-		type: "function" as const,
-		name: "getRoleAdmin",
-		inputs: [{ name: "role", type: "bytes32" }],
-		outputs: [{ name: "", type: "bytes32" }],
-		stateMutability: "view",
-	},
-	{
-		type: "function" as const,
-		name: "grantRole",
-		inputs: [
-			{ name: "role", type: "bytes32" },
-			{ name: "account", type: "address" },
-		],
-		outputs: [],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function" as const,
-		name: "revokeRole",
-		inputs: [
-			{ name: "role", type: "bytes32" },
-			{ name: "account", type: "address" },
-		],
-		outputs: [],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function" as const,
-		name: "renounceRole",
-		inputs: [
-			{ name: "role", type: "bytes32" },
-			{ name: "callerConfirmation", type: "address" },
-		],
-		outputs: [],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "event" as const,
-		name: "RoleAdminChanged",
-		inputs: [
-			{ name: "role", type: "bytes32", indexed: true },
-			{ name: "previousAdminRole", type: "bytes32", indexed: true },
-			{ name: "newAdminRole", type: "bytes32", indexed: true },
-		],
-	},
-	{
-		type: "event" as const,
-		name: "RoleGranted",
-		inputs: [
-			{ name: "role", type: "bytes32", indexed: true },
-			{ name: "account", type: "address", indexed: true },
-			{ name: "sender", type: "address", indexed: true },
-		],
-	},
-	{
-		type: "event" as const,
-		name: "RoleRevoked",
-		inputs: [
-			{ name: "role", type: "bytes32", indexed: true },
-			{ name: "account", type: "address", indexed: true },
-			{ name: "sender", type: "address", indexed: true },
-		],
-	},
-
-	// Storage
-	{
-		type: "function" as const,
-		name: "escrows",
-		inputs: [{ name: "", type: "bytes32" }],
-		outputs: [
-			{ name: "bountyId", type: "bytes32" },
-			{ name: "requester", type: "address" },
-			{ name: "provider", type: "address" },
-			{ name: "token", type: "address" },
-			{ name: "amount", type: "uint256" },
-			{ name: "providerBond", type: "uint256" },
-			{ name: "created", type: "uint256" },
-			{ name: "deadline", type: "uint256" },
-			{ name: "state", type: "uint8" },
-		],
-		stateMutability: "view",
-	},
-	{
-		type: "function" as const,
-		name: "escrowBountyContracts",
-		inputs: [{ name: "", type: "bytes32" }],
-		outputs: [{ name: "", type: "address" }],
-		stateMutability: "view",
-	},
-	{
-		type: "function" as const,
-		name: "PROVIDER_BOND_BPS",
+		type: "constructor",
 		inputs: [],
-		outputs: [{ name: "", type: "uint256" }],
-		stateMutability: "view",
+		stateMutability: "nonpayable",
 	},
 	{
-		type: "function" as const,
-		name: "ESCROW_ADMIN_ROLE",
-		inputs: [],
-		outputs: [{ name: "", type: "bytes32" }],
-		stateMutability: "view",
-	},
-	{
-		type: "function" as const,
+		type: "function",
 		name: "BOUNTY_CONTRACT_ROLE",
 		inputs: [],
-		outputs: [{ name: "", type: "bytes32" }],
+		outputs: [
+			{
+				name: "",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
 		stateMutability: "view",
 	},
-
-	// Admin
 	{
-		type: "function" as const,
-		name: "registerBountyContract",
-		inputs: [{ name: "bountyContract", type: "address" }],
-		outputs: [],
-		stateMutability: "nonpayable",
+		type: "function",
+		name: "DEFAULT_ADMIN_ROLE",
+		inputs: [],
+		outputs: [
+			{
+				name: "",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		stateMutability: "view",
 	},
-
-	// IBountyEscrow
 	{
-		type: "function" as const,
-		name: "createBountyEscrow",
+		type: "function",
+		name: "ESCROW_ADMIN_ROLE",
+		inputs: [],
+		outputs: [
+			{
+				name: "",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "PROVIDER_BOND_BPS",
+		inputs: [],
+		outputs: [
+			{
+				name: "",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "autoRefund",
 		inputs: [
-			{ name: "bountyId", type: "bytes32" },
-			{ name: "requester_", type: "address" },
-			{ name: "token", type: "address" },
-			{ name: "amount", type: "uint256" },
-			{ name: "workDeadline", type: "uint256" },
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "timeoutSeconds",
+				type: "uint256",
+				internalType: "uint256",
+			},
 		],
 		outputs: [],
 		stateMutability: "nonpayable",
 	},
 	{
-		type: "function" as const,
+		type: "function",
 		name: "bondProvider",
 		inputs: [
-			{ name: "bountyId", type: "bytes32" },
-			{ name: "provider_", type: "address" },
-			{ name: "bondAmount", type: "uint256" },
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "provider_",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "bondAmount",
+				type: "uint256",
+				internalType: "uint256",
+			},
 		],
 		outputs: [],
 		stateMutability: "nonpayable",
 	},
 	{
-		type: "function" as const,
-		name: "releaseWithFees",
+		type: "function",
+		name: "createBountyEscrow",
 		inputs: [
-			{ name: "bountyId", type: "bytes32" },
-			{ name: "provider_", type: "address" },
-			{ name: "protocolFeeBps", type: "uint256" },
-			{ name: "reviewerFeeBps", type: "uint256" },
-			{ name: "verificationFeeBps", type: "uint256" },
-			{ name: "protocolFeeRecipient", type: "address" },
-			{ name: "reviewerFeeRecipient", type: "address" },
-			{ name: "verificationFeeRecipient", type: "address" },
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "requester_",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "token",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "amount",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "workDeadline",
+				type: "uint256",
+				internalType: "uint256",
+			},
 		],
 		outputs: [],
 		stateMutability: "nonpayable",
 	},
 	{
-		type: "function" as const,
-		name: "refundRequester",
-		inputs: [{ name: "bountyId", type: "bytes32" }],
-		outputs: [],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function" as const,
-		name: "isEscrowFunded",
-		inputs: [{ name: "bountyId", type: "bytes32" }],
-		outputs: [{ name: "", type: "bool" }],
-		stateMutability: "view",
-	},
-
-	// Direct escrow (backward-compatible)
-	{
-		type: "function" as const,
+		type: "function",
 		name: "createEscrow",
 		inputs: [
-			{ name: "bountyId", type: "bytes32" },
-			{ name: "token", type: "address" },
-			{ name: "amount", type: "uint256" },
-			{ name: "deadline", type: "uint256" },
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "token",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "amount",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "deadline",
+				type: "uint256",
+				internalType: "uint256",
+			},
 		],
 		outputs: [],
 		stateMutability: "nonpayable",
 	},
 	{
-		type: "function" as const,
-		name: "fundEscrow",
-		inputs: [
-			{ name: "bountyId", type: "bytes32" },
-			{ name: "providerBond", type: "uint256" },
-		],
-		outputs: [],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function" as const,
-		name: "release",
-		inputs: [{ name: "bountyId", type: "bytes32" }],
-		outputs: [],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function" as const,
-		name: "refund",
-		inputs: [{ name: "bountyId", type: "bytes32" }],
-		outputs: [],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function" as const,
+		type: "function",
 		name: "dispute",
-		inputs: [{ name: "bountyId", type: "bytes32" }],
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
 		outputs: [],
 		stateMutability: "nonpayable",
 	},
 	{
-		type: "function" as const,
-		name: "getEscrowState",
-		inputs: [{ name: "bountyId", type: "bytes32" }],
-		outputs: [{ name: "", type: "uint8" }],
+		type: "function",
+		name: "escrowBountyContracts",
+		inputs: [
+			{
+				name: "",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		outputs: [
+			{
+				name: "",
+				type: "address",
+				internalType: "address",
+			},
+		],
 		stateMutability: "view",
 	},
-
-	// Events
 	{
-		type: "event" as const,
+		type: "function",
+		name: "escrows",
+		inputs: [
+			{
+				name: "",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		outputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "requester",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "provider",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "token",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "amount",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "providerBond",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "created",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "deadline",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "state",
+				type: "uint8",
+				internalType: "enum NeunodeEscrow.EscrowState",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "fundEscrow",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "providerBond",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "getEscrowState",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		outputs: [
+			{
+				name: "",
+				type: "uint8",
+				internalType: "enum NeunodeEscrow.EscrowState",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "getRoleAdmin",
+		inputs: [
+			{
+				name: "role",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		outputs: [
+			{
+				name: "",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "grantRole",
+		inputs: [
+			{
+				name: "role",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "account",
+				type: "address",
+				internalType: "address",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "hasRole",
+		inputs: [
+			{
+				name: "role",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "account",
+				type: "address",
+				internalType: "address",
+			},
+		],
+		outputs: [
+			{
+				name: "",
+				type: "bool",
+				internalType: "bool",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "isEscrowFunded",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		outputs: [
+			{
+				name: "",
+				type: "bool",
+				internalType: "bool",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "refund",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "refundRequester",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "registerBountyContract",
+		inputs: [
+			{
+				name: "bountyContract",
+				type: "address",
+				internalType: "address",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "release",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "releaseWithFees",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "provider_",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "protocolFeeBps",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "reviewerFeeBps",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "verificationFeeBps",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "protocolFeeRecipient",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "reviewerFeeRecipient",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "verificationFeeRecipient",
+				type: "address",
+				internalType: "address",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "renounceRole",
+		inputs: [
+			{
+				name: "role",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "callerConfirmation",
+				type: "address",
+				internalType: "address",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "revokeRole",
+		inputs: [
+			{
+				name: "role",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "account",
+				type: "address",
+				internalType: "address",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "supportsInterface",
+		inputs: [
+			{
+				name: "interfaceId",
+				type: "bytes4",
+				internalType: "bytes4",
+			},
+		],
+		outputs: [
+			{
+				name: "",
+				type: "bool",
+				internalType: "bool",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "event",
+		name: "BountyContractRegistered",
+		inputs: [
+			{
+				name: "bountyContract",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "event",
 		name: "EscrowCreated",
 		inputs: [
-			{ name: "bountyId", type: "bytes32", indexed: true },
-			{ name: "requester", type: "address", indexed: true },
-			{ name: "token", type: "address", indexed: false },
-			{ name: "amount", type: "uint256", indexed: false },
+			{
+				name: "bountyId",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+			{
+				name: "requester",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "token",
+				type: "address",
+				indexed: false,
+				internalType: "address",
+			},
+			{
+				name: "amount",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
 		],
+		anonymous: false,
 	},
 	{
-		type: "event" as const,
-		name: "EscrowFunded",
-		inputs: [
-			{ name: "bountyId", type: "bytes32", indexed: true },
-			{ name: "provider", type: "address", indexed: true },
-			{ name: "bond", type: "uint256", indexed: false },
-		],
-	},
-	{
-		type: "event" as const,
-		name: "EscrowReleased",
-		inputs: [
-			{ name: "bountyId", type: "bytes32", indexed: true },
-			{ name: "provider", type: "address", indexed: true },
-			{ name: "amount", type: "uint256", indexed: false },
-		],
-	},
-	{
-		type: "event" as const,
-		name: "EscrowRefunded",
-		inputs: [
-			{ name: "bountyId", type: "bytes32", indexed: true },
-			{ name: "requester", type: "address", indexed: true },
-			{ name: "amount", type: "uint256", indexed: false },
-		],
-	},
-	{
-		type: "event" as const,
+		type: "event",
 		name: "EscrowDisputed",
 		inputs: [
-			{ name: "bountyId", type: "bytes32", indexed: true },
-			{ name: "timestamp", type: "uint256", indexed: false },
+			{
+				name: "bountyId",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+			{
+				name: "timestamp",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
 		],
+		anonymous: false,
 	},
 	{
-		type: "event" as const,
+		type: "event",
+		name: "EscrowFunded",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+			{
+				name: "provider",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "bond",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "event",
+		name: "EscrowRefunded",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+			{
+				name: "requester",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "amount",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "event",
+		name: "EscrowReleased",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+			{
+				name: "provider",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "amount",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "event",
 		name: "EscrowReleasedWithFees",
 		inputs: [
-			{ name: "bountyId", type: "bytes32", indexed: true },
-			{ name: "provider", type: "address", indexed: true },
-			{ name: "providerPayout", type: "uint256", indexed: false },
-			{ name: "protocolFee", type: "uint256", indexed: false },
-			{ name: "reviewerFee", type: "uint256", indexed: false },
-			{ name: "verificationFee", type: "uint256", indexed: false },
+			{
+				name: "bountyId",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+			{
+				name: "provider",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "providerPayout",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+			{
+				name: "protocolFee",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+			{
+				name: "reviewerFee",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+			{
+				name: "verificationFee",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "event",
+		name: "RoleAdminChanged",
+		inputs: [
+			{
+				name: "role",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+			{
+				name: "previousAdminRole",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+			{
+				name: "newAdminRole",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "event",
+		name: "RoleGranted",
+		inputs: [
+			{
+				name: "role",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+			{
+				name: "account",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "sender",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "event",
+		name: "RoleRevoked",
+		inputs: [
+			{
+				name: "role",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+			{
+				name: "account",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "sender",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "error",
+		name: "AccessControlBadConfirmation",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "AccessControlUnauthorizedAccount",
+		inputs: [
+			{
+				name: "account",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "neededRole",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
 		],
 	},
 	{
-		type: "event" as const,
-		name: "BountyContractRegistered",
-		inputs: [{ name: "bountyContract", type: "address", indexed: true }],
+		type: "error",
+		name: "DeadlinePassed",
+		inputs: [
+			{
+				name: "deadline",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
 	},
-
-	// Errors
 	{
-		type: "error" as const,
-		name: "EscrowNotFound",
-		inputs: [{ name: "bountyId", type: "bytes32" }],
+		type: "error",
+		name: "EscrowAlreadyExists",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
 	},
 	{
-		type: "error" as const,
+		type: "error",
 		name: "EscrowNotCreated",
-		inputs: [{ name: "bountyId", type: "bytes32" }],
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
 	},
 	{
-		type: "error" as const,
+		type: "error",
+		name: "EscrowNotFound",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+	},
+	{
+		type: "error",
 		name: "EscrowNotFunded",
-		inputs: [{ name: "bountyId", type: "bytes32" }],
-	},
-	{
-		type: "error" as const,
-		name: "NotRequester",
 		inputs: [
-			{ name: "bountyId", type: "bytes32" },
-			{ name: "caller", type: "address" },
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
 		],
 	},
 	{
-		type: "error" as const,
-		name: "NotProvider",
+		type: "error",
+		name: "FeeBpsExceeds100Pct",
 		inputs: [
-			{ name: "bountyId", type: "bytes32" },
-			{ name: "caller", type: "address" },
+			{
+				name: "totalBps",
+				type: "uint256",
+				internalType: "uint256",
+			},
 		],
 	},
 	{
-		type: "error" as const,
+		type: "error",
 		name: "InvalidAmount",
 		inputs: [],
 	},
 	{
-		type: "error" as const,
+		type: "error",
 		name: "InvalidToken",
 		inputs: [],
 	},
 	{
-		type: "error" as const,
-		name: "DeadlinePassed",
-		inputs: [{ name: "deadline", type: "uint256" }],
+		type: "error",
+		name: "NotProvider",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "caller",
+				type: "address",
+				internalType: "address",
+			},
+		],
 	},
 	{
-		type: "error" as const,
-		name: "TransferFailed",
+		type: "error",
+		name: "NotRequester",
+		inputs: [
+			{
+				name: "bountyId",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "caller",
+				type: "address",
+				internalType: "address",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "ReentrancyGuardReentrantCall",
 		inputs: [],
 	},
 	{
-		type: "error" as const,
+		type: "error",
+		name: "SafeERC20FailedOperation",
+		inputs: [
+			{
+				name: "token",
+				type: "address",
+				internalType: "address",
+			},
+		],
+	},
+	{
+		type: "error",
 		name: "Unauthorized",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "ZeroAddressFeeRecipient",
 		inputs: [],
 	},
 ] as const;

@@ -1,176 +1,425 @@
-/**
- * NeunodeRegistry ABI — Agent capability and endpoint registry.
- * Source: contracts/src/NeunodeRegistry.sol
- */
+// Generated from Foundry artifacts by scripts/contract-abis.mjs.
+// Do not edit manually.
 
 export const neunodeRegistryAbi = [
 	{
-		type: "function" as const,
-		name: "identity",
-		inputs: [],
-		outputs: [{ name: "", type: "address" }],
-		stateMutability: "view",
-	},
-	{
-		type: "function" as const,
-		name: "agents",
-		inputs: [{ name: "", type: "bytes32" }],
-		outputs: [
-			{ name: "didHash", type: "bytes32" },
-			{ name: "capabilities", type: "string" },
-			{ name: "endpoint", type: "string" },
-			{ name: "stakeAmount", type: "uint256" },
-			{ name: "registeredAt", type: "uint256" },
-			{ name: "updatedAt", type: "uint256" },
-			{ name: "active", type: "bool" },
+		type: "constructor",
+		inputs: [
+			{
+				name: "identity_",
+				type: "address",
+				internalType: "address",
+			},
 		],
-		stateMutability: "view",
+		stateMutability: "nonpayable",
 	},
 	{
-		type: "function" as const,
-		name: "agentList",
-		inputs: [{ name: "", type: "uint256" }],
-		outputs: [{ name: "", type: "bytes32" }],
-		stateMutability: "view",
-	},
-	{
-		type: "function" as const,
+		type: "function",
 		name: "activeCount",
 		inputs: [],
-		outputs: [{ name: "", type: "uint256" }],
+		outputs: [
+			{
+				name: "",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
 		stateMutability: "view",
 	},
 	{
-		type: "function" as const,
-		name: "register",
+		type: "function",
+		name: "agentList",
 		inputs: [
-			{ name: "didHash", type: "bytes32" },
-			{ name: "capabilities", type: "string" },
-			{ name: "endpoint", type: "string" },
+			{
+				name: "",
+				type: "uint256",
+				internalType: "uint256",
+			},
 		],
-		outputs: [],
-		stateMutability: "nonpayable",
+		outputs: [
+			{
+				name: "",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		stateMutability: "view",
 	},
 	{
-		type: "function" as const,
-		name: "update",
+		type: "function",
+		name: "agents",
 		inputs: [
-			{ name: "didHash", type: "bytes32" },
-			{ name: "capabilities", type: "string" },
-			{ name: "endpoint", type: "string" },
+			{
+				name: "",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
 		],
-		outputs: [],
-		stateMutability: "nonpayable",
+		outputs: [
+			{
+				name: "didHash",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "capabilities",
+				type: "string",
+				internalType: "string",
+			},
+			{
+				name: "endpoint",
+				type: "string",
+				internalType: "string",
+			},
+			{
+				name: "stakeAmount",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "registeredAt",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "updatedAt",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "active",
+				type: "bool",
+				internalType: "bool",
+			},
+		],
+		stateMutability: "view",
 	},
 	{
-		type: "function" as const,
+		type: "function",
 		name: "deregister",
-		inputs: [{ name: "didHash", type: "bytes32" }],
+		inputs: [
+			{
+				name: "didHash",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
 		outputs: [],
 		stateMutability: "nonpayable",
 	},
 	{
-		type: "function" as const,
+		type: "function",
+		name: "getActiveAgents",
+		inputs: [],
+		outputs: [
+			{
+				name: "",
+				type: "bytes32[]",
+				internalType: "bytes32[]",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
 		name: "getAgent",
-		inputs: [{ name: "didHash", type: "bytes32" }],
+		inputs: [
+			{
+				name: "didHash",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
 		outputs: [
 			{
 				name: "",
 				type: "tuple",
+				internalType: "struct NeunodeRegistry.AgentRegistration",
 				components: [
-					{ name: "didHash", type: "bytes32" },
-					{ name: "capabilities", type: "string" },
-					{ name: "endpoint", type: "string" },
-					{ name: "stakeAmount", type: "uint256" },
-					{ name: "registeredAt", type: "uint256" },
-					{ name: "updatedAt", type: "uint256" },
-					{ name: "active", type: "bool" },
+					{
+						name: "didHash",
+						type: "bytes32",
+						internalType: "bytes32",
+					},
+					{
+						name: "capabilities",
+						type: "string",
+						internalType: "string",
+					},
+					{
+						name: "endpoint",
+						type: "string",
+						internalType: "string",
+					},
+					{
+						name: "stakeAmount",
+						type: "uint256",
+						internalType: "uint256",
+					},
+					{
+						name: "registeredAt",
+						type: "uint256",
+						internalType: "uint256",
+					},
+					{
+						name: "updatedAt",
+						type: "uint256",
+						internalType: "uint256",
+					},
+					{
+						name: "active",
+						type: "bool",
+						internalType: "bool",
+					},
 				],
 			},
 		],
 		stateMutability: "view",
 	},
 	{
-		type: "function" as const,
-		name: "getActiveAgents",
-		inputs: [],
-		outputs: [{ name: "", type: "bytes32[]" }],
+		type: "function",
+		name: "getAgents",
+		inputs: [
+			{
+				name: "offset",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "limit",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+		outputs: [
+			{
+				name: "",
+				type: "bytes32[]",
+				internalType: "bytes32[]",
+			},
+		],
 		stateMutability: "view",
 	},
 	{
-		type: "function" as const,
+		type: "function",
 		name: "getTotalAgents",
 		inputs: [],
-		outputs: [{ name: "", type: "uint256" }],
+		outputs: [
+			{
+				name: "",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
 		stateMutability: "view",
 	},
-
-	// Events
 	{
-		type: "event" as const,
-		name: "AgentRegistered",
-		inputs: [
-			{ name: "didHash", type: "bytes32", indexed: true },
-			{ name: "controller", type: "address", indexed: true },
-			{ name: "timestamp", type: "uint256", indexed: false },
+		type: "function",
+		name: "identity",
+		inputs: [],
+		outputs: [
+			{
+				name: "",
+				type: "address",
+				internalType: "contract INeunodeIdentity",
+			},
 		],
+		stateMutability: "view",
 	},
 	{
-		type: "event" as const,
-		name: "AgentUpdated",
+		type: "function",
+		name: "register",
 		inputs: [
-			{ name: "didHash", type: "bytes32", indexed: true },
-			{ name: "controller", type: "address", indexed: true },
-			{ name: "timestamp", type: "uint256", indexed: false },
+			{
+				name: "didHash",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "capabilities",
+				type: "string",
+				internalType: "string",
+			},
+			{
+				name: "endpoint",
+				type: "string",
+				internalType: "string",
+			},
 		],
+		outputs: [],
+		stateMutability: "nonpayable",
 	},
 	{
-		type: "event" as const,
+		type: "function",
+		name: "update",
+		inputs: [
+			{
+				name: "didHash",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "capabilities",
+				type: "string",
+				internalType: "string",
+			},
+			{
+				name: "endpoint",
+				type: "string",
+				internalType: "string",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "event",
 		name: "AgentDeregistered",
 		inputs: [
-			{ name: "didHash", type: "bytes32", indexed: true },
-			{ name: "controller", type: "address", indexed: true },
-			{ name: "timestamp", type: "uint256", indexed: false },
+			{
+				name: "didHash",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+			{
+				name: "controller",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "timestamp",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
 		],
+		anonymous: false,
 	},
-
-	// Errors
 	{
-		type: "error" as const,
-		name: "NotDidController",
+		type: "event",
+		name: "AgentRegistered",
 		inputs: [
-			{ name: "didHash", type: "bytes32" },
-			{ name: "caller", type: "address" },
+			{
+				name: "didHash",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+			{
+				name: "controller",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "timestamp",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "event",
+		name: "AgentUpdated",
+		inputs: [
+			{
+				name: "didHash",
+				type: "bytes32",
+				indexed: true,
+				internalType: "bytes32",
+			},
+			{
+				name: "controller",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "timestamp",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+		],
+		anonymous: false,
+	},
+	{
+		type: "error",
+		name: "AgentAlreadyRegistered",
+		inputs: [
+			{
+				name: "didHash",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
 		],
 	},
 	{
-		type: "error" as const,
-		name: "DidNotActive",
-		inputs: [{ name: "didHash", type: "bytes32" }],
-	},
-	{
-		type: "error" as const,
-		name: "AgentNotFound",
-		inputs: [{ name: "didHash", type: "bytes32" }],
-	},
-	{
-		type: "error" as const,
-		name: "AgentAlreadyRegistered",
-		inputs: [{ name: "didHash", type: "bytes32" }],
-	},
-	{
-		type: "error" as const,
+		type: "error",
 		name: "AgentNotActive",
-		inputs: [{ name: "didHash", type: "bytes32" }],
+		inputs: [
+			{
+				name: "didHash",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
 	},
 	{
-		type: "error" as const,
+		type: "error",
+		name: "AgentNotFound",
+		inputs: [
+			{
+				name: "didHash",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "DidNotActive",
+		inputs: [
+			{
+				name: "didHash",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+	},
+	{
+		type: "error",
 		name: "EmptyCapabilities",
 		inputs: [],
 	},
 	{
-		type: "error" as const,
+		type: "error",
 		name: "EmptyEndpoint",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "NotDidController",
+		inputs: [
+			{
+				name: "didHash",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+			{
+				name: "caller",
+				type: "address",
+				internalType: "address",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "ZeroAddress",
 		inputs: [],
 	},
 ] as const;

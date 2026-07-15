@@ -15,8 +15,11 @@ export { neunodeEscrowAbi } from "./abi/neunode-escrow.js";
 export { neunodeGovernanceAbi } from "./abi/neunode-governance.js";
 export { neunodeIdentityAbi } from "./abi/neunode-identity.js";
 export { neunodeRegistryAbi } from "./abi/neunode-registry.js";
+export { neunodeReputationAbi } from "./abi/neunode-reputation.js";
+export { neunodeSlashingAbi } from "./abi/neunode-slashing.js";
 export { neunodeTokenAbi } from "./abi/neunode-token.js";
 export { royaltySplitterAbi } from "./abi/royalty-splitter.js";
+export { stakingEscrowAbi } from "./abi/staking-escrow.js";
 export { storageTokenAbi } from "./abi/storage-token.js";
 export { trainingTokenAbi } from "./abi/training-token.js";
 export type { ChainId, ContractAddresses } from "./addresses.js";
@@ -37,8 +40,11 @@ export {
 	getNeunodeGovernance,
 	getNeunodeIdentity,
 	getNeunodeRegistry,
+	getNeunodeReputation,
+	getNeunodeSlashing,
 	getNeunodeToken,
 	getRoyaltySplitter,
+	getStakingEscrow,
 	getStorageToken,
 	getTrainingToken,
 } from "./contracts.js";

@@ -1,11 +1,30 @@
 // Generated from Foundry artifacts by scripts/contract-abis.mjs.
 // Do not edit manually.
 
-export const modelRegistryAbi = [
+export const stakingEscrowAbi = [
 	{
 		type: "constructor",
-		inputs: [],
+		inputs: [
+			{
+				name: "tokenAddress",
+				type: "address",
+				internalType: "address",
+			},
+		],
 		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "DECAY_ADMIN_ROLE",
+		inputs: [],
+		outputs: [
+			{
+				name: "",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		stateMutability: "view",
 	},
 	{
 		type: "function",
@@ -22,44 +41,12 @@ export const modelRegistryAbi = [
 	},
 	{
 		type: "function",
-		name: "REGISTRAR_ROLE",
-		inputs: [],
-		outputs: [
-			{
-				name: "",
-				type: "bytes32",
-				internalType: "bytes32",
-			},
-		],
-		stateMutability: "view",
-	},
-	{
-		type: "function",
-		name: "getChildren",
+		name: "computeDecay",
 		inputs: [
 			{
-				name: "cid",
-				type: "bytes32",
-				internalType: "bytes32",
-			},
-		],
-		outputs: [
-			{
-				name: "",
-				type: "bytes32[]",
-				internalType: "bytes32[]",
-			},
-		],
-		stateMutability: "view",
-	},
-	{
-		type: "function",
-		name: "getLineageDepth",
-		inputs: [
-			{
-				name: "cid",
-				type: "bytes32",
-				internalType: "bytes32",
+				name: "account",
+				type: "address",
+				internalType: "address",
 			},
 		],
 		outputs: [
@@ -73,59 +60,14 @@ export const modelRegistryAbi = [
 	},
 	{
 		type: "function",
-		name: "getModel",
+		name: "decayRatesBps",
 		inputs: [
 			{
-				name: "cid",
-				type: "bytes32",
-				internalType: "bytes32",
-			},
-		],
-		outputs: [
-			{
 				name: "",
-				type: "tuple",
-				internalType: "struct IModelRegistry.ModelInfo",
-				components: [
-					{
-						name: "cid",
-						type: "bytes32",
-						internalType: "bytes32",
-					},
-					{
-						name: "contributor",
-						type: "address",
-						internalType: "address",
-					},
-					{
-						name: "contribution",
-						type: "uint8",
-						internalType: "enum IModelRegistry.ContributionType",
-					},
-					{
-						name: "metadataURI",
-						type: "string",
-						internalType: "string",
-					},
-					{
-						name: "registeredAt",
-						type: "uint256",
-						internalType: "uint256",
-					},
-					{
-						name: "exists",
-						type: "bool",
-						internalType: "bool",
-					},
-				],
+				type: "uint256",
+				internalType: "uint256",
 			},
 		],
-		stateMutability: "view",
-	},
-	{
-		type: "function",
-		name: "getModelCount",
-		inputs: [],
 		outputs: [
 			{
 				name: "",
@@ -137,22 +79,16 @@ export const modelRegistryAbi = [
 	},
 	{
 		type: "function",
-		name: "getParents",
+		name: "executeDecay",
 		inputs: [
 			{
-				name: "cid",
-				type: "bytes32",
-				internalType: "bytes32",
+				name: "account",
+				type: "address",
+				internalType: "address",
 			},
 		],
-		outputs: [
-			{
-				name: "",
-				type: "bytes32[]",
-				internalType: "bytes32[]",
-			},
-		],
-		stateMutability: "view",
+		outputs: [],
+		stateMutability: "nonpayable",
 	},
 	{
 		type: "function",
@@ -217,55 +153,16 @@ export const modelRegistryAbi = [
 	},
 	{
 		type: "function",
-		name: "modelExists",
-		inputs: [
-			{
-				name: "cid",
-				type: "bytes32",
-				internalType: "bytes32",
-			},
-		],
+		name: "neunodeToken",
+		inputs: [],
 		outputs: [
 			{
 				name: "",
-				type: "bool",
-				internalType: "bool",
+				type: "address",
+				internalType: "contract INeunodeToken",
 			},
 		],
 		stateMutability: "view",
-	},
-	{
-		type: "function",
-		name: "registerModel",
-		inputs: [
-			{
-				name: "cid",
-				type: "bytes32",
-				internalType: "bytes32",
-			},
-			{
-				name: "parentCids",
-				type: "bytes32[]",
-				internalType: "bytes32[]",
-			},
-			{
-				name: "contribution",
-				type: "uint8",
-				internalType: "enum IModelRegistry.ContributionType",
-			},
-			{
-				name: "metadataURI",
-				type: "string",
-				internalType: "string",
-			},
-			{
-				name: "derivationProofHash",
-				type: "bytes32",
-				internalType: "bytes32",
-			},
-		],
-		outputs: [],
-		stateMutability: "nonpayable",
 	},
 	{
 		type: "function",
@@ -324,56 +221,19 @@ export const modelRegistryAbi = [
 	},
 	{
 		type: "event",
-		name: "LineageExtended",
+		name: "DecayExecuted",
 		inputs: [
 			{
-				name: "parentCid",
-				type: "bytes32",
-				indexed: true,
-				internalType: "bytes32",
-			},
-			{
-				name: "childCid",
-				type: "bytes32",
-				indexed: true,
-				internalType: "bytes32",
-			},
-			{
-				name: "contributor",
-				type: "address",
-				indexed: true,
-				internalType: "address",
-			},
-		],
-		anonymous: false,
-	},
-	{
-		type: "event",
-		name: "ModelRegistered",
-		inputs: [
-			{
-				name: "cid",
-				type: "bytes32",
-				indexed: true,
-				internalType: "bytes32",
-			},
-			{
-				name: "contributor",
+				name: "account",
 				type: "address",
 				indexed: true,
 				internalType: "address",
 			},
 			{
-				name: "contribution",
-				type: "uint8",
+				name: "slashedAmount",
+				type: "uint256",
 				indexed: false,
-				internalType: "enum IModelRegistry.ContributionType",
-			},
-			{
-				name: "parentCids",
-				type: "bytes32[]",
-				indexed: false,
-				internalType: "bytes32[]",
+				internalType: "uint256",
 			},
 		],
 		anonymous: false,
@@ -476,56 +336,12 @@ export const modelRegistryAbi = [
 	},
 	{
 		type: "error",
-		name: "DerivationProofRequired",
+		name: "DecayTooSoon",
 		inputs: [
 			{
-				name: "parentCid",
-				type: "bytes32",
-				internalType: "bytes32",
-			},
-		],
-	},
-	{
-		type: "error",
-		name: "InvalidCid",
-		inputs: [
-			{
-				name: "cid",
-				type: "bytes32",
-				internalType: "bytes32",
-			},
-		],
-	},
-	{
-		type: "error",
-		name: "ModelAlreadyExists",
-		inputs: [
-			{
-				name: "cid",
-				type: "bytes32",
-				internalType: "bytes32",
-			},
-		],
-	},
-	{
-		type: "error",
-		name: "ModelNotFound",
-		inputs: [
-			{
-				name: "cid",
-				type: "bytes32",
-				internalType: "bytes32",
-			},
-		],
-	},
-	{
-		type: "error",
-		name: "ParentNotFound",
-		inputs: [
-			{
-				name: "cid",
-				type: "bytes32",
-				internalType: "bytes32",
+				name: "account",
+				type: "address",
+				internalType: "address",
 			},
 		],
 	},

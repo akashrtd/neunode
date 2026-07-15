@@ -1,15 +1,21 @@
 // Generated from Foundry artifacts by scripts/contract-abis.mjs.
 // Do not edit manually.
 
-export const computeTokenAbi = [
+export const neunodeSlashingAbi = [
 	{
 		type: "constructor",
-		inputs: [],
+		inputs: [
+			{
+				name: "token_",
+				type: "address",
+				internalType: "address",
+			},
+		],
 		stateMutability: "nonpayable",
 	},
 	{
 		type: "function",
-		name: "BURNER_ROLE",
+		name: "ADMIN_ROLE",
 		inputs: [],
 		outputs: [
 			{
@@ -35,7 +41,20 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "function",
-		name: "GOVERNANCE_ROLE",
+		name: "MAX_BPS",
+		inputs: [],
+		outputs: [
+			{
+				name: "",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "REPORTER_ROLE",
 		inputs: [],
 		outputs: [
 			{
@@ -48,7 +67,20 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "function",
-		name: "MINTER_ROLE",
+		name: "REPUTATION_SLASH_MULTIPLIER",
+		inputs: [],
+		outputs: [
+			{
+				name: "",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "SLASHING_ROLE",
 		inputs: [],
 		outputs: [
 			{
@@ -61,130 +93,70 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "function",
-		name: "activateSeed",
+		name: "getOffenseCount",
 		inputs: [
 			{
-				name: "account",
-				type: "address",
-				internalType: "address",
-			},
-		],
-		outputs: [],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function",
-		name: "allowance",
-		inputs: [
-			{
-				name: "owner",
+				name: "validator",
 				type: "address",
 				internalType: "address",
 			},
 			{
-				name: "spender",
-				type: "address",
-				internalType: "address",
-			},
-		],
-		outputs: [
-			{
-				name: "",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
-		stateMutability: "view",
-	},
-	{
-		type: "function",
-		name: "approve",
-		inputs: [
-			{
-				name: "spender",
-				type: "address",
-				internalType: "address",
-			},
-			{
-				name: "value",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
-		outputs: [
-			{
-				name: "",
-				type: "bool",
-				internalType: "bool",
-			},
-		],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function",
-		name: "balanceOf",
-		inputs: [
-			{
-				name: "account",
-				type: "address",
-				internalType: "address",
-			},
-		],
-		outputs: [
-			{
-				name: "",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
-		stateMutability: "view",
-	},
-	{
-		type: "function",
-		name: "burn",
-		inputs: [
-			{
-				name: "from",
-				type: "address",
-				internalType: "address",
-			},
-			{
-				name: "amount",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
-		outputs: [],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function",
-		name: "decimals",
-		inputs: [],
-		outputs: [
-			{
-				name: "",
+				name: "offense",
 				type: "uint8",
-				internalType: "uint8",
+				internalType: "enum NeunodeSlashing.OffenseType",
+			},
+		],
+		outputs: [
+			{
+				name: "",
+				type: "uint256",
+				internalType: "uint256",
 			},
 		],
 		stateMutability: "view",
 	},
 	{
 		type: "function",
-		name: "getActivityLevel",
+		name: "getPenaltySchedule",
 		inputs: [
 			{
-				name: "account",
-				type: "address",
-				internalType: "address",
+				name: "offense",
+				type: "uint8",
+				internalType: "enum NeunodeSlashing.OffenseType",
+			},
+			{
+				name: "offenseCount",
+				type: "uint256",
+				internalType: "uint256",
 			},
 		],
 		outputs: [
 			{
 				name: "",
-				type: "uint8",
-				internalType: "uint8",
+				type: "tuple",
+				internalType: "struct NeunodeSlashing.SlashingPenalty",
+				components: [
+					{
+						name: "stakeSlashBps",
+						type: "uint256",
+						internalType: "uint256",
+					},
+					{
+						name: "reputationSlashBps",
+						type: "uint256",
+						internalType: "uint256",
+					},
+					{
+						name: "jailDurationBlocks",
+						type: "uint256",
+						internalType: "uint256",
+					},
+					{
+						name: "outcome",
+						type: "uint8",
+						internalType: "enum NeunodeSlashing.PenaltyOutcome",
+					},
+				],
 			},
 		],
 		stateMutability: "view",
@@ -204,6 +176,47 @@ export const computeTokenAbi = [
 				name: "",
 				type: "bytes32",
 				internalType: "bytes32",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "getValidatorStatus",
+		inputs: [
+			{
+				name: "validator",
+				type: "address",
+				internalType: "address",
+			},
+		],
+		outputs: [
+			{
+				name: "",
+				type: "tuple",
+				internalType: "struct NeunodeSlashing.ValidatorStatus",
+				components: [
+					{
+						name: "isJailed",
+						type: "bool",
+						internalType: "bool",
+					},
+					{
+						name: "jailReleaseBlock",
+						type: "uint256",
+						internalType: "uint256",
+					},
+					{
+						name: "offenseCount",
+						type: "uint256",
+						internalType: "uint256",
+					},
+					{
+						name: "isTombstoned",
+						type: "bool",
+						internalType: "bool",
+					},
+				],
 			},
 		],
 		stateMutability: "view",
@@ -252,10 +265,29 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "function",
-		name: "lastActivity",
+		name: "isEvidenceSeen",
 		inputs: [
 			{
-				name: "account",
+				name: "evidenceHash",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+		outputs: [
+			{
+				name: "",
+				type: "bool",
+				internalType: "bool",
+			},
+		],
+		stateMutability: "view",
+	},
+	{
+		type: "function",
+		name: "isJailed",
+		inputs: [
+			{
+				name: "validator",
 				type: "address",
 				internalType: "address",
 			},
@@ -263,80 +295,31 @@ export const computeTokenAbi = [
 		outputs: [
 			{
 				name: "",
-				type: "uint256",
-				internalType: "uint256",
+				type: "bool",
+				internalType: "bool",
 			},
 		],
 		stateMutability: "view",
 	},
 	{
 		type: "function",
-		name: "mint",
-		inputs: [
-			{
-				name: "to",
-				type: "address",
-				internalType: "address",
-			},
-			{
-				name: "amount",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
+		name: "pause",
+		inputs: [],
 		outputs: [],
 		stateMutability: "nonpayable",
 	},
 	{
 		type: "function",
-		name: "mintSeed",
-		inputs: [
-			{
-				name: "to",
-				type: "address",
-				internalType: "address",
-			},
-			{
-				name: "amount",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
-		outputs: [],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function",
-		name: "name",
+		name: "paused",
 		inputs: [],
 		outputs: [
 			{
 				name: "",
-				type: "string",
-				internalType: "string",
+				type: "bool",
+				internalType: "bool",
 			},
 		],
 		stateMutability: "view",
-	},
-	{
-		type: "function",
-		name: "owner",
-		inputs: [],
-		outputs: [
-			{
-				name: "",
-				type: "address",
-				internalType: "address",
-			},
-		],
-		stateMutability: "view",
-	},
-	{
-		type: "function",
-		name: "renounceOwnership",
-		inputs: [],
-		outputs: [],
-		stateMutability: "nonpayable",
 	},
 	{
 		type: "function",
@@ -351,6 +334,57 @@ export const computeTokenAbi = [
 				name: "callerConfirmation",
 				type: "address",
 				internalType: "address",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "reportDoubleSign",
+		inputs: [
+			{
+				name: "header1",
+				type: "bytes",
+				internalType: "bytes",
+			},
+			{
+				name: "header2",
+				type: "bytes",
+				internalType: "bytes",
+			},
+			{
+				name: "sig1",
+				type: "bytes",
+				internalType: "bytes",
+			},
+			{
+				name: "sig2",
+				type: "bytes",
+				internalType: "bytes",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "reportDowntime",
+		inputs: [
+			{
+				name: "validator",
+				type: "address",
+				internalType: "address",
+			},
+			{
+				name: "missedBlocks",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "windowBlocks",
+				type: "uint256",
+				internalType: "uint256",
 			},
 		],
 		outputs: [],
@@ -376,14 +410,46 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "function",
-		name: "seedBalanceOf",
+		name: "setPenaltySchedule",
 		inputs: [
 			{
-				name: "account",
-				type: "address",
-				internalType: "address",
+				name: "offense",
+				type: "uint8",
+				internalType: "enum NeunodeSlashing.OffenseType",
+			},
+			{
+				name: "tier",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "stakeSlashBps",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "reputationSlashBps",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "jailDurationBlocks",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "outcome",
+				type: "uint8",
+				internalType: "enum NeunodeSlashing.PenaltyOutcome",
 			},
 		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "slashingEventCount",
+		inputs: [],
 		outputs: [
 			{
 				name: "",
@@ -395,53 +461,63 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "function",
-		name: "slashStake",
+		name: "submitEvidence",
 		inputs: [
 			{
-				name: "account",
-				type: "address",
-				internalType: "address",
+				name: "offense",
+				type: "uint8",
+				internalType: "enum NeunodeSlashing.OffenseType",
 			},
 			{
-				name: "amount",
-				type: "uint256",
-				internalType: "uint256",
+				name: "evidence",
+				type: "tuple",
+				internalType: "struct NeunodeSlashing.SlashingEvidence",
+				components: [
+					{
+						name: "blockHash1",
+						type: "bytes32",
+						internalType: "bytes32",
+					},
+					{
+						name: "blockHash2",
+						type: "bytes32",
+						internalType: "bytes32",
+					},
+					{
+						name: "blockNumber",
+						type: "uint256",
+						internalType: "uint256",
+					},
+					{
+						name: "signature1",
+						type: "bytes",
+						internalType: "bytes",
+					},
+					{
+						name: "signature2",
+						type: "bytes",
+						internalType: "bytes",
+					},
+					{
+						name: "extraData",
+						type: "bytes",
+						internalType: "bytes",
+					},
+					{
+						name: "reporter",
+						type: "address",
+						internalType: "address",
+					},
+					{
+						name: "timestamp",
+						type: "uint256",
+						internalType: "uint256",
+					},
+				],
 			},
 		],
 		outputs: [],
 		stateMutability: "nonpayable",
-	},
-	{
-		type: "function",
-		name: "stake",
-		inputs: [
-			{
-				name: "amount",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
-		outputs: [],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function",
-		name: "stakedBalanceOf",
-		inputs: [
-			{
-				name: "account",
-				type: "address",
-				internalType: "address",
-			},
-		],
-		outputs: [
-			{
-				name: "",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
-		stateMutability: "view",
 	},
 	{
 		type: "function",
@@ -464,181 +540,120 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "function",
-		name: "symbol",
+		name: "token",
 		inputs: [],
 		outputs: [
 			{
 				name: "",
-				type: "string",
-				internalType: "string",
+				type: "address",
+				internalType: "contract INeunodeToken",
 			},
 		],
 		stateMutability: "view",
 	},
 	{
 		type: "function",
-		name: "totalSupply",
+		name: "unjail",
+		inputs: [
+			{
+				name: "validator",
+				type: "address",
+				internalType: "address",
+			},
+		],
+		outputs: [],
+		stateMutability: "nonpayable",
+	},
+	{
+		type: "function",
+		name: "unpause",
 		inputs: [],
-		outputs: [
-			{
-				name: "",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
-		stateMutability: "view",
-	},
-	{
-		type: "function",
-		name: "transfer",
-		inputs: [
-			{
-				name: "to",
-				type: "address",
-				internalType: "address",
-			},
-			{
-				name: "value",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
-		outputs: [
-			{
-				name: "",
-				type: "bool",
-				internalType: "bool",
-			},
-		],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function",
-		name: "transferFrom",
-		inputs: [
-			{
-				name: "from",
-				type: "address",
-				internalType: "address",
-			},
-			{
-				name: "to",
-				type: "address",
-				internalType: "address",
-			},
-			{
-				name: "value",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
-		outputs: [
-			{
-				name: "",
-				type: "bool",
-				internalType: "bool",
-			},
-		],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function",
-		name: "transferOwnership",
-		inputs: [
-			{
-				name: "newOwner",
-				type: "address",
-				internalType: "address",
-			},
-		],
-		outputs: [],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function",
-		name: "unstake",
-		inputs: [
-			{
-				name: "amount",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
-		outputs: [],
-		stateMutability: "nonpayable",
-	},
-	{
-		type: "function",
-		name: "updateActivity",
-		inputs: [
-			{
-				name: "account",
-				type: "address",
-				internalType: "address",
-			},
-		],
 		outputs: [],
 		stateMutability: "nonpayable",
 	},
 	{
 		type: "event",
-		name: "ActivityUpdated",
+		name: "EvidenceSubmitted",
 		inputs: [
 			{
-				name: "account",
+				name: "validator",
 				type: "address",
 				indexed: true,
 				internalType: "address",
 			},
 			{
-				name: "timestamp",
-				type: "uint256",
+				name: "offense",
+				type: "uint8",
 				indexed: false,
-				internalType: "uint256",
+				internalType: "enum NeunodeSlashing.OffenseType",
+			},
+			{
+				name: "reporter",
+				type: "address",
+				indexed: true,
+				internalType: "address",
+			},
+			{
+				name: "evidenceHash",
+				type: "bytes32",
+				indexed: false,
+				internalType: "bytes32",
 			},
 		],
 		anonymous: false,
 	},
 	{
 		type: "event",
-		name: "Approval",
+		name: "Paused",
 		inputs: [
 			{
-				name: "owner",
+				name: "account",
 				type: "address",
-				indexed: true,
-				internalType: "address",
-			},
-			{
-				name: "spender",
-				type: "address",
-				indexed: true,
-				internalType: "address",
-			},
-			{
-				name: "value",
-				type: "uint256",
 				indexed: false,
-				internalType: "uint256",
+				internalType: "address",
 			},
 		],
 		anonymous: false,
 	},
 	{
 		type: "event",
-		name: "OwnershipTransferred",
+		name: "PenaltyScheduleUpdated",
 		inputs: [
 			{
-				name: "previousOwner",
-				type: "address",
+				name: "offense",
+				type: "uint8",
 				indexed: true,
-				internalType: "address",
+				internalType: "enum NeunodeSlashing.OffenseType",
 			},
 			{
-				name: "newOwner",
-				type: "address",
+				name: "tier",
+				type: "uint256",
 				indexed: true,
-				internalType: "address",
+				internalType: "uint256",
+			},
+			{
+				name: "stakeSlashBps",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+			{
+				name: "reputationSlashBps",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+			{
+				name: "jailDurationBlocks",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+			{
+				name: "outcome",
+				type: "uint8",
+				indexed: false,
+				internalType: "enum NeunodeSlashing.PenaltyOutcome",
 			},
 		],
 		anonymous: false,
@@ -720,12 +735,12 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "event",
-		name: "SeedActivated",
+		name: "Unpaused",
 		inputs: [
 			{
 				name: "account",
 				type: "address",
-				indexed: true,
+				indexed: false,
 				internalType: "address",
 			},
 		],
@@ -733,16 +748,16 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "event",
-		name: "SeedMinted",
+		name: "ValidatorJailed",
 		inputs: [
 			{
-				name: "to",
+				name: "validator",
 				type: "address",
 				indexed: true,
 				internalType: "address",
 			},
 			{
-				name: "amount",
+				name: "releaseBlock",
 				type: "uint256",
 				indexed: false,
 				internalType: "uint256",
@@ -752,16 +767,28 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "event",
-		name: "StakeSlashed",
+		name: "ValidatorSlashed",
 		inputs: [
 			{
-				name: "account",
+				name: "validator",
 				type: "address",
 				indexed: true,
 				internalType: "address",
 			},
 			{
-				name: "amount",
+				name: "offense",
+				type: "uint8",
+				indexed: false,
+				internalType: "enum NeunodeSlashing.OffenseType",
+			},
+			{
+				name: "stakeSlashed",
+				type: "uint256",
+				indexed: false,
+				internalType: "uint256",
+			},
+			{
+				name: "reputationSlashed",
 				type: "uint256",
 				indexed: false,
 				internalType: "uint256",
@@ -771,63 +798,26 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "event",
-		name: "Staked",
+		name: "ValidatorTombstoned",
 		inputs: [
 			{
-				name: "account",
+				name: "validator",
 				type: "address",
 				indexed: true,
 				internalType: "address",
-			},
-			{
-				name: "amount",
-				type: "uint256",
-				indexed: false,
-				internalType: "uint256",
 			},
 		],
 		anonymous: false,
 	},
 	{
 		type: "event",
-		name: "Transfer",
+		name: "ValidatorUnjailed",
 		inputs: [
 			{
-				name: "from",
+				name: "validator",
 				type: "address",
 				indexed: true,
 				internalType: "address",
-			},
-			{
-				name: "to",
-				type: "address",
-				indexed: true,
-				internalType: "address",
-			},
-			{
-				name: "value",
-				type: "uint256",
-				indexed: false,
-				internalType: "uint256",
-			},
-		],
-		anonymous: false,
-	},
-	{
-		type: "event",
-		name: "Unstaked",
-		inputs: [
-			{
-				name: "account",
-				type: "address",
-				indexed: true,
-				internalType: "address",
-			},
-			{
-				name: "amount",
-				type: "uint256",
-				indexed: false,
-				internalType: "uint256",
 			},
 		],
 		anonymous: false,
@@ -855,46 +845,67 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "error",
-		name: "CannotUnstakeSeed",
+		name: "DowntimeThresholdNotMet",
+		inputs: [
+			{
+				name: "missed",
+				type: "uint256",
+				internalType: "uint256",
+			},
+			{
+				name: "required",
+				type: "uint256",
+				internalType: "uint256",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "DuplicateEvidence",
+		inputs: [
+			{
+				name: "hash",
+				type: "bytes32",
+				internalType: "bytes32",
+			},
+		],
+	},
+	{
+		type: "error",
+		name: "EnforcedPause",
 		inputs: [],
 	},
 	{
 		type: "error",
-		name: "ERC20InsufficientAllowance",
-		inputs: [
-			{
-				name: "spender",
-				type: "address",
-				internalType: "address",
-			},
-			{
-				name: "allowance",
-				type: "uint256",
-				internalType: "uint256",
-			},
-			{
-				name: "needed",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
+		name: "EvidenceExpired",
+		inputs: [],
 	},
 	{
 		type: "error",
-		name: "ERC20InsufficientBalance",
+		name: "ExpectedPause",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "InsufficientEvidence",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "InvalidEvidence",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "InvalidOffenseType",
+		inputs: [],
+	},
+	{
+		type: "error",
+		name: "InvalidPenaltyBps",
 		inputs: [
 			{
-				name: "sender",
-				type: "address",
-				internalType: "address",
-			},
-			{
-				name: "balance",
-				type: "uint256",
-				internalType: "uint256",
-			},
-			{
-				name: "needed",
+				name: "bps",
 				type: "uint256",
 				internalType: "uint256",
 			},
@@ -902,116 +913,42 @@ export const computeTokenAbi = [
 	},
 	{
 		type: "error",
-		name: "ERC20InvalidApprover",
-		inputs: [
-			{
-				name: "approver",
-				type: "address",
-				internalType: "address",
-			},
-		],
+		name: "InvalidSignature",
+		inputs: [],
 	},
 	{
 		type: "error",
-		name: "ERC20InvalidReceiver",
-		inputs: [
-			{
-				name: "receiver",
-				type: "address",
-				internalType: "address",
-			},
-		],
+		name: "JailNotExpired",
+		inputs: [],
 	},
 	{
 		type: "error",
-		name: "ERC20InvalidSender",
-		inputs: [
-			{
-				name: "sender",
-				type: "address",
-				internalType: "address",
-			},
-		],
+		name: "ReporterNotAuthorized",
+		inputs: [],
 	},
 	{
 		type: "error",
-		name: "ERC20InvalidSpender",
-		inputs: [
-			{
-				name: "spender",
-				type: "address",
-				internalType: "address",
-			},
-		],
+		name: "SameBlockHashes",
+		inputs: [],
 	},
 	{
 		type: "error",
-		name: "InsufficientBalance",
-		inputs: [
-			{
-				name: "account",
-				type: "address",
-				internalType: "address",
-			},
-			{
-				name: "required",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
+		name: "SignaturesDoNotMatchValidator",
+		inputs: [],
 	},
 	{
 		type: "error",
-		name: "InsufficientStake",
-		inputs: [
-			{
-				name: "account",
-				type: "address",
-				internalType: "address",
-			},
-			{
-				name: "required",
-				type: "uint256",
-				internalType: "uint256",
-			},
-		],
+		name: "ValidatorAlreadyTombstoned",
+		inputs: [],
 	},
 	{
 		type: "error",
-		name: "OwnableInvalidOwner",
-		inputs: [
-			{
-				name: "owner",
-				type: "address",
-				internalType: "address",
-			},
-		],
+		name: "ValidatorNotJailed",
+		inputs: [],
 	},
 	{
 		type: "error",
-		name: "OwnableUnauthorizedAccount",
-		inputs: [
-			{
-				name: "account",
-				type: "address",
-				internalType: "address",
-			},
-		],
-	},
-	{
-		type: "error",
-		name: "UnauthorizedActivityUpdate",
-		inputs: [
-			{
-				name: "caller",
-				type: "address",
-				internalType: "address",
-			},
-			{
-				name: "account",
-				type: "address",
-				internalType: "address",
-			},
-		],
+		name: "ZeroAddress",
+		inputs: [],
 	},
 ] as const;
