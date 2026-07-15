@@ -67,7 +67,7 @@ describe("createNeunodeClient", () => {
 	});
 
 	describe("resource properties", () => {
-		it("should have all 10 resource properties", () => {
+		it("should expose every built-in resource", () => {
 			const client = createNeunodeClient({ cli: { binaryPath: "agnetd" } });
 			const resourceKeys = [
 				"identity",
@@ -80,6 +80,11 @@ describe("createNeunodeClient", () => {
 				"token",
 				"reputation",
 				"inference",
+				"knowledge",
+				"discovery",
+				"turboquant",
+				"lifecycle",
+				"lineage",
 			] as const;
 			for (const key of resourceKeys) {
 				expect(client[key]).toBeDefined();

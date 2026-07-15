@@ -14,6 +14,8 @@ use super::error::ApiError;
 use super::state::ApiState;
 use super::types;
 
+const LINEAGE_PREFIX: &str = "lineage:";
+
 // ---------------------------------------------------------------------------
 // Request / Response types
 // ---------------------------------------------------------------------------
@@ -173,9 +175,9 @@ fn ct_label(ct: &ContributionType) -> String {
 }
 
 fn store_model_node(db: &neunode_storage::db::NeunodeDb, node: &ModelNode) -> Result<(), ApiError> {
-    let key = node.cid.as_bytes();
+    let key = format!("{LINEAGE_PREFIX}{}", node.cid);
     let value = serde_json::to_vec(node).map_err(|e| ApiError::Internal(e.to_string()))?;
-    db.put_raw(CF_MODELS, key, &value)?;
+    db.put_raw(CF_MODELS, key.as_bytes(), &value)?;
     Ok(())
 }
 
@@ -183,8 +185,8 @@ fn load_model_node(
     db: &neunode_storage::db::NeunodeDb,
     cid: &str,
 ) -> Result<Option<ModelNode>, ApiError> {
-    let key = cid.as_bytes();
-    match db.get_raw(CF_MODELS, key)? {
+    let key = format!("{LINEAGE_PREFIX}{cid}");
+    match db.get_raw(CF_MODELS, key.as_bytes())? {
         Some(bytes) => {
             let node: ModelNode =
                 serde_json::from_slice(&bytes).map_err(|e| ApiError::Internal(e.to_string()))?;
@@ -195,7 +197,7 @@ fn load_model_node(
 }
 
 fn rebuild_dag(db: &neunode_storage::db::NeunodeDb) -> Result<LineageDag, ApiError> {
-    let all_kv = db.prefix_scan(CF_MODELS, &[])?;
+    let all_kv = db.prefix_scan(CF_MODELS, LINEAGE_PREFIX.as_bytes())?;
     let mut nodes: Vec<ModelNode> = Vec::new();
     for (_k, v) in all_kv {
         let node: ModelNode =
@@ -228,7 +230,7 @@ fn model_node_to_summary(node: &ModelNode) -> ModelSummary {
     path = "/api/v1/lineage/register",
     request_body = RegisterLineageRequest,
     responses(
-        (status = 201, description = "Model registered in lineage DAG", body = RegisterLineageResponse)
+        (status = 201, description = "Model registered in lineage DAG", body = types::SuccessEnvelope<RegisterLineageResponse>)
     ),
     tag = "lineage",
 )]
@@ -284,7 +286,7 @@ pub async fn register_lineage(
     get,
     path = "/api/v1/lineage/{cid}",
     responses(
-        (status = 200, description = "Model details", body = LineageDetailResponse)
+        (status = 200, description = "Model details", body = types::SuccessEnvelope<LineageDetailResponse>)
     ),
     tag = "lineage",
 )]
@@ -314,7 +316,7 @@ pub async fn show_lineage(
     get,
     path = "/api/v1/lineage/{cid}/parents",
     responses(
-        (status = 200, description = "Direct parent models", body = Vec<ModelSummary>)
+        (status = 200, description = "Direct parent models", body = types::SuccessEnvelope<Vec<ModelSummary>>)
     ),
     tag = "lineage",
 )]
@@ -335,7 +337,7 @@ pub async fn show_parents(
     get,
     path = "/api/v1/lineage/{cid}/children",
     responses(
-        (status = 200, description = "Direct child models", body = Vec<ModelSummary>)
+        (status = 200, description = "Direct child models", body = types::SuccessEnvelope<Vec<ModelSummary>>)
     ),
     tag = "lineage",
 )]
@@ -356,7 +358,7 @@ pub async fn show_children(
     get,
     path = "/api/v1/lineage/{cid}/ancestors",
     responses(
-        (status = 200, description = "All ancestor models", body = Vec<ModelSummary>)
+        (status = 200, description = "All ancestor models", body = types::SuccessEnvelope<Vec<ModelSummary>>)
     ),
     tag = "lineage",
 )]
@@ -377,7 +379,7 @@ pub async fn show_ancestors(
     get,
     path = "/api/v1/lineage/{cid}/depth",
     responses(
-        (status = 200, description = "Lineage depth", body = DepthResponse)
+        (status = 200, description = "Lineage depth", body = types::SuccessEnvelope<DepthResponse>)
     ),
     tag = "lineage",
 )]
@@ -398,7 +400,7 @@ pub async fn show_depth(
     path = "/api/v1/lineage/{cid}/royalties",
     request_body = RoyaltiesRequest,
     responses(
-        (status = 200, description = "Royalty allocations", body = Vec<RoyaltyAllocation>)
+        (status = 200, description = "Royalty allocations", body = types::SuccessEnvelope<Vec<RoyaltyAllocation>>)
     ),
     tag = "lineage",
 )]
@@ -432,7 +434,7 @@ pub async fn compute_royalties(
     path = "/api/v1/lineage/hash",
     request_body = HashRequest,
     responses(
-        (status = 200, description = "Content hash computed", body = HashResponse)
+        (status = 200, description = "Content hash computed", body = types::SuccessEnvelope<HashResponse>)
     ),
     tag = "lineage",
 )]
@@ -468,7 +470,7 @@ pub async fn hash_file(
     path = "/api/v1/lineage/verify",
     request_body = VerifyRequest,
     responses(
-        (status = 200, description = "Signature verification result", body = VerifyResponse)
+        (status = 200, description = "Signature verification result", body = types::SuccessEnvelope<VerifyResponse>)
     ),
     tag = "lineage",
 )]
@@ -481,7 +483,9 @@ pub async fn verify_signature(
     let node = load_model_node(&state.db, &body.cid)?
         .ok_or_else(|| ApiError::NotFound(format!("model '{}' not found", body.cid)))?;
 
-    let sig_valid = node.signature.len() == 64;
+    // Registration currently stores a placeholder rather than a DID-bound signature.
+    // Never report cryptographic verification until canonical signing is implemented.
+    let sig_valid = false;
     let fields_valid = !node.cid.is_empty() && !node.contributor_did.is_empty();
     let verified = sig_valid && fields_valid;
 
@@ -493,4 +497,40 @@ pub async fn verify_signature(
         signature_length: node.signature.len(),
         contributor_did: node.contributor_did,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use neunode_core::types::TokenAmount;
+    use neunode_inference::provider::ModelInfo;
+
+    #[test]
+    fn lineage_namespace_ignores_other_model_record_formats() {
+        let state = crate::testutil::test_state();
+        let model = ModelInfo {
+            id: "local-model".to_string(),
+            base_model: None,
+            context_length: 4096,
+            input_price_per_million: TokenAmount(1),
+            output_price_per_million: TokenAmount(2),
+            capabilities: vec!["chat".to_string()],
+        };
+        crate::cmd_model::store_model(state.db(), &model).unwrap();
+        let node = ModelNode {
+            cid: "sha256:aa".to_string(),
+            parent_cids: vec![],
+            contributor_did: state.require_did().unwrap().0.clone(),
+            contribution_type: ContributionType::PreTraining,
+            signature: vec![0; 64],
+            created_at: 1,
+            metadata: ModelMetadata::default(),
+        };
+        store_model_node(state.db(), &node).unwrap();
+
+        let dag = rebuild_dag(state.db()).unwrap();
+        assert_eq!(dag.lineage_depth(&node.cid).unwrap(), 0);
+        let loaded = load_model_node(state.db(), &node.cid).unwrap().unwrap();
+        assert_eq!(loaded.cid, node.cid);
+    }
 }

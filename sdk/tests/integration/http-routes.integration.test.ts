@@ -7,7 +7,11 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createNeunodeClient, type NeunodeClient } from "../../src/index.js";
+import {
+	type CID,
+	createNeunodeClient,
+	type NeunodeClient,
+} from "../../src/index.js";
 import { BINARY_PATH } from "./helpers/agnetd.js";
 
 const execFileAsync = promisify(execFile);
@@ -139,6 +143,112 @@ describe("Integration: live HTTP resource routes", () => {
 	it("uses the daemon's canonical train jobs route", async () => {
 		const jobs = await client.train.list();
 		expect(jobs).toBeDefined();
+	});
+
+	it("publishes the lifecycle and lineage SDK contract in live OpenAPI", async () => {
+		const response = await fetch(`${baseUrl}/api-docs/openapi.json`);
+		expect(response.ok).toBe(true);
+		const document = (await response.json()) as {
+			paths?: Record<string, Record<string, unknown>>;
+			components?: { schemas?: Record<string, unknown> };
+		};
+		const operations = [
+			["/api/v1/lifecycle/status", "get"],
+			["/api/v1/lifecycle/activate", "post"],
+			["/api/v1/lifecycle/hibernate", "post"],
+			["/api/v1/lifecycle/reactivate", "post"],
+			["/api/v1/lifecycle/list", "get"],
+			["/api/v1/lifecycle/reap", "post"],
+			["/api/v1/lineage/register", "post"],
+			["/api/v1/lineage/{cid}", "get"],
+			["/api/v1/lineage/{cid}/parents", "get"],
+			["/api/v1/lineage/{cid}/children", "get"],
+			["/api/v1/lineage/{cid}/ancestors", "get"],
+			["/api/v1/lineage/{cid}/depth", "get"],
+			["/api/v1/lineage/{cid}/royalties", "post"],
+			["/api/v1/lineage/hash", "post"],
+			["/api/v1/lineage/verify", "post"],
+		] as const;
+		for (const [path, method] of operations) {
+			const operation = document.paths?.[path]?.[method];
+			expect(operation, `${method.toUpperCase()} ${path}`).toBeDefined();
+			expect(JSON.stringify(operation)).toContain("SuccessEnvelope");
+		}
+		for (const schema of [
+			"LifecycleStatusBody",
+			"ReapResult",
+			"RegisterLineageRequest",
+			"LineageDetailResponse",
+			"RoyaltyAllocation",
+			"VerifyResponse",
+		]) {
+			expect(document.components?.schemas?.[schema], schema).toBeDefined();
+		}
+	});
+
+	it("executes lifecycle transitions through the typed SDK", async () => {
+		expect(await client.lifecycle.status()).toHaveProperty("message");
+		expect((await client.lifecycle.activate()).message).toContain("activated");
+		const status = await client.lifecycle.status();
+		expect(status).toMatchObject({ state: "ACTIVE" });
+		expect((await client.lifecycle.hibernate()).message).toContain(
+			"hibernating",
+		);
+		expect((await client.lifecycle.reactivate()).message).toContain(
+			"reactivated",
+		);
+		expect(await client.lifecycle.list()).toEqual([
+			expect.objectContaining({ state: "ACTIVE" }),
+		]);
+		expect(await client.lifecycle.reap()).toEqual({
+			transitions: [],
+			count: 0,
+		});
+	});
+
+	it("executes lineage DAG operations alongside bincode model records", async () => {
+		await client.model.push({
+			path: "/tmp/local.gguf",
+			name: "local-test-model",
+		});
+		const root = `sha256:${"a".repeat(64)}` as CID;
+		const child = `sha256:${"b".repeat(64)}` as CID;
+		const registeredRoot = await client.lineage.register({
+			cid: root,
+			contributionType: "pre_training",
+		});
+		expect(registeredRoot.parent_cids).toEqual([]);
+		await client.lineage.register({
+			cid: child,
+			parents: [root],
+			contributionType: "fine_tune",
+			loraRank: 8,
+			loraAlpha: 16,
+		});
+		expect(await client.lineage.parents(child)).toEqual([
+			expect.objectContaining({ cid: root }),
+		]);
+		expect(await client.lineage.children(root)).toEqual([
+			expect.objectContaining({ cid: child }),
+		]);
+		expect(await client.lineage.ancestors(child)).toEqual([
+			expect.objectContaining({ cid: root }),
+		]);
+		expect(await client.lineage.depth(child)).toEqual({
+			cid: child,
+			lineage_depth: 1,
+		});
+		expect(await client.lineage.royalties(child, 10_000)).toHaveLength(1);
+		expect(await client.lineage.show(child)).toMatchObject({
+			cid: child,
+			parent_cids: [root],
+			signature_length: 64,
+		});
+		expect(await client.lineage.verify(child, "00")).toMatchObject({
+			cid: child,
+			signature_valid: false,
+			verified: false,
+		});
 	});
 
 	it("settles a bounty with reward and provider bond through the shared service", async () => {

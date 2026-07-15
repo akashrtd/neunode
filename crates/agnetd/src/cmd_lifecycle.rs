@@ -66,6 +66,22 @@ fn put_record(db: &neunode_storage::db::NeunodeDb, record: &LifecycleRecord) -> 
     Ok(())
 }
 
+fn all_records(db: &neunode_storage::db::NeunodeDb) -> Result<Vec<LifecycleRecord>> {
+    let entries = db.prefix_scan(neunode_storage::cf::CF_IDENTITY, &[])?;
+    let mut records = Vec::new();
+    for (key, value) in entries {
+        let Ok(key) = bincode::deserialize::<String>(&key) else {
+            continue;
+        };
+        if key.starts_with(LIFECYCLE_PREFIX) {
+            let record = bincode::deserialize::<LifecycleRecord>(&value)
+                .map_err(|e| anyhow::anyhow!("corrupt lifecycle record {key}: {e}"))?;
+            records.push(record);
+        }
+    }
+    Ok(records)
+}
+
 fn now_ts() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
 }
@@ -197,26 +213,23 @@ fn reactivate(writer: &OutputWriter, state: &AppState) -> Result<()> {
 }
 
 fn list_agents(writer: &OutputWriter, state: &AppState) -> Result<()> {
-    let _db = state.db();
-
     // Scan identity CF for lifecycle: prefix
-    let entries = state.db().prefix_scan("identity", b"lifecycle:")?;
-    if entries.is_empty() {
+    let records = all_records(state.db())?;
+    if records.is_empty() {
         writer.write_status("No agents registered");
         return Ok(());
     }
 
     let headers = ["DID", "State", "Last Activity"];
-    let rows: Vec<Vec<String>> = entries
+    let rows: Vec<Vec<String>> = records
         .iter()
-        .filter_map(|(_, value)| {
-            let record: LifecycleRecord = bincode::deserialize(value).ok()?;
+        .map(|record| {
             let did_short = if record.did.len() > 24 {
                 format!("{}...", &record.did[..24])
             } else {
                 record.did.clone()
             };
-            Some(vec![did_short, record.state.to_string(), record.last_activity.to_string()])
+            vec![did_short, record.state.to_string(), record.last_activity.to_string()]
         })
         .collect();
 
@@ -228,15 +241,10 @@ fn reap(writer: &OutputWriter, state: &AppState) -> Result<()> {
     let db = state.db();
     let now = now_ts();
 
-    let entries = db.prefix_scan("identity", b"lifecycle:")?;
+    let records = all_records(db)?;
     let mut transitions: Vec<(String, String, String)> = Vec::new();
 
-    for (_, value) in &entries {
-        let mut record: LifecycleRecord = match bincode::deserialize(value) {
-            Ok(r) => r,
-            Err(_) => continue,
-        };
-
+    for mut record in records {
         let elapsed = now.saturating_sub(record.last_activity);
         let old_state = record.state.clone();
 
@@ -289,4 +297,35 @@ fn reap(writer: &OutputWriter, state: &AppState) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testutil::{human_writer, test_state};
+
+    #[test]
+    fn encoded_lifecycle_keys_are_listed_and_reaped() {
+        let state = test_state();
+        let did = state.require_did().unwrap().0.clone();
+        let record = LifecycleRecord {
+            did: did.clone(),
+            state: AgentState::Active,
+            last_activity: now_ts().saturating_sub(IDLE_THRESHOLD_SECS + 1),
+            activated_at: Some(1),
+            hibernated_at: None,
+            tombstoned_at: None,
+            derived_from: None,
+        };
+        put_record(state.db(), &record).unwrap();
+
+        let records = all_records(state.db()).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].did, did);
+        list_agents(&human_writer(), &state).unwrap();
+        reap(&human_writer(), &state).unwrap();
+
+        let updated = get_record(state.db(), &did).unwrap().unwrap();
+        assert_eq!(updated.state, AgentState::Idle);
+    }
 }

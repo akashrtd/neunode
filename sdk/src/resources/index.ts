@@ -79,6 +79,31 @@ export type {
 } from "./knowledge.js";
 export { createKnowledgeResource } from "./knowledge.js";
 export type {
+	LifecycleAck,
+	LifecycleAgentSummary,
+	LifecycleNoRecord,
+	LifecycleReapResult,
+	LifecycleResource,
+	LifecycleState,
+	LifecycleStatus,
+	LifecycleStatusResult,
+	LifecycleTransition,
+} from "./lifecycle.js";
+export { createLifecycleResource } from "./lifecycle.js";
+export type {
+	LineageContributionType,
+	LineageDepth,
+	LineageDetail,
+	LineageHashResult,
+	LineageModelSummary,
+	LineageResource,
+	LineageVerifyResult,
+	RegisterLineageParams,
+	RegisterLineageResult,
+	RoyaltyAllocation,
+} from "./lineage.js";
+export { createLineageResource } from "./lineage.js";
+export type {
 	MeshConnectResult,
 	MeshDisconnectResult,
 	MeshPeersResult,

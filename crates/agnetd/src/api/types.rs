@@ -4,7 +4,7 @@ use axum::Json;
 use serde::Serialize;
 
 /// Standard success envelope matching the SDK format.
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct SuccessEnvelope<T: Serialize> {
     pub data: T,
     pub success: bool,
@@ -19,7 +19,7 @@ pub fn created<T: Serialize>(data: T) -> Response {
 }
 
 /// Generic empty success response.
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct Ack {
     pub message: String,
 }

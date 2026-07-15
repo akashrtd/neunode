@@ -42,6 +42,8 @@ function makeMockClient(
 		knowledge: {} as never,
 		discovery: {} as never,
 		turboquant: {} as never,
+		lifecycle: {} as never,
+		lineage: {} as never,
 		extend: vi.fn(),
 	};
 }

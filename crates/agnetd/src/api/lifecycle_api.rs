@@ -85,6 +85,13 @@ pub struct NoRecordResponse {
     pub message: String,
 }
 
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(untagged)]
+pub enum LifecycleStatusBody {
+    Status(LifecycleStatusResponse),
+    NoRecord(NoRecordResponse),
+}
+
 // ---------------------------------------------------------------------------
 // Storage helpers
 // ---------------------------------------------------------------------------
@@ -114,6 +121,22 @@ fn put_record(
     Ok(())
 }
 
+fn all_records(db: &neunode_storage::db::NeunodeDb) -> Result<Vec<LifecycleRecord>, ApiError> {
+    let entries = db.prefix_scan(neunode_storage::cf::CF_IDENTITY, &[])?;
+    let mut records = Vec::new();
+    for (key, value) in entries {
+        let Ok(key) = bincode::deserialize::<String>(&key) else {
+            continue;
+        };
+        if key.starts_with(LIFECYCLE_PREFIX) {
+            let record = bincode::deserialize::<LifecycleRecord>(&value)
+                .map_err(|e| ApiError::Internal(format!("corrupt lifecycle record {key}: {e}")))?;
+            records.push(record);
+        }
+    }
+    Ok(records)
+}
+
 fn now_ts() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
 }
@@ -132,7 +155,7 @@ const ZOMBIE_WARNING_SECS: u64 = 25 * 86400;
     get,
     path = "/api/v1/lifecycle/status",
     responses(
-        (status = 200, description = "Current agent lifecycle status", body = LifecycleStatusResponse)
+        (status = 200, description = "Current agent lifecycle status", body = types::SuccessEnvelope<LifecycleStatusBody>)
     ),
     tag = "lifecycle",
 )]
@@ -151,19 +174,19 @@ pub async fn lifecycle_status(
                 None
             };
 
-            Ok(types::ok(LifecycleStatusResponse {
+            Ok(types::ok(LifecycleStatusBody::Status(LifecycleStatusResponse {
                 did: did.0.clone(),
                 state: record.state.to_string(),
                 last_activity: record.last_activity,
                 elapsed_secs: elapsed,
                 activated_at: record.activated_at,
                 warning,
-            }))
+            })))
         }
-        None => Ok(types::ok(NoRecordResponse {
+        None => Ok(types::ok(LifecycleStatusBody::NoRecord(NoRecordResponse {
             message: "No lifecycle record. POST /api/v1/lifecycle/activate to register."
                 .to_string(),
-        })),
+        }))),
     }
 }
 
@@ -171,7 +194,7 @@ pub async fn lifecycle_status(
     post,
     path = "/api/v1/lifecycle/activate",
     responses(
-        (status = 200, description = "Agent activated")
+        (status = 200, description = "Agent activated", body = types::SuccessEnvelope<types::Ack>)
     ),
     tag = "lifecycle",
 )]
@@ -214,7 +237,7 @@ pub async fn activate(State(state): State<Arc<ApiState>>) -> Result<impl IntoRes
     post,
     path = "/api/v1/lifecycle/hibernate",
     responses(
-        (status = 200, description = "Agent hibernated")
+        (status = 200, description = "Agent hibernated", body = types::SuccessEnvelope<types::Ack>)
     ),
     tag = "lifecycle",
 )]
@@ -244,7 +267,7 @@ pub async fn hibernate(State(state): State<Arc<ApiState>>) -> Result<impl IntoRe
     post,
     path = "/api/v1/lifecycle/reactivate",
     responses(
-        (status = 200, description = "Agent reactivated from hibernation")
+        (status = 200, description = "Agent reactivated from hibernation", body = types::SuccessEnvelope<types::Ack>)
     ),
     tag = "lifecycle",
 )]
@@ -275,28 +298,25 @@ pub async fn reactivate(State(state): State<Arc<ApiState>>) -> Result<impl IntoR
     get,
     path = "/api/v1/lifecycle/list",
     responses(
-        (status = 200, description = "List all agent states", body = Vec<AgentSummary>)
+        (status = 200, description = "List all agent states", body = types::SuccessEnvelope<Vec<AgentSummary>>)
     ),
     tag = "lifecycle",
 )]
 pub async fn list_states(
     State(state): State<Arc<ApiState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let entries = state.db.prefix_scan("identity", b"lifecycle:")?;
-    if entries.is_empty() {
+    let records = all_records(&state.db)?;
+    if records.is_empty() {
         let empty: Vec<AgentSummary> = vec![];
         return Ok(types::ok(empty));
     }
 
-    let agents: Vec<AgentSummary> = entries
-        .iter()
-        .filter_map(|(_, value)| {
-            let record: LifecycleRecord = bincode::deserialize(value).ok()?;
-            Some(AgentSummary {
-                did: record.did,
-                state: record.state.to_string(),
-                last_activity: record.last_activity,
-            })
+    let agents: Vec<AgentSummary> = records
+        .into_iter()
+        .map(|record| AgentSummary {
+            did: record.did,
+            state: record.state.to_string(),
+            last_activity: record.last_activity,
         })
         .collect();
 
@@ -307,7 +327,7 @@ pub async fn list_states(
     post,
     path = "/api/v1/lifecycle/reap",
     responses(
-        (status = 200, description = "Reap idle/zombie agents", body = ReapResult)
+        (status = 200, description = "Reap idle/zombie agents", body = types::SuccessEnvelope<ReapResult>)
     ),
     tag = "lifecycle",
 )]
@@ -315,15 +335,10 @@ pub async fn reap(State(state): State<Arc<ApiState>>) -> Result<impl IntoRespons
     let db = &state.db;
     let now = now_ts();
 
-    let entries = db.prefix_scan("identity", b"lifecycle:")?;
+    let records = all_records(db)?;
     let mut transitions: Vec<ReapTransition> = Vec::new();
 
-    for (_, value) in &entries {
-        let mut record: LifecycleRecord = match bincode::deserialize(value) {
-            Ok(r) => r,
-            Err(_) => continue,
-        };
-
+    for mut record in records {
         let elapsed = now.saturating_sub(record.last_activity);
         let old_state = record.state.clone();
 

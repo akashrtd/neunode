@@ -23,6 +23,14 @@ import {
 	createKnowledgeResource,
 	type KnowledgeResource,
 } from "../resources/knowledge.js";
+import {
+	createLifecycleResource,
+	type LifecycleResource,
+} from "../resources/lifecycle.js";
+import {
+	createLineageResource,
+	type LineageResource,
+} from "../resources/lineage.js";
 import { createMeshResource, type MeshResource } from "../resources/mesh.js";
 import { createModelResource, type ModelResource } from "../resources/model.js";
 import {
@@ -95,6 +103,10 @@ export interface NeunodeClient {
 	readonly discovery: DiscoveryResource;
 	/** TurboQuant compression: adaptive strategy selection, codebook generation. */
 	readonly turboquant: TurboquantResource;
+	/** Agent activation, hibernation, reactivation, and reaping. */
+	readonly lifecycle: LifecycleResource;
+	/** Model provenance DAG, ancestry, verification, hashing, and royalties. */
+	readonly lineage: LineageResource;
 	/** Attach custom properties to the client. Returns the merged object. */
 	extend<T>(extender: (client: NeunodeClient) => T): NeunodeClient & T;
 }
@@ -117,6 +129,8 @@ class NeunodeClientImpl implements NeunodeClient {
 	readonly knowledge: KnowledgeResource;
 	readonly discovery: DiscoveryResource;
 	readonly turboquant: TurboquantResource;
+	readonly lifecycle: LifecycleResource;
+	readonly lineage: LineageResource;
 
 	constructor(
 		cliConfig?: CliTransportConfig,
@@ -153,6 +167,8 @@ class NeunodeClientImpl implements NeunodeClient {
 		this.knowledge = createKnowledgeResource(this);
 		this.discovery = createDiscoveryResource(this);
 		this.turboquant = createTurboquantResource(this);
+		this.lifecycle = createLifecycleResource(this);
+		this.lineage = createLineageResource(this);
 	}
 
 	get transportMode(): TransportMode {
@@ -186,6 +202,8 @@ class NeunodeClientImpl implements NeunodeClient {
 			"knowledge",
 			"discovery",
 			"turboquant",
+			"lifecycle",
+			"lineage",
 			"transportMode",
 			"extend",
 		]);

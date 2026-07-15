@@ -1103,7 +1103,7 @@ async fn feed_sse_handler(
         version = "0.1.0",
     ),
 )]
-struct ApiDoc;
+struct DashboardApiDoc;
 
 pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) -> Result<()> {
     let (feed_tx, _) = tokio::sync::broadcast::channel(256);
@@ -1151,9 +1151,10 @@ pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) ->
     // Mount REST API v1
     let app = app.merge(crate::api::build_api_router().with_state(api_state));
 
+    let mut openapi = crate::api::ApiDoc::openapi();
+    openapi.merge(DashboardApiDoc::openapi());
     let app = app.merge(
-        utoipa_swagger_ui::SwaggerUi::new("/swagger-ui")
-            .url("/api-docs/openapi.json", ApiDoc::openapi()),
+        utoipa_swagger_ui::SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi),
     );
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
@@ -1163,6 +1164,7 @@ pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) ->
         console::style("INFO").dim(),
         port
     );
+
     println!("{}  Press Ctrl+C to shut down gracefully", console::style("INFO").dim());
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
