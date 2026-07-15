@@ -21,6 +21,7 @@ function cid(label: string): `0x${string}` {
 }
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000" as const;
+const ZERO_HASH = `0x${"00".repeat(32)}` as const;
 
 /** Contribution type enum */
 const ContributionType = {
@@ -64,12 +65,13 @@ async function registerModel(
 ): Promise<`0x${string}`> {
   const { walletClient, publicClient, addresses, account } = getFixture();
   const modelCid = cid(label);
+  const derivationProofHash = parentCids.length === 0 ? ZERO_HASH : cid(`${label}-proof`);
 
   const hash = await walletClient.writeContract({
     abi: modelRegistryAbi,
     address: addresses.modelRegistry,
     functionName: "registerModel",
-    args: [modelCid, parentCids, contribution, metadataURI],
+    args: [modelCid, parentCids, contribution, metadataURI, derivationProofHash],
     account: account.address,
   });
   await publicClient.waitForTransactionReceipt({ hash });
@@ -90,7 +92,7 @@ describe("ModelRegistry", () => {
       abi: modelRegistryAbi,
       address: addresses.modelRegistry,
       functionName: "registerModel",
-      args: [modelCid, [], ContributionType.PreTraining, "ipfs://root"],
+      args: [modelCid, [], ContributionType.PreTraining, "ipfs://root", ZERO_HASH],
       account: account.address,
     });
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
@@ -205,7 +207,7 @@ describe("ModelRegistry", () => {
       abi: modelRegistryAbi,
       address: addresses.modelRegistry,
       functionName: "registerModel",
-      args: [parentCid, [], ContributionType.PreTraining, ""],
+      args: [parentCid, [], ContributionType.PreTraining, "", ZERO_HASH],
       account: account.address,
     });
     await publicClient.waitForTransactionReceipt({ hash: regHash });
@@ -214,7 +216,7 @@ describe("ModelRegistry", () => {
       abi: modelRegistryAbi,
       address: addresses.modelRegistry,
       functionName: "registerModel",
-      args: [childCid, [parentCid], ContributionType.FineTune, ""],
+      args: [childCid, [parentCid], ContributionType.FineTune, "", cid("lineage-proof")],
       account: account.address,
     });
     const receipt = await publicClient.waitForTransactionReceipt({ hash: childHash });

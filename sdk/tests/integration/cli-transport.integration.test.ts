@@ -6,9 +6,9 @@
  * is not available (e.g., CI without a Rust build step).
  */
 
-import { describe, it, expect } from "vitest";
+import { beforeAll, describe, it, expect } from "vitest";
 import { CliTransport, CliTransportError } from "../../src/transport/cli-transport.js";
-import { BINARY_PATH, hasBinary } from "./helpers/agnetd.js";
+import { BINARY_PATH } from "./helpers/agnetd.js";
 
 // ---------------------------------------------------------------------------
 // Shared transport instance (uses discovered binary path)
@@ -21,14 +21,11 @@ function makeTransport(): CliTransport {
   });
 }
 
-// Skip entire suite when binary is missing
-const skipSuite = !hasBinary;
-
 // ===========================================================================
 // A. Binary & Envelope Format
 // ===========================================================================
 
-describe("Integration: Binary & Envelope Format", { skip: skipSuite }, () => {
+describe("Integration: Binary & Envelope Format", () => {
   const transport = makeTransport();
 
   it("should find agnetd binary", () => {
@@ -56,7 +53,7 @@ describe("Integration: Binary & Envelope Format", { skip: skipSuite }, () => {
 // B. Identity Commands
 // ===========================================================================
 
-describe("Integration: Identity Commands", { skip: skipSuite }, () => {
+describe("Integration: Identity Commands", () => {
   const transport = makeTransport();
   let createdDid: string;
 
@@ -101,7 +98,7 @@ describe("Integration: Identity Commands", { skip: skipSuite }, () => {
 // C. Config Commands
 // ===========================================================================
 
-describe("Integration: Config Commands", { skip: skipSuite }, () => {
+describe("Integration: Config Commands", () => {
   const transport = makeTransport();
 
   it("should list all config values", async () => {
@@ -124,8 +121,13 @@ describe("Integration: Config Commands", { skip: skipSuite }, () => {
 // D. Bounty Commands
 // ===========================================================================
 
-describe("Integration: Bounty Commands", { skip: skipSuite }, () => {
+describe("Integration: Bounty Commands", () => {
   const transport = makeTransport();
+
+  beforeAll(async () => {
+    await transport.execute(["token", "seed"]);
+    await transport.execute(["token", "unstake", "--amount", "100"]);
+  });
 
   it("should create a bounty", async () => {
     const result = await transport.execute<Record<string, unknown>>([
@@ -165,7 +167,7 @@ describe("Integration: Bounty Commands", { skip: skipSuite }, () => {
 // E. Token Commands (multi-envelope)
 // ===========================================================================
 
-describe("Integration: Token Commands (multi-envelope)", { skip: skipSuite }, () => {
+describe("Integration: Token Commands (multi-envelope)", () => {
   const transport = makeTransport();
 
   it("should return token balance as multiple envelopes", async () => {
@@ -186,7 +188,7 @@ describe("Integration: Token Commands (multi-envelope)", { skip: skipSuite }, ()
 // F. Reputation Commands
 // ===========================================================================
 
-describe("Integration: Reputation Commands", { skip: skipSuite }, () => {
+describe("Integration: Reputation Commands", () => {
   const transport = makeTransport();
   let agentDid: string;
 
@@ -218,7 +220,7 @@ describe("Integration: Reputation Commands", { skip: skipSuite }, () => {
 // G. Feed Commands
 // ===========================================================================
 
-describe("Integration: Feed Commands", { skip: skipSuite }, () => {
+describe("Integration: Feed Commands", () => {
   const transport = makeTransport();
 
   it("should post to feed", async () => {
@@ -239,7 +241,7 @@ describe("Integration: Feed Commands", { skip: skipSuite }, () => {
 // H. Error Handling
 // ===========================================================================
 
-describe("Integration: Error Handling", { skip: skipSuite }, () => {
+describe("Integration: Error Handling", () => {
   const transport = makeTransport();
 
   it("should throw CliTransportError for invalid identity", async () => {

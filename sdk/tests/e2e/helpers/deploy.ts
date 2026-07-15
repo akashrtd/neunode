@@ -236,6 +236,22 @@ export async function deployAll(
   });
   await waitForTx(registerBountyHash);
 
+  // The legacy direct-claim entry point is intentionally manager-gated.
+  // Grant the deterministic Anvil provider used by the lifecycle tests.
+  const bountyManagerRole = await publicClient.readContract({
+    abi: neunodeBountyAbi,
+    address: neunodeBountyAddr,
+    functionName: "BOUNTY_MANAGER_ROLE",
+  });
+  const grantBountyManagerHash = await walletClient.writeContract({
+    abi: neunodeBountyAbi,
+    address: neunodeBountyAddr,
+    functionName: "grantRole",
+    args: [bountyManagerRole, "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"],
+    account: deployer,
+  });
+  await waitForTx(grantBountyManagerHash);
+
   // ── Phase 5: Deploy royalty system ────────────────────────────────────
   const modelRegistryArtifact = loadArtifact("ModelRegistry");
   const modelRegistryHash = await deployContract(walletClient, {

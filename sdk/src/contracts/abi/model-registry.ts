@@ -96,6 +96,7 @@ export const modelRegistryAbi = [
 			{ name: "parentCids", type: "bytes32[]" },
 			{ name: "contribution", type: "uint8" },
 			{ name: "metadataURI", type: "string" },
+			{ name: "derivationProofHash", type: "bytes32" },
 		],
 		outputs: [],
 		stateMutability: "nonpayable",

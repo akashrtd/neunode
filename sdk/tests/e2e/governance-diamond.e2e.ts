@@ -431,7 +431,7 @@ describe("NeunodeGovernance", () => {
       abi: neunodeGovernanceAbi,
       address: f.addresses.neunodeGovernance,
       functionName: "setVotingDelay",
-      args: [50000n],
+      args: [86400n],
       account: f.account,
     });
     await f.publicClient.waitForTransactionReceipt({ hash: setDelayHash });
@@ -452,7 +452,7 @@ describe("NeunodeGovernance", () => {
       address: f.addresses.neunodeGovernance,
       functionName: "votingDelay",
     });
-    expect(delay).toBe(50000n);
+    expect(delay).toBe(86400n);
 
     const threshold = await f.publicClient.readContract({
       abi: neunodeGovernanceAbi,

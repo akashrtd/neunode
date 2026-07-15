@@ -51,8 +51,18 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: sdk/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: "v1.5.1"
       - name: Install dependencies
         run: cd sdk && npm install
+      - name: Build daemon for integration tests
+        run: cargo build -p agnetd
+      - name: Build contracts for E2E tests
+        run: cd contracts && forge build
       - name: Build
         run: cd sdk && npm run build
       - name: Typecheck
@@ -61,3 +71,7 @@ jobs:
         run: cd sdk && npm run lint
       - name: Test (unit)
         run: cd sdk && npm test
+      - name: Test (CLI integration)
+        run: cd sdk && npm run test:integration
+      - name: Test (contract E2E)
+        run: cd sdk && npm run test:e2e
