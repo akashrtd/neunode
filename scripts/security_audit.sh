@@ -25,7 +25,18 @@ assert_unreachable hickory-proto@0.25.2 -p neunode-p2p
 # Neunode's Intel verifier selects the Ring backend only.
 assert_unreachable rsa@0.9.10 -p neunode-verification --features tee-intel
 
+# Alloy's integer stack records optional arkworks integration in Cargo.lock.
+# No Neunode target enables those features; remove this exception when ruint
+# drops ark-ff/derivative from its published dependency metadata.
+assert_unreachable derivative@2.2.0
+
+# lazy_static records its no_std spin backend in Cargo.lock, but every Neunode
+# target uses the standard-library backend. Remove this guard when lazy_static
+# publishes a release without the yanked optional dependency.
+assert_unreachable spin@0.9.8
+
 cargo audit \
   --ignore RUSTSEC-2026-0118 \
   --ignore RUSTSEC-2026-0119 \
-  --ignore RUSTSEC-2023-0071
+  --ignore RUSTSEC-2023-0071 \
+  --ignore RUSTSEC-2024-0388
