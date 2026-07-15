@@ -29,14 +29,14 @@ export type Signature = Brand<string, "Signature">;
 
 // ─── Numeric Aliases ──────────────────────────────────────────────────────────────
 
-/** Millisecond-precision unix timestamp (u64 in Rust). */
+/** Unix timestamp in seconds (u64 in Rust). */
 export type Timestamp = Brand<number, "Timestamp">;
 
 /** Monotonically increasing sequence number per-agent (u64 in Rust). */
 export type Sequence = Brand<number, "Sequence">;
 
 // ─── Token Amount ─────────────────────────────────────────────────────────────────
-// Rust: TokenAmount(u64) — too large for JS number, use bigint.
+// Rust: TokenAmount(u128) — too large for JS number, use bigint.
 
 export type TokenAmount = Brand<bigint, "TokenAmount">;
 
@@ -103,63 +103,4 @@ export const ActivityLevel = {
 
 export type ActivityLevel = (typeof ActivityLevel)[keyof typeof ActivityLevel];
 
-// ─── Kind Taxonomy ────────────────────────────────────────────────────────────────
-// Rust: enum Kind — 27 variants, #[repr(u16)], serde serializes as string name.
-// Source: neunode-core/src/kind.rs
-
-/** Feed event kind taxonomy: 27 variants across System, Bounty, Training, Attestation, Inference, and Governance. */
-export const Kind = {
-	// System (0–5)
-	AgentAnnounce: "AgentAnnounce",
-	AgentUpdate: "AgentUpdate",
-	Ping: "Ping",
-	Pong: "Pong",
-	Error: "Error",
-	Metadata: "Metadata",
-	// Bounty (1000–1102)
-	BountyPost: "BountyPost",
-	BountyClaim: "BountyClaim",
-	BountySubmit: "BountySubmit",
-	BountyReview: "BountyReview",
-	BountyAccept: "BountyAccept",
-	BountyReject: "BountyReject",
-	BountyDispute: "BountyDispute",
-	BountyResolve: "BountyResolve",
-	BountyPay: "BountyPay",
-	BountyCancel: "BountyCancel",
-	BountyExpire: "BountyExpire",
-	// Training (2000–2020)
-	TrainingStart: "TrainingStart",
-	TrainingProgress: "TrainingProgress",
-	TrainingComplete: "TrainingComplete",
-	TrainingFailed: "TrainingFailed",
-	// Attestation (3000–3010)
-	Attestation: "Attestation",
-	AttestationRevoke: "AttestationRevoke",
-	// Inference (4000–4010)
-	InferenceRequest: "InferenceRequest",
-	InferenceResult: "InferenceResult",
-	// Governance (5000–5010)
-	GovernanceProposal: "GovernanceProposal",
-	GovernanceVote: "GovernanceVote",
-} as const;
-
-export type Kind = (typeof Kind)[keyof typeof Kind];
-
-// ─── Kind Category ────────────────────────────────────────────────────────────────
-// Rust: enum KindCategory { System, Bounty, Training, Attestation, Inference,
-//        Governance, Custom, Unknown }
-
-/** Broad category a Kind variant belongs to. */
-export const KindCategory = {
-	System: "System",
-	Bounty: "Bounty",
-	Training: "Training",
-	Attestation: "Attestation",
-	Inference: "Inference",
-	Governance: "Governance",
-	Custom: "Custom",
-	Unknown: "Unknown",
-} as const;
-
-export type KindCategory = (typeof KindCategory)[keyof typeof KindCategory];
+export { Kind, KindCategory } from "./protocol.generated.js";

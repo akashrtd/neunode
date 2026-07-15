@@ -81,7 +81,7 @@ describe("Branded types compile", () => {
 	});
 
 	it("Timestamp is a branded number", () => {
-		const ts = Date.now() as Timestamp;
+		const ts = 1_700_000_000 as Timestamp;
 		expectTypeOf(ts).toBeNumber();
 	});
 
@@ -98,37 +98,41 @@ describe("Branded types compile", () => {
 
 describe("Kind enum", () => {
 	const kindKeys = [
-		"AgentAnnounce",
-		"AgentUpdate",
-		"Ping",
-		"Pong",
-		"Error",
-		"Metadata",
+		"AgentMetadata",
+		"CapabilityUpdate",
+		"ReputationChange",
+		"IdentityRotation",
+		"Lifecycle",
 		"BountyPost",
 		"BountyClaim",
 		"BountySubmit",
 		"BountyReview",
-		"BountyAccept",
-		"BountyReject",
 		"BountyDispute",
-		"BountyResolve",
-		"BountyPay",
-		"BountyCancel",
-		"BountyExpire",
-		"TrainingStart",
-		"TrainingProgress",
-		"TrainingComplete",
-		"TrainingFailed",
-		"Attestation",
-		"AttestationRevoke",
-		"InferenceRequest",
-		"InferenceResult",
-		"GovernanceProposal",
-		"GovernanceVote",
+		"BountyResolved",
+		"EscrowDeposit",
+		"EscrowRelease",
+		"EscrowRefund",
+		"JobSubmit",
+		"Checkpoint",
+		"TrainingResult",
+		"GradientUpdate",
+		"EvalScore",
+		"Attest",
+		"CounterAttest",
+		"DisputeInit",
+		"VerificationResult",
+		"ModelAnnounce",
+		"ServeOffer",
+		"ServeResult",
+		"BenchmarkClaim",
+		"Proposal",
+		"Vote",
+		"Delegate",
+		"ParameterChange",
 	] as const;
 
-	it("should have all 27 variants", () => {
-		expect(Object.keys(Kind)).toHaveLength(27);
+	it("should have all 31 variants", () => {
+		expect(Object.keys(Kind)).toHaveLength(31);
 	});
 
 	it.each(kindKeys)("should have Kind.%s", (key) => {

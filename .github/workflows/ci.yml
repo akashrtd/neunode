@@ -67,6 +67,8 @@ jobs:
         run: cd sdk && npm run build
       - name: Typecheck
         run: cd sdk && npm run typecheck
+      - name: Check Rust/TypeScript protocol drift
+        run: cd sdk && npm run check:protocol
       - name: Lint
         run: cd sdk && npm run lint
       - name: Test (unit)

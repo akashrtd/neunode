@@ -58,7 +58,59 @@ pub enum KindCategory {
     Unknown,
 }
 
+impl KindCategory {
+    /// Every category in canonical serialized order for binding generation.
+    pub const ALL: [Self; 8] = [
+        Self::System,
+        Self::Bounty,
+        Self::Training,
+        Self::Attestation,
+        Self::Inference,
+        Self::Governance,
+        Self::Custom,
+        Self::Unknown,
+    ];
+}
+
 impl Kind {
+    /// Every protocol-defined kind in canonical wire order.
+    ///
+    /// Code generators and compatibility checks must use this list instead of
+    /// maintaining a second taxonomy outside the core protocol crate.
+    pub const ALL: [Self; 31] = [
+        Self::AgentMetadata,
+        Self::CapabilityUpdate,
+        Self::ReputationChange,
+        Self::IdentityRotation,
+        Self::Lifecycle,
+        Self::BountyPost,
+        Self::BountyClaim,
+        Self::BountySubmit,
+        Self::BountyReview,
+        Self::BountyDispute,
+        Self::BountyResolved,
+        Self::EscrowDeposit,
+        Self::EscrowRelease,
+        Self::EscrowRefund,
+        Self::JobSubmit,
+        Self::Checkpoint,
+        Self::TrainingResult,
+        Self::GradientUpdate,
+        Self::EvalScore,
+        Self::Attest,
+        Self::CounterAttest,
+        Self::DisputeInit,
+        Self::VerificationResult,
+        Self::ModelAnnounce,
+        Self::ServeOffer,
+        Self::ServeResult,
+        Self::BenchmarkClaim,
+        Self::Proposal,
+        Self::Vote,
+        Self::Delegate,
+        Self::ParameterChange,
+    ];
+
     pub fn from_u16(value: u16) -> Result<Self> {
         match value {
             0 => Ok(Kind::AgentMetadata),
@@ -201,6 +253,19 @@ mod tests {
         for (val, expected) in cases {
             assert_eq!(Kind::from_u16(val).unwrap(), expected);
         }
+    }
+
+    #[test]
+    fn all_is_complete_unique_and_roundtrips() {
+        let values: std::collections::HashSet<u16> = Kind::ALL
+            .iter()
+            .map(|kind| {
+                let value = kind.as_u16();
+                assert_eq!(Kind::from_u16(value).unwrap(), *kind);
+                value
+            })
+            .collect();
+        assert_eq!(values.len(), Kind::ALL.len());
     }
 
     #[test]
