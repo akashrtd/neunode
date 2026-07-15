@@ -16,6 +16,7 @@ const abiRoot = resolve(sdkRoot, "src/contracts/abi");
 const biome = resolve(sdkRoot, "node_modules/.bin/biome");
 
 const outputs = [
+	["agent-paymaster.ts", [["agentPaymasterAbi", "AgentPaymaster"]]],
 	[
 		"bandwidth-token.ts",
 		[],

@@ -24,6 +24,7 @@ contract DeploymentTopologyTest is Test {
         assertGt(address(deployment.slashing()).code.length, 0);
         assertGt(address(deployment.stakingEscrow()).code.length, 0);
         assertGt(address(deployment.resourceAmm()).code.length, 0);
+        assertGt(address(deployment.agentPaymaster()).code.length, 0);
 
         assertEq(address(deployment.registry().identity()), address(deployment.identity()));
         assertEq(address(deployment.identity().stakeSource()), address(deployment.computeToken()));
@@ -33,6 +34,8 @@ contract DeploymentTopologyTest is Test {
         assertEq(address(deployment.reputation().stakeSource()), address(deployment.computeToken()));
         assertEq(address(deployment.slashing().token()), address(deployment.computeToken()));
         assertEq(address(deployment.slashing().reputation()), address(deployment.reputation()));
+        assertEq(address(deployment.agentPaymaster().entryPoint()), deployment.ENTRY_POINT_V08());
+        assertEq(deployment.agentPaymaster().sponsorSigner(), deployer);
         assertEq(
             address(deployment.stakingEscrow().neunodeToken()), address(deployment.computeToken())
         );
@@ -83,6 +86,10 @@ contract DeploymentTopologyTest is Test {
         assertTrue(
             deployment.resourceAmm().hasRole(deployment.resourceAmm().TREASURY_ROLE(), governance)
         );
+        assertTrue(
+            deployment.agentPaymaster()
+                .hasRole(deployment.agentPaymaster().SPONSOR_ADMIN_ROLE(), governance)
+        );
 
         assertTrue(deployment.governance().allowedTargets(address(deployment.identity())));
         assertTrue(deployment.governance().allowedTargets(address(deployment.reputation())));
@@ -90,6 +97,7 @@ contract DeploymentTopologyTest is Test {
         assertTrue(deployment.governance().allowedTargets(address(deployment.stakingEscrow())));
         assertTrue(deployment.governance().allowedTargets(address(deployment.bounty())));
         assertTrue(deployment.governance().allowedTargets(address(deployment.resourceAmm())));
+        assertTrue(deployment.governance().allowedTargets(address(deployment.agentPaymaster())));
     }
 
     function test_slashingAtomicallyUpdatesStakeAndReputation() public {

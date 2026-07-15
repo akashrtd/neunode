@@ -18,6 +18,7 @@ import "../src/reputation/NeunodeReputation.sol";
 import "../src/slashing/NeunodeSlashing.sol";
 import "../src/escrow/StakingEscrow.sol";
 import "../src/exchange/ResourceAMM.sol";
+import "../src/account/AgentPaymaster.sol";
 import "../src/diamond/Diamond.sol";
 import "../src/diamond/DiamondCutFacet.sol";
 import "../src/diamond/DiamondLoupeFacet.sol";
@@ -51,6 +52,7 @@ contract Deploy is Script {
 
     // ─── Governance ──────────────────────────────────────────────────────
     NeunodeGovernance public governance;
+    AgentPaymaster public agentPaymaster;
 
     // ─── Diamond Proxy ───────────────────────────────────────────────────
     DiamondCutFacet public diamondCutFacet;
@@ -67,6 +69,7 @@ contract Deploy is Script {
     uint256 constant MIN_REGISTRATION_STAKE = 100e18;
     uint256 constant STAKE_FACTOR_TARGET = 10_000e18;
     uint256 constant AMM_PAIR_SEED = 1_000_000e18;
+    address public constant ENTRY_POINT_V08 = 0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108;
 
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
@@ -137,9 +140,14 @@ contract Deploy is Script {
             EXECUTION_WINDOW
         );
 
+        // ── 9. Deploy ERC-4337 gas sponsorship ─────────────────────────
+        address entryPoint = vm.envOr("ENTRY_POINT", ENTRY_POINT_V08);
+        address sponsorSigner = vm.envOr("SPONSOR_SIGNER", deployer);
+        agentPaymaster = new AgentPaymaster(entryPoint, sponsorSigner, deployer);
+
         _wireGovernance(deployer);
 
-        // ── 9. Deploy diamond proxy with loupe + cut facets ─────────────
+        // ── 10. Deploy diamond proxy with loupe + cut facets ────────────
         diamondCutFacet = new DiamondCutFacet();
         diamondLoupeFacet = new DiamondLoupeFacet();
 
@@ -197,6 +205,7 @@ contract Deploy is Script {
         console.log("");
         console.log("=== Governance ===");
         console.log("NeunodeGovernance:", address(governance));
+        console.log("AgentPaymaster:", address(agentPaymaster));
         console.log("");
         console.log("=== Diamond Proxy ===");
         console.log("Diamond:", address(diamond));
@@ -243,6 +252,8 @@ contract Deploy is Script {
         slashing.grantRole(slashing.REPORTER_ROLE(), oracle);
         stakingEscrow.grantRole(stakingEscrow.DEFAULT_ADMIN_ROLE(), governanceAddress);
         stakingEscrow.grantRole(stakingEscrow.DECAY_ADMIN_ROLE(), governanceAddress);
+        agentPaymaster.grantRole(agentPaymaster.DEFAULT_ADMIN_ROLE(), governanceAddress);
+        agentPaymaster.grantRole(agentPaymaster.SPONSOR_ADMIN_ROLE(), governanceAddress);
 
         identity.transferOwnership(governanceAddress);
 
@@ -261,6 +272,7 @@ contract Deploy is Script {
         governance.setAllowedTarget(address(reputation), true);
         governance.setAllowedTarget(address(slashing), true);
         governance.setAllowedTarget(address(stakingEscrow), true);
+        governance.setAllowedTarget(address(agentPaymaster), true);
     }
 
     function _seedResourceMarkets(address treasury) internal {

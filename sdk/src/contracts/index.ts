@@ -1,5 +1,6 @@
 // ABIs
 
+export { agentPaymasterAbi } from "./abi/agent-paymaster.js";
 export { bandwidthTokenAbi } from "./abi/bandwidth-token.js";
 export { bountyReviewAbi } from "./abi/bounty-review.js";
 export { computeTokenAbi } from "./abi/compute-token.js";
@@ -26,9 +27,19 @@ export { trainingTokenAbi } from "./abi/training-token.js";
 export type { ChainId, ContractAddresses } from "./addresses.js";
 // Addresses
 export { chainAddresses, getContractAddresses } from "./addresses.js";
+export {
+	agentPaymasterSignatureMagic,
+	encodeAgentPaymasterData,
+	getAgentSponsorshipTypedData,
+} from "./paymaster.js";
+export type {
+	AgentPaymasterData,
+	AgentSponsorshipTypedData,
+} from "./paymaster.js";
 
 // Contract helpers
 export {
+	getAgentPaymaster,
 	getBandwidthToken,
 	getBountyReview,
 	getComputeToken,

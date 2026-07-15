@@ -1,6 +1,7 @@
 type Address = `0x${string}`;
 
 export interface ContractAddresses {
+	readonly agentPaymaster: Address;
 	readonly computeToken: Address;
 	readonly trainingToken: Address;
 	readonly bandwidthToken: Address;
@@ -24,6 +25,7 @@ export interface ContractAddresses {
 
 export const chainAddresses: Record<number, ContractAddresses> = {
 	31337: {
+		agentPaymaster: "0x0000000000000000000000000000000000000020" as Address,
 		computeToken: "0x0000000000000000000000000000000000000001" as Address,
 		trainingToken: "0x0000000000000000000000000000000000000002" as Address,
 		bandwidthToken: "0x0000000000000000000000000000000000000003" as Address,

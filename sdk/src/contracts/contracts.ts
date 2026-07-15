@@ -1,5 +1,6 @@
 import type { Client } from "viem";
 import { getContract } from "viem";
+import { agentPaymasterAbi } from "./abi/agent-paymaster.js";
 import { bandwidthTokenAbi } from "./abi/bandwidth-token.js";
 import { bountyReviewAbi } from "./abi/bounty-review.js";
 import { computeTokenAbi } from "./abi/compute-token.js";
@@ -53,6 +54,11 @@ function makeContract(
 		abi: abi as typeof neunodeTokenAbi,
 		client,
 	}) as unknown as GenericContract;
+}
+
+/** Get a contract instance for the ERC-4337 agent gas sponsor. */
+export function getAgentPaymaster(client: Client, address: Addr) {
+	return makeContract(agentPaymasterAbi, client, address);
 }
 
 /** Get a typed contract instance for the nCompute ERC-20 token. */
