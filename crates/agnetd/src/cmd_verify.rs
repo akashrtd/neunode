@@ -6,7 +6,9 @@ use neunode_verification::spot_check::{SpotCheckConfig, SpotChecker};
 use neunode_verification::tee_amd::{AmdGeneration, AmdSnpPolicy, AmdSnpVerifier, AmdTcb};
 use neunode_verification::tee_intel::{IntelTdxPolicy, IntelTdxVerifier};
 
-use crate::cli::{AmdGenerationArg, GlobalArgs, TeeVerifyCommands, VerifyCommands};
+use crate::cli::{
+    AmdGenerationArg, AmdVerificationPolicyArgs, GlobalArgs, TeeVerifyCommands, VerifyCommands,
+};
 use crate::output::OutputWriter;
 use crate::state::AppState;
 
@@ -222,40 +224,12 @@ fn verify_tee(command: &TeeVerifyCommands, writer: &OutputWriter, _state: &AppSt
             }));
             writer.write_status("TEE attestation verified (Intel TDX)");
         }
-        TeeVerifyCommands::Amd {
-            report,
-            ark,
-            ask,
-            vek,
-            generation,
-            measurement,
-            report_data,
-            min_bootloader,
-            min_tee,
-            min_snp,
-            min_microcode,
-            min_fmc,
-            allow_smt,
-            allow_migration,
-            now_secs,
-        } => {
+        TeeVerifyCommands::Amd { report, ark, ask, vek, generation, policy, now_secs } => {
             let generation = amd_generation(*generation);
-            if generation == AmdGeneration::Turin && min_fmc.is_none() {
+            if generation == AmdGeneration::Turin && policy.min_fmc.is_none() {
                 anyhow::bail!("--min-fmc is required for AMD Turin verification");
             }
-            let mut policy = AmdSnpPolicy::strict(
-                decode_fixed_hex(measurement, "measurement")?,
-                decode_fixed_hex(report_data, "REPORT_DATA")?,
-                AmdTcb {
-                    bootloader: *min_bootloader,
-                    tee: *min_tee,
-                    snp: *min_snp,
-                    microcode: *min_microcode,
-                    fmc: *min_fmc,
-                },
-            );
-            policy.allow_smt = *allow_smt;
-            policy.allow_migration = *allow_migration;
+            let policy = amd_policy(policy)?;
             let verified_at = trusted_time(*now_secs)?;
             let claims = AmdSnpVerifier::production_vcek(generation).verify_der(
                 &read_evidence(report, "AMD SEV-SNP report")?,
@@ -272,12 +246,72 @@ fn verify_tee(command: &TeeVerifyCommands, writer: &OutputWriter, _state: &AppSt
             }));
             writer.write_status("TEE attestation verified (AMD SEV-SNP)");
         }
+        TeeVerifyCommands::AmdVlek {
+            report,
+            ark,
+            asvk,
+            vlek,
+            crl,
+            ark_sha384,
+            product_name,
+            csp_id,
+            generation,
+            policy,
+            now_secs,
+        } => {
+            let generation = amd_generation(*generation);
+            let raw_ark = read_evidence(ark, "AMD VLEK ARK certificate")?;
+            let raw_asvk = read_evidence(asvk, "AMD ASVK certificate")?;
+            let raw_crl = read_evidence(crl, "AMD VLEK CRL")?;
+            let verifier = AmdSnpVerifier::pinned_vlek(
+                generation,
+                &raw_ark,
+                &raw_asvk,
+                &raw_crl,
+                decode_fixed_hex(ark_sha384, "ARK SHA-384")?,
+                product_name.clone(),
+                csp_id.clone(),
+            )?;
+            let claims = verifier.verify_der(
+                &read_evidence(report, "AMD SEV-SNP report")?,
+                &raw_ark,
+                &raw_asvk,
+                &read_evidence(vlek, "AMD VLEK certificate")?,
+                &amd_policy(policy)?,
+                trusted_time(*now_secs)?,
+            )?;
+            writer.write_json(&serde_json::json!({
+                "verified": true,
+                "tee_type": "amd_sev_snp_vlek",
+                "claims": claims,
+                "product_name": product_name,
+                "csp_id": csp_id,
+            }));
+            writer.write_status("TEE attestation verified (AMD SEV-SNP VLEK)");
+        }
     }
     Ok(())
 }
 
 fn read_evidence(path: &str, label: &str) -> Result<Vec<u8>> {
     std::fs::read(path).map_err(|error| anyhow::anyhow!("failed to read {label} '{path}': {error}"))
+}
+
+fn amd_policy(args: &AmdVerificationPolicyArgs) -> Result<AmdSnpPolicy> {
+    let mut policy = AmdSnpPolicy::strict(
+        decode_fixed_hex(&args.measurement, "measurement")?,
+        decode_fixed_hex(&args.report_data, "REPORT_DATA")?,
+        AmdTcb {
+            bootloader: args.min_bootloader,
+            tee: args.min_tee,
+            snp: args.min_snp,
+            microcode: args.min_microcode,
+            fmc: args.min_fmc,
+        },
+    );
+    policy.allow_smt = args.allow_smt;
+    policy.allow_migration = args.allow_migration;
+    Ok(policy)
 }
 
 fn decode_fixed_hex<const N: usize>(value: &str, label: &str) -> Result<[u8; N]> {

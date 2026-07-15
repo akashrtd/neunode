@@ -94,6 +94,38 @@ describe("VerificationResource", () => {
 		).rejects.toThrow("minimumTcb.fmc is required");
 	});
 
+	it("builds a separately pinned AMD VLEK command", async () => {
+		const client = createNeunodeClient({ cli: { binaryPath: "agnetd" } });
+		const cli = client.cli;
+		if (!cli) throw new Error("expected CLI transport");
+		const execute = vi
+			.spyOn(cli, "execute")
+			.mockResolvedValue({ verified: true });
+
+		await client.verification.verifyAmdVlek({
+			report: "report.bin",
+			ark: "ark.der",
+			asvk: "asvk.der",
+			vlek: "vlek.der",
+			crl: "vlek.crl",
+			arkSha384: "aa".repeat(48),
+			productName: "Milan-B0",
+			cspId: "cloud.example",
+			generation: "milan",
+			measurement: "11".repeat(48),
+			reportData: "22".repeat(64),
+			minimumTcb: { bootloader: 3, tee: 0, snp: 8, microcode: 115 },
+			nowSecs: 1_783_000_000,
+		});
+
+		const args = execute.mock.calls[0]?.[0] as readonly string[];
+		expect(args.slice(0, 3)).toEqual(["verify", "tee", "amd-vlek"]);
+		expect(args).toContain("--ark-sha384");
+		expect(args).toContain("--asvk");
+		expect(args).toContain("--crl");
+		expect(args).toContain("cloud.example");
+	});
+
 	it("requires the CLI transport", async () => {
 		const client = createNeunodeClient({
 			mock: { responses: {} },

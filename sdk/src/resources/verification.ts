@@ -10,12 +10,7 @@ export interface IntelTdxVerifyParams {
 	readonly nowSecs?: number;
 }
 
-export interface AmdSnpVerifyParams {
-	readonly report: string;
-	readonly ark: string;
-	readonly ask: string;
-	readonly vek: string;
-	readonly generation: AmdGeneration;
+interface AmdPolicyParams {
 	readonly measurement: string;
 	readonly reportData: string;
 	readonly minimumTcb: {
@@ -28,6 +23,26 @@ export interface AmdSnpVerifyParams {
 	readonly allowSmt?: boolean;
 	readonly allowMigration?: boolean;
 	readonly nowSecs?: number;
+}
+
+export interface AmdSnpVerifyParams extends AmdPolicyParams {
+	readonly report: string;
+	readonly ark: string;
+	readonly ask: string;
+	readonly vek: string;
+	readonly generation: AmdGeneration;
+}
+
+export interface AmdVlekVerifyParams extends AmdPolicyParams {
+	readonly report: string;
+	readonly ark: string;
+	readonly asvk: string;
+	readonly vlek: string;
+	readonly crl: string;
+	readonly arkSha384: string;
+	readonly productName: string;
+	readonly cspId: string;
+	readonly generation: Exclude<AmdGeneration, "turin">;
 }
 
 export interface IntelTdxClaims {
@@ -69,9 +84,18 @@ export interface AmdSnpVerifyResult {
 	readonly claims: AmdSnpClaims;
 }
 
+export interface AmdVlekVerifyResult {
+	readonly verified: true;
+	readonly tee_type: "amd_sev_snp_vlek";
+	readonly claims: AmdSnpClaims;
+	readonly product_name: string;
+	readonly csp_id: string;
+}
+
 export interface VerificationResource {
 	verifyIntelTdx(params: IntelTdxVerifyParams): Promise<IntelTdxVerifyResult>;
 	verifyAmdSnp(params: AmdSnpVerifyParams): Promise<AmdSnpVerifyResult>;
+	verifyAmdVlek(params: AmdVlekVerifyParams): Promise<AmdVlekVerifyResult>;
 }
 
 function cli(client: NeunodeClient) {
@@ -96,6 +120,33 @@ function unsignedInteger(value: number, label: string): string {
 		throw new Error(`${label} must be a non-negative safe integer`);
 	}
 	return String(value);
+}
+
+function amdPolicyArgs(params: AmdPolicyParams): string[] {
+	const tcb = params.minimumTcb;
+	const args = [
+		"--measurement",
+		exactHex(params.measurement, 48, "measurement"),
+		"--report-data",
+		exactHex(params.reportData, 64, "reportData"),
+		"--min-bootloader",
+		unsignedInteger(tcb.bootloader, "minimumTcb.bootloader"),
+		"--min-tee",
+		unsignedInteger(tcb.tee, "minimumTcb.tee"),
+		"--min-snp",
+		unsignedInteger(tcb.snp, "minimumTcb.snp"),
+		"--min-microcode",
+		unsignedInteger(tcb.microcode, "minimumTcb.microcode"),
+	];
+	if (tcb.fmc !== undefined) {
+		args.push("--min-fmc", unsignedInteger(tcb.fmc, "minimumTcb.fmc"));
+	}
+	if (params.allowSmt) args.push("--allow-smt");
+	if (params.allowMigration) args.push("--allow-migration");
+	if (params.nowSecs !== undefined) {
+		args.push("--now-secs", unsignedInteger(params.nowSecs, "nowSecs"));
+	}
+	return args;
 }
 
 export function createVerificationResource(
@@ -143,28 +194,39 @@ export function createVerificationResource(
 				params.vek,
 				"--generation",
 				params.generation,
-				"--measurement",
-				exactHex(params.measurement, 48, "measurement"),
-				"--report-data",
-				exactHex(params.reportData, 64, "reportData"),
-				"--min-bootloader",
-				unsignedInteger(tcb.bootloader, "minimumTcb.bootloader"),
-				"--min-tee",
-				unsignedInteger(tcb.tee, "minimumTcb.tee"),
-				"--min-snp",
-				unsignedInteger(tcb.snp, "minimumTcb.snp"),
-				"--min-microcode",
-				unsignedInteger(tcb.microcode, "minimumTcb.microcode"),
+				...amdPolicyArgs(params),
 			];
-			if (tcb.fmc !== undefined) {
-				args.push("--min-fmc", unsignedInteger(tcb.fmc, "minimumTcb.fmc"));
-			}
-			if (params.allowSmt) args.push("--allow-smt");
-			if (params.allowMigration) args.push("--allow-migration");
-			if (params.nowSecs !== undefined) {
-				args.push("--now-secs", unsignedInteger(params.nowSecs, "nowSecs"));
-			}
 			return cli(client).execute<AmdSnpVerifyResult>(args);
+		},
+
+		async verifyAmdVlek(params) {
+			if (params.productName.length === 0 || params.cspId.length === 0) {
+				throw new Error("productName and cspId cannot be empty");
+			}
+			return cli(client).execute<AmdVlekVerifyResult>([
+				"verify",
+				"tee",
+				"amd-vlek",
+				"--report",
+				params.report,
+				"--ark",
+				params.ark,
+				"--asvk",
+				params.asvk,
+				"--vlek",
+				params.vlek,
+				"--crl",
+				params.crl,
+				"--ark-sha384",
+				exactHex(params.arkSha384, 48, "arkSha384"),
+				"--product-name",
+				params.productName,
+				"--csp-id",
+				params.cspId,
+				"--generation",
+				params.generation,
+				...amdPolicyArgs(params),
+			]);
 		},
 	};
 }

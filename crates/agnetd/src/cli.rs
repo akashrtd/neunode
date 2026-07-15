@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(name = "agnetd", version, about = "Neunode AI Agent CLI")]
@@ -899,37 +899,78 @@ pub enum TeeVerifyCommands {
         /// Processor generation associated with the certificate chain
         #[arg(long, value_enum)]
         generation: AmdGenerationArg,
-        /// Expected 48-byte launch measurement in hex
-        #[arg(long)]
-        measurement: String,
-        /// Expected 64-byte challenge-bound REPORT_DATA in hex
-        #[arg(long)]
-        report_data: String,
-        /// Minimum bootloader security version
-        #[arg(long)]
-        min_bootloader: u8,
-        /// Minimum TEE security version
-        #[arg(long)]
-        min_tee: u8,
-        /// Minimum SNP security version
-        #[arg(long)]
-        min_snp: u8,
-        /// Minimum microcode security version
-        #[arg(long)]
-        min_microcode: u8,
-        /// Minimum FMC security version (required for Turin)
-        #[arg(long)]
-        min_fmc: Option<u8>,
-        /// Permit SMT-enabled guests; disabled by default
-        #[arg(long)]
-        allow_smt: bool,
-        /// Permit migration-enabled guests; disabled by default
-        #[arg(long)]
-        allow_migration: bool,
+        #[command(flatten)]
+        policy: AmdVerificationPolicyArgs,
         /// Trusted Unix verification time; defaults to the current system time
         #[arg(long)]
         now_secs: Option<u64>,
     },
+    /// Verify an AMD SEV-SNP report signed by a CSP-bound VLEK
+    AmdVlek {
+        /// Raw binary SEV-SNP attestation report
+        #[arg(long, value_name = "PATH")]
+        report: String,
+        /// Pinned AMD VLEK ARK certificate in DER form
+        #[arg(long, value_name = "PATH")]
+        ark: String,
+        /// AMD ASVK intermediate certificate in DER form
+        #[arg(long, value_name = "PATH")]
+        asvk: String,
+        /// CSP-bound AMD VLEK certificate in DER form
+        #[arg(long, value_name = "PATH")]
+        vlek: String,
+        /// Current AMD VLEK CRL in DER form
+        #[arg(long, value_name = "PATH")]
+        crl: String,
+        /// Independently provisioned SHA-384 digest of the trusted ARK
+        #[arg(long)]
+        ark_sha384: String,
+        /// Exact AMD productName certificate extension (for example Milan-B0)
+        #[arg(long)]
+        product_name: String,
+        /// Exact CSP identity certificate extension
+        #[arg(long)]
+        csp_id: String,
+        /// Processor generation; AMD's published VLEK profile supports Milan and Genoa
+        #[arg(long, value_enum)]
+        generation: AmdGenerationArg,
+        #[command(flatten)]
+        policy: AmdVerificationPolicyArgs,
+        /// Trusted Unix verification time; defaults to the current system time
+        #[arg(long)]
+        now_secs: Option<u64>,
+    },
+}
+
+#[derive(Args, Debug)]
+pub struct AmdVerificationPolicyArgs {
+    /// Expected 48-byte launch measurement in hex
+    #[arg(long)]
+    pub measurement: String,
+    /// Expected 64-byte challenge-bound REPORT_DATA in hex
+    #[arg(long)]
+    pub report_data: String,
+    /// Minimum bootloader security version
+    #[arg(long)]
+    pub min_bootloader: u8,
+    /// Minimum TEE security version
+    #[arg(long)]
+    pub min_tee: u8,
+    /// Minimum SNP security version
+    #[arg(long)]
+    pub min_snp: u8,
+    /// Minimum microcode security version
+    #[arg(long)]
+    pub min_microcode: u8,
+    /// Minimum FMC security version (required for Turin)
+    #[arg(long)]
+    pub min_fmc: Option<u8>,
+    /// Permit SMT-enabled guests; disabled by default
+    #[arg(long)]
+    pub allow_smt: bool,
+    /// Permit migration-enabled guests; disabled by default
+    #[arg(long)]
+    pub allow_migration: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -1434,12 +1475,68 @@ mod tests {
             Commands::Verify {
                 command: VerifyCommands::Tee {
                     command: TeeVerifyCommands::Amd {
-                        allow_smt: false,
-                        allow_migration: false,
+                        policy: AmdVerificationPolicyArgs {
+                            allow_smt: false,
+                            allow_migration: false,
+                            ..
+                        },
                         ..
                     }
                 }
             }
+        ));
+    }
+
+    #[test]
+    fn parse_amd_vlek_requires_explicit_trust_inputs() {
+        let cli = Cli::try_parse_from([
+            "agnetd",
+            "verify",
+            "tee",
+            "amd-vlek",
+            "--report",
+            "report.bin",
+            "--ark",
+            "ark.der",
+            "--asvk",
+            "asvk.der",
+            "--vlek",
+            "vlek.der",
+            "--crl",
+            "vlek.crl",
+            "--ark-sha384",
+            &"aa".repeat(48),
+            "--product-name",
+            "Milan-B0",
+            "--csp-id",
+            "cloud.example",
+            "--generation",
+            "milan",
+            "--measurement",
+            &"11".repeat(48),
+            "--report-data",
+            &"22".repeat(64),
+            "--min-bootloader",
+            "3",
+            "--min-tee",
+            "0",
+            "--min-snp",
+            "8",
+            "--min-microcode",
+            "115",
+        ])
+        .expect("parse AMD VLEK verification");
+        assert!(matches!(
+            cli.command,
+            Commands::Verify {
+                command: VerifyCommands::Tee {
+                    command: TeeVerifyCommands::AmdVlek {
+                        product_name,
+                        csp_id,
+                        ..
+                    }
+                }
+            } if product_name == "Milan-B0" && csp_id == "cloud.example"
         ));
     }
 }

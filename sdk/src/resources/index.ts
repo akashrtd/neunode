@@ -174,6 +174,8 @@ export type {
 	AmdSnpVerifyParams,
 	AmdSnpVerifyResult,
 	AmdTcbClaims,
+	AmdVlekVerifyParams,
+	AmdVlekVerifyResult,
 	IntelTdxClaims,
 	IntelTdxVerifyParams,
 	IntelTdxVerifyResult,
