@@ -11,6 +11,7 @@ spot-check = []
 repops = []
 tee = []
 tee-sim = []
+tee-intel = ["tee", "dep:dcap-qvl"]
 zk = []
 
 [dependencies]
@@ -24,3 +25,4 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 ts-rs = { workspace = true }
 rand = { version = "0.8" }
+dcap-qvl = { version = "=0.5.2", optional = true, default-features = false, features = ["std", "ring", "default-x509"] }
