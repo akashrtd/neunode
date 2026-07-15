@@ -141,7 +141,7 @@ describe("createTrainResource", () => {
 			const resource = createTrainResource(dualClient);
 			await resource.status("job_123");
 			expect(http.get).toHaveBeenCalledWith(
-				"/api/v1/train/status?jobId=job_123",
+				"/api/v1/train/status?job_id=job_123",
 			);
 		});
 
@@ -175,7 +175,7 @@ describe("createTrainResource", () => {
 			const resource = createTrainResource(dualClient);
 			await resource.stop("job_123");
 			expect(http.post).toHaveBeenCalledWith("/api/v1/train/stop", {
-				jobId: "job_123",
+				job_id: "job_123",
 			});
 		});
 
@@ -230,9 +230,10 @@ describe("createTrainResource", () => {
 				maxModelParams: 7,
 			});
 			expect(http.post).toHaveBeenCalledWith("/api/v1/train/worker-register", {
-				gpuCount: 4,
-				gpuMemoryGb: 80,
-				maxModelParams: 7,
+				gpu_count: 4,
+				gpu_memory: 80,
+				max_params: 7,
+				bf16: false,
 			});
 		});
 
@@ -307,8 +308,8 @@ describe("createTrainResource", () => {
 			expect(http.get).toHaveBeenCalled();
 			const callUrl = http.get.mock.calls[0]?.[0] as string;
 			expect(callUrl).toContain("/api/v1/train/workers?");
-			expect(callUrl).toContain("minGpu=4");
-			expect(callUrl).toContain("minMemory=40");
+			expect(callUrl).toContain("min_gpu=4");
+			expect(callUrl).toContain("min_memory=40");
 		});
 
 		it("should call execute with train worker-list (no params) via CLI", async () => {
@@ -343,7 +344,7 @@ describe("createTrainResource", () => {
 			const resource = createTrainResource(dualClient);
 			await resource.coordinatorStatus({ jobId: "job_abc" });
 			expect(http.get).toHaveBeenCalledWith(
-				"/api/v1/train/coordinator-status?jobId=job_abc",
+				"/api/v1/train/coordinator-status?job_id=job_abc",
 			);
 		});
 

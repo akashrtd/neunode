@@ -7,12 +7,20 @@ export interface TrainStartParams {
 }
 
 export interface TrainStartResult {
-	"Job ID": string;
-	Model: string;
-	Dataset: string;
-	Config: string;
-	Status: string;
-	Method: string;
+	job_id: string;
+	model: string;
+	dataset: string;
+	status: string;
+	created_at: number;
+	method: string;
+	config?: {
+		local_steps: number;
+		inner_lr: number;
+		outer_lr: number;
+		batch_size: number;
+		max_workers: number;
+		async_mode: boolean;
+	};
 }
 
 export interface TrainStatusResult {
@@ -30,15 +38,7 @@ export interface TrainStopResult {
 	status: string;
 }
 
-export interface TrainListResult {
-	data: Array<{
-		"Job ID": string;
-		Model: string;
-		Dataset: string;
-		Status: string;
-		Method: string;
-	}>;
-}
+export type TrainListResult = TrainStartResult[];
 
 export interface WorkerRegisterParams {
 	gpuCount: number;
@@ -54,7 +54,6 @@ export interface WorkerRegisterResult {
 	max_model_params: number;
 	supports_bf16: boolean;
 	status: string;
-	registered_at: number;
 }
 
 export interface WorkerListParams {
@@ -62,15 +61,7 @@ export interface WorkerListParams {
 	minMemory?: number;
 }
 
-export interface WorkerListResult {
-	data: Array<{
-		worker_id: string;
-		gpu_count: number;
-		gpu_memory_gb: number;
-		supports_bf16: boolean;
-		status: string;
-	}>;
-}
+export type WorkerListResult = WorkerRegisterResult[];
 
 export interface CoordinatorStatusParams {
 	jobId: string;
@@ -78,10 +69,14 @@ export interface CoordinatorStatusParams {
 
 export interface CoordinatorStatusResult {
 	job_id: string;
-	status: string;
-	workers_count: number;
-	current_outer_step: number;
-	created_at: number;
+	job_status: string;
+	model: string;
+	method: string;
+	config: unknown;
+	coordinator: {
+		active_workers: number;
+		phase: string;
+	};
 }
 
 /** Distributed training job management. */
@@ -131,7 +126,7 @@ export function createTrainResource(client: NeunodeClient): TrainResource {
 		async status(jobId?: string): Promise<TrainStatusResult> {
 			if (client.http) {
 				const qs = new URLSearchParams();
-				if (jobId) qs.set("jobId", jobId);
+				if (jobId) qs.set("job_id", jobId);
 				const query = qs.toString();
 				return client.http.get<TrainStatusResult>(
 					query ? `/api/v1/train/status?${query}` : "/api/v1/train/status",
@@ -148,7 +143,7 @@ export function createTrainResource(client: NeunodeClient): TrainResource {
 		async stop(jobId: string): Promise<TrainStopResult> {
 			if (client.http) {
 				return client.http.post<TrainStopResult>(`/api/v1/train/stop`, {
-					jobId,
+					job_id: jobId,
 				});
 			}
 			const cli = client.cli;
@@ -173,7 +168,12 @@ export function createTrainResource(client: NeunodeClient): TrainResource {
 			if (client.http) {
 				return client.http.post<WorkerRegisterResult>(
 					"/api/v1/train/worker-register",
-					params,
+					{
+						gpu_count: params.gpuCount,
+						gpu_memory: params.gpuMemoryGb,
+						max_params: params.maxModelParams,
+						bf16: params.supportsBf16 ?? false,
+					},
 				);
 			}
 			const cli = client.cli;
@@ -196,8 +196,8 @@ export function createTrainResource(client: NeunodeClient): TrainResource {
 		async listWorkers(params?: WorkerListParams): Promise<WorkerListResult> {
 			if (client.http) {
 				const qs = new URLSearchParams();
-				if (params?.minGpu) qs.set("minGpu", String(params.minGpu));
-				if (params?.minMemory) qs.set("minMemory", String(params.minMemory));
+				if (params?.minGpu) qs.set("min_gpu", String(params.minGpu));
+				if (params?.minMemory) qs.set("min_memory", String(params.minMemory));
 				const query = qs.toString();
 				return client.http.get<WorkerListResult>(
 					query ? `/api/v1/train/workers?${query}` : "/api/v1/train/workers",
@@ -218,7 +218,7 @@ export function createTrainResource(client: NeunodeClient): TrainResource {
 		): Promise<CoordinatorStatusResult> {
 			if (client.http) {
 				return client.http.get<CoordinatorStatusResult>(
-					`/api/v1/train/coordinator-status?jobId=${encodeURIComponent(params.jobId)}`,
+					`/api/v1/train/coordinator-status?job_id=${encodeURIComponent(params.jobId)}`,
 				);
 			}
 			const cli = client.cli;

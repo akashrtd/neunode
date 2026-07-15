@@ -187,8 +187,8 @@ export function createInferenceResource(
 			if (client.http) {
 				const qs = new URLSearchParams();
 				qs.set("model", model);
-				qs.set("inputTokens", String(inputTokens));
-				qs.set("outputTokens", String(outputTokens));
+				qs.set("input_tokens", String(inputTokens));
+				qs.set("output_tokens", String(outputTokens));
 				return client.http.get<InferencePricingResult>(
 					`/api/v1/inference/pricing?${qs.toString()}`,
 				);

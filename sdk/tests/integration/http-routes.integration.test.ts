@@ -145,6 +145,37 @@ describe("Integration: live HTTP resource routes", () => {
 		expect(jobs).toBeDefined();
 	});
 
+	it("uses canonical HTTP field names across training and inference", async () => {
+		const job = await client.train.start({ model: "tiny", dataset: "fixture" });
+		expect(job.job_id).toMatch(/^train_/);
+		expect((await client.train.status(job.job_id)).job_id).toBe(job.job_id);
+
+		const worker = await client.train.registerWorker({
+			gpuCount: 2,
+			gpuMemoryGb: 24,
+			maxModelParams: 7_000_000_000,
+			supportsBf16: true,
+		});
+		expect(worker).toMatchObject({ gpu_count: 2, supports_bf16: true });
+		expect(
+			await client.train.listWorkers({ minGpu: 2, minMemory: 20 }),
+		).toEqual([expect.objectContaining({ worker_id: worker.worker_id })]);
+		expect(
+			await client.train.coordinatorStatus({ jobId: job.job_id }),
+		).toMatchObject({
+			job_id: job.job_id,
+			coordinator: { active_workers: 1 },
+		});
+		expect((await client.train.stop(job.job_id)).status).toBe("stopped");
+
+		const pricing = await client.inference.pricing("tiny", 1_000, 500);
+		expect(pricing).toMatchObject({
+			model: "tiny",
+			input_tokens: 1_000,
+			output_tokens: 500,
+		});
+	});
+
 	it("publishes the lifecycle and lineage SDK contract in live OpenAPI", async () => {
 		const response = await fetch(`${baseUrl}/api-docs/openapi.json`);
 		expect(response.ok).toBe(true);

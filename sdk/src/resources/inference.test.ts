@@ -283,7 +283,7 @@ describe("createInferenceResource", () => {
 			const resource = createInferenceResource(dualClient);
 			await resource.pricing("llama-3b", 1000, 500);
 			expect(http.get).toHaveBeenCalledWith(
-				"/api/v1/inference/pricing?model=llama-3b&inputTokens=1000&outputTokens=500",
+				"/api/v1/inference/pricing?model=llama-3b&input_tokens=1000&output_tokens=500",
 			);
 		});
 
