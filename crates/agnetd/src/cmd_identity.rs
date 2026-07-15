@@ -47,8 +47,12 @@ fn create_identity(
         capabilities.push("inference".to_string());
         capabilities.push("training".to_string());
     }
-    let card =
-        neunode_identity::agent_card::AgentCard::new(name, &keyring, capabilities, HashMap::new())?;
+    let card = neunode_identity::agent_card::AgentCard::new(
+        name,
+        &keyring,
+        capabilities.clone(),
+        HashMap::new(),
+    )?;
     let signed_card = card.sign(&keyring);
     let doc = neunode_identity::document::DidDocument::from_keyring(&keyring)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -100,6 +104,12 @@ fn create_identity(
     let store = state.identity_store();
     let doc_json = doc.to_json()?;
     store.put(&did_str, &doc_json)?;
+    crate::cmd_knowledge::register_agent_capabilities(
+        state.db(),
+        &keyring,
+        &did_str,
+        &capabilities,
+    )?;
 
     state.config.active_identity = Some(did_str.clone());
     state.config.app_config.active_identity = Some(did_str.clone());

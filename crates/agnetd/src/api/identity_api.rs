@@ -132,7 +132,7 @@ pub async fn create_identity(
     let card = neunode_identity::agent_card::AgentCard::new(
         &body.name,
         &keyring,
-        capabilities,
+        capabilities.clone(),
         std::collections::HashMap::new(),
     )
     .map_err(|e| ApiError::Internal(format!("failed to create agent card: {e}")))?;
@@ -145,6 +145,13 @@ pub async fn create_identity(
         .to_json()
         .map_err(|e| ApiError::Internal(format!("failed to serialize DID document: {e}")))?;
     store.put(&did.to_string(), &doc_json).map_err(|e| ApiError::Internal(e.to_string()))?;
+    crate::cmd_knowledge::register_agent_capabilities(
+        &state.db,
+        &keyring,
+        &did.to_string(),
+        &capabilities,
+    )
+    .map_err(|e| ApiError::Internal(format!("failed to index agent capabilities: {e}")))?;
 
     let card_cid = card.to_cid();
 
@@ -263,6 +270,19 @@ pub async fn register_onchain(
 mod tests {
     use super::*;
 
+    fn test_api_state() -> Arc<ApiState> {
+        let app = crate::testutil::test_state();
+        let (feed_tx, _) = tokio::sync::broadcast::channel(4);
+        Arc::new(ApiState {
+            db: Arc::clone(&app.db),
+            active_did: app.active_did,
+            active_keyring: Arc::new(std::sync::Mutex::new(app.active_keyring)),
+            mesh_handle: Arc::new(tokio::sync::RwLock::new(None)),
+            config: Arc::new(std::sync::RwLock::new(app.config)),
+            feed_tx,
+        })
+    }
+
     #[test]
     fn create_identity_request_default_method() {
         let req: CreateIdentityRequest = serde_json::from_str(r#"{"name": "test"}"#).unwrap();
@@ -313,5 +333,36 @@ mod tests {
         let back: OnChainRegistrationResponse = serde_json::from_str(&json).unwrap();
         assert_eq!(resp.tx_hash, back.tx_hash);
         assert_eq!(resp.block_number, back.block_number);
+    }
+
+    #[tokio::test]
+    async fn create_neunode_identity_indexes_capabilities_for_discovery() {
+        let state = test_api_state();
+        let did = state.require_keyring().unwrap().to_did().to_string();
+
+        create_identity(
+            State(Arc::clone(&state)),
+            Json(CreateIdentityRequest { name: "discoverable".into(), method: "neunode".into() }),
+        )
+        .await
+        .unwrap();
+
+        let dict = neunode_knowledge::StringDictionary::new(&state.db);
+        let engine = neunode_knowledge::QueryEngine::new(&state.db, &dict);
+        let predicate = neunode_knowledge::StringDictionary::hash(&neunode_knowledge::nn(
+            neunode_knowledge::PRED_HAS_CAPABILITY,
+        ));
+        let results = engine
+            .query(&neunode_knowledge::QueryPattern {
+                subject: Some(neunode_knowledge::StringDictionary::hash(&did)),
+                predicate: Some(predicate),
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert_eq!(results.len(), 2);
+        let capabilities: Vec<String> = results.iter().map(|quad| quad.object.clone()).collect();
+        assert!(capabilities.contains(&neunode_knowledge::nn("inference")));
+        assert!(capabilities.contains(&neunode_knowledge::nn("training")));
     }
 }

@@ -146,24 +146,36 @@ fn register_agent(
 
     let keyring = state.require_keyring()?;
     let caps = parse_capabilities(capabilities);
-    let cap_refs: Vec<&str> = caps.iter().map(|s| s.as_str()).collect();
-
-    let payload = neunode_knowledge::authorization::canonical_register_agent(did, &cap_refs);
-    let auth = sign_mutation(keyring, did, &payload)?;
-
-    let db = state.db();
-    let dict = neunode_knowledge::StringDictionary::new(db);
-    let batch = neunode_knowledge::register_agent(&dict, did, &cap_refs)?;
-    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
+    let triples_inserted = register_agent_capabilities(state.db(), keyring, did, &caps)?;
 
     let out = serde_json::json!({
         "did": did,
         "capabilities": caps,
-        "triples_inserted": batch.len(),
+        "triples_inserted": triples_inserted,
     });
     writer.write_json(&out);
     writer.write_status(&format!("Agent registered: {did}"));
     Ok(())
+}
+
+pub(crate) fn register_agent_capabilities(
+    db: &neunode_storage::db::NeunodeDb,
+    keyring: &neunode_identity::keyring::Keyring,
+    did: &str,
+    capabilities: &[String],
+) -> Result<usize> {
+    if did.is_empty() {
+        anyhow::bail!("agent DID cannot be empty");
+    }
+
+    let cap_refs: Vec<&str> = capabilities.iter().map(String::as_str).collect();
+    let payload = neunode_knowledge::authorization::canonical_register_agent(did, &cap_refs);
+    let auth = sign_mutation(keyring, did, &payload)?;
+    let dict = neunode_knowledge::StringDictionary::new(db);
+    let batch = neunode_knowledge::register_agent(&dict, did, &cap_refs)?;
+    let count = batch.len();
+    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
+    Ok(count)
 }
 
 // ---------------------------------------------------------------------------
