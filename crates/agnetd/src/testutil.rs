@@ -28,9 +28,11 @@ pub fn test_state() -> AppState {
     let kr = Keyring::generate();
     let did = kr.to_did();
 
+    let config_path = dir.join("config.toml");
+
     AppState {
         db: Arc::new(db),
-        config: CliConfig::load(None).unwrap(),
+        config: CliConfig::load(config_path.to_str()).unwrap(),
         active_keyring: Some(kr),
         active_did: Some(did),
         mesh_handle: None,

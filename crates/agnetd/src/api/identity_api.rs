@@ -204,7 +204,8 @@ pub async fn list_identities(
 pub async fn register_onchain(
     State(state): State<Arc<ApiState>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let contracts = &state.config.app_config.contracts;
+    let config = state.config_snapshot()?;
+    let contracts = &config.app_config.contracts;
     let rpc_url = match &contracts.eth_rpc_url {
         Some(url) => url.clone(),
         None => {

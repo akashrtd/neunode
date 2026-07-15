@@ -60,10 +60,10 @@ export function createConfigResource(client: NeunodeClient): ConfigResource {
 
 		async path(): Promise<string> {
 			if (client.http) {
-				const result = await client.http.get<Record<string, string>>(
+				const result = await client.http.get<{ path: string }>(
 					"/api/v1/config/path",
 				);
-				return result["Config path"] ?? "";
+				return result.path;
 			}
 			const cli = client.cli;
 			if (!cli)

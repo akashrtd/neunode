@@ -314,7 +314,7 @@ pub async fn stake(
         amount: body.amount,
         token: token_name,
         state: "Staked".to_string(),
-        unbonding_period_secs: state.config.app_config.tokens.unbonding_period_secs,
+        unbonding_period_secs: state.config_snapshot()?.app_config.tokens.unbonding_period_secs,
     }))
 }
 
@@ -337,13 +337,14 @@ pub async fn unstake(
 
     let did = state.require_did()?;
     let token_types = [TOKEN_COMPUTE, TOKEN_TRAINING, TOKEN_BANDWIDTH, TOKEN_STORAGE];
+    let unbonding_period_secs = state.config_snapshot()?.app_config.tokens.unbonding_period_secs;
     let entry = UnbondingStore::new(&state.db)
         .begin(
             &did.0,
             &token_types,
             body.amount as u128,
             current_timestamp(),
-            state.config.app_config.tokens.unbonding_period_secs,
+            unbonding_period_secs,
         )
         .map_err(|error| match error {
             neunode_storage::error::StorageError::InsufficientStakedBalance { .. } => {

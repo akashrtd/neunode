@@ -1,5 +1,5 @@
 use std::ops::Deref;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use neunode_core::types::Did;
 use neunode_identity::keyring::Keyring;
@@ -15,7 +15,7 @@ pub struct ApiState {
     pub active_did: Option<Did>,
     pub active_keyring: Arc<Mutex<Option<Keyring>>>,
     pub mesh_handle: Arc<tokio::sync::RwLock<Option<MeshHandle>>>,
-    pub config: CliConfig,
+    pub(crate) config: Arc<RwLock<CliConfig>>,
     #[allow(dead_code)]
     pub feed_tx: tokio::sync::broadcast::Sender<FeedEventUpdate>,
 }
@@ -52,5 +52,26 @@ impl ApiState {
             return Err(super::error::ApiError::NoIdentity);
         }
         Ok(KeyringGuard(guard))
+    }
+
+    pub fn config_snapshot(&self) -> Result<CliConfig, super::error::ApiError> {
+        self.config
+            .read()
+            .map(|config| config.clone())
+            .map_err(|_| super::error::ApiError::Internal("config lock is poisoned".to_string()))
+    }
+
+    pub fn set_config_value(&self, key: &str, value: &str) -> Result<(), super::error::ApiError> {
+        let mut live = self
+            .config
+            .write()
+            .map_err(|_| super::error::ApiError::Internal("config lock is poisoned".to_string()))?;
+        let mut candidate = live.clone();
+        candidate
+            .set(key, value)
+            .map_err(|error| super::error::ApiError::BadRequest(error.to_string()))?;
+        candidate.save().map_err(|error| super::error::ApiError::Internal(error.to_string()))?;
+        *live = candidate;
+        Ok(())
     }
 }

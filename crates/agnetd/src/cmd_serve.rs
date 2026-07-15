@@ -1121,7 +1121,7 @@ pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) ->
         active_did: app_state.active_did.clone(),
         active_keyring: std::sync::Mutex::new(app_state.active_keyring.take()).into(),
         mesh_handle: tokio::sync::RwLock::new(None).into(),
-        config: app_state.config.clone(),
+        config: std::sync::RwLock::new(app_state.config.clone()).into(),
         feed_tx: feed_tx.clone(),
     });
 

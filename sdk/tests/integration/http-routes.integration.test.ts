@@ -165,10 +165,21 @@ describe("Integration: live HTTP resource routes", () => {
 	});
 
 	it("keeps newly unbonded tokens locked before maturity", async () => {
+		await client.config.set({
+			key: "tokens.unbonding_period_secs",
+			value: "7200",
+		});
+		expect(await client.config.get("tokens.unbonding_period_secs")).toBe(
+			"7200",
+		);
+
+		const beforeUnstake = Math.floor(Date.now() / 1000);
 		await client.token.stake({ amount: 100, token: "compute" });
 		const position = await client.token.unstake(100);
 		expect(position.id).toMatch(/^unbond_/);
 		expect(position.state).toBe("Unbonding");
+		expect(position.unbond_at - beforeUnstake).toBeGreaterThanOrEqual(7200);
+		expect(position.unbond_at - beforeUnstake).toBeLessThanOrEqual(7205);
 
 		const earlyClaim = await client.token.claimUnbonded();
 		const status = await client.token.stakeStatus();

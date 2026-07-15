@@ -149,9 +149,7 @@ describe("createConfigResource", () => {
 			const http = dualClient.http as unknown as {
 				get: ReturnType<typeof vi.fn>;
 			};
-			http.get.mockResolvedValue({
-				"Config path": "/home/user/.agnetd/config.toml",
-			});
+			http.get.mockResolvedValue({ path: "/home/user/.agnetd/config.toml" });
 			const resource = createConfigResource(dualClient);
 			const result = await resource.path();
 			expect(http.get).toHaveBeenCalledWith("/api/v1/config/path");
