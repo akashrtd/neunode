@@ -148,6 +148,38 @@ describe.sequential("Integration: Config Commands", () => {
 		]);
 		expect(result).toHaveProperty("agent.name");
 	});
+
+	it("should set, get, and restore the active identity", async () => {
+		const original = await transport.execute<Record<string, string>>([
+			"config",
+			"get",
+			"active_identity",
+		]);
+		const originalDid = original.active_identity ?? "";
+		const configuredDid = "did:neunode:config-integration";
+
+		await transport.executeRaw([
+			"config",
+			"set",
+			"active_identity",
+			configuredDid,
+		]);
+		try {
+			const updated = await transport.execute<Record<string, string>>([
+				"config",
+				"get",
+				"active_identity",
+			]);
+			expect(updated.active_identity).toBe(configuredDid);
+		} finally {
+			await transport.executeRaw([
+				"config",
+				"set",
+				"active_identity",
+				originalDid,
+			]);
+		}
+	});
 });
 
 // ===========================================================================

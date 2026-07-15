@@ -10,6 +10,7 @@ const CONFIG_FILE_NAME: &str = "config.toml";
 /// Type-safe config key enum — replaces stringly-typed key matching.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConfigKey {
+    ActiveIdentity,
     AgentName,
     AgentDidMethod,
     AgentDataDir,
@@ -31,6 +32,7 @@ pub enum ConfigKey {
 impl ConfigKey {
     pub fn from_dot_path(key: &str) -> Option<Self> {
         match key {
+            "active_identity" => Some(Self::ActiveIdentity),
             "agent.name" => Some(Self::AgentName),
             "agent.did_method" => Some(Self::AgentDidMethod),
             "agent.data_dir" => Some(Self::AgentDataDir),
@@ -53,6 +55,7 @@ impl ConfigKey {
 
     pub fn to_dot_path(self) -> &'static str {
         match self {
+            Self::ActiveIdentity => "active_identity",
             Self::AgentName => "agent.name",
             Self::AgentDidMethod => "agent.did_method",
             Self::AgentDataDir => "agent.data_dir",
@@ -72,7 +75,8 @@ impl ConfigKey {
         }
     }
 
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 17] = [
+        Self::ActiveIdentity,
         Self::AgentName,
         Self::AgentDidMethod,
         Self::AgentDataDir,
@@ -158,6 +162,11 @@ impl CliConfig {
 
     pub fn set_typed(&mut self, key: ConfigKey, value: &str) -> Result<()> {
         match key {
+            ConfigKey::ActiveIdentity => {
+                let identity = (!value.is_empty()).then(|| value.to_string());
+                self.active_identity = identity.clone();
+                self.app_config.active_identity = identity;
+            }
             ConfigKey::AgentName => self.app_config.agent.name = value.to_string(),
             ConfigKey::AgentDidMethod => self.app_config.agent.did_method = value.to_string(),
             ConfigKey::AgentDataDir => self.app_config.agent.data_dir = value.to_string(),
@@ -215,6 +224,7 @@ impl CliConfig {
 
     pub fn get_typed(&self, key: ConfigKey) -> String {
         match key {
+            ConfigKey::ActiveIdentity => self.active_identity.clone().unwrap_or_default(),
             ConfigKey::AgentName => self.app_config.agent.name.clone(),
             ConfigKey::AgentDidMethod => self.app_config.agent.did_method.clone(),
             ConfigKey::AgentDataDir => self.app_config.agent.data_dir.clone(),
@@ -412,7 +422,27 @@ mod tests {
 
     #[test]
     fn config_key_all_count() {
-        assert_eq!(ConfigKey::ALL.len(), 16);
+        assert_eq!(ConfigKey::ALL.len(), 17);
+    }
+
+    #[test]
+    fn active_identity_set_clear_and_reload_roundtrip() {
+        let path = temp_config_path();
+        cleanup(&path);
+        let mut config = CliConfig::load(Some(path.to_str().unwrap())).expect("load");
+
+        config.set("active_identity", "did:neunode:alice").unwrap();
+        assert_eq!(config.get("active_identity"), Some("did:neunode:alice".to_string()));
+        assert_eq!(config.active_identity.as_deref(), Some("did:neunode:alice"));
+        assert_eq!(config.app_config.active_identity.as_deref(), Some("did:neunode:alice"));
+        config.save().unwrap();
+
+        let mut reloaded = CliConfig::load(Some(path.to_str().unwrap())).expect("reload");
+        assert_eq!(reloaded.get("active_identity"), Some("did:neunode:alice".to_string()));
+        reloaded.set("active_identity", "").unwrap();
+        assert_eq!(reloaded.active_identity, None);
+        assert_eq!(reloaded.app_config.active_identity, None);
+        cleanup(&path);
     }
 
     #[test]
