@@ -120,6 +120,20 @@ impl IntelTdxVerifier {
             verified_at_secs: now_secs,
         })
     }
+
+    /// Decode JSON collateral and verify a raw quote without exposing the vendor
+    /// collateral type to CLI and SDK adapters.
+    pub fn verify_json(
+        &self,
+        raw_quote: &[u8],
+        collateral_json: &[u8],
+        policy: &IntelTdxPolicy,
+        now_secs: u64,
+    ) -> Result<IntelTdxClaims> {
+        let collateral = serde_json::from_slice(collateral_json)
+            .map_err(|error| tee_error(format!("invalid Intel DCAP collateral JSON: {error}")))?;
+        self.verify(raw_quote, &collateral, policy, now_secs)
+    }
 }
 
 impl Default for IntelTdxVerifier {
@@ -157,10 +171,17 @@ mod tests {
 
     #[test]
     fn verifies_vendor_tdx_quote_end_to_end() {
-        let (raw_quote, collateral, policy) = tdx_fixture();
+        let (raw_quote, _, policy) = tdx_fixture();
         let verifier = IntelTdxVerifier::production();
 
-        let claims = verifier.verify(&raw_quote, &collateral, &policy, FIXTURE_TIME).unwrap();
+        let claims = verifier
+            .verify_json(
+                &raw_quote,
+                include_bytes!("tee_intel_tdx_collateral.json"),
+                &policy,
+                FIXTURE_TIME,
+            )
+            .unwrap();
 
         assert_eq!(claims.mr_td, policy.expected_mr_td);
         assert_eq!(claims.report_data, policy.expected_report_data);
@@ -199,6 +220,17 @@ mod tests {
         let error = verifier.verify(&raw_quote, &collateral, &policy, 2_000_000_000).unwrap_err();
 
         assert!(error.to_string().contains("DCAP verification failed"));
+    }
+
+    #[test]
+    fn rejects_malformed_collateral_json() {
+        let (raw_quote, _, policy) = tdx_fixture();
+        let verifier = IntelTdxVerifier::production();
+
+        let error =
+            verifier.verify_json(&raw_quote, b"not-json", &policy, FIXTURE_TIME).unwrap_err();
+
+        assert!(error.to_string().contains("invalid Intel DCAP collateral JSON"));
     }
 
     #[test]

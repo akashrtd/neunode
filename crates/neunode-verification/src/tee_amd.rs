@@ -7,8 +7,9 @@
 
 use der::Decode;
 use sev::{
-    certs::snp::{ca, Chain, Verifiable},
+    certs::snp::{ca, Certificate, Chain, Verifiable},
     firmware::guest::AttestationReport,
+    parser::ByteParser,
     Generation,
 };
 use x509_cert::{ext::Extension, Certificate as X509Certificate};
@@ -132,6 +133,32 @@ impl AmdSnpVerifier {
             vmpl: report.vmpl,
             verified_at_secs: now_secs,
         })
+    }
+
+    /// Decode a raw SNP report and DER certificate chain, then run the complete
+    /// production verification path. Evidence decoding failures are fail-closed.
+    pub fn verify_der(
+        &self,
+        raw_report: &[u8],
+        ark_der: &[u8],
+        ask_der: &[u8],
+        vek_der: &[u8],
+        policy: &AmdSnpPolicy,
+        now_secs: u64,
+    ) -> Result<AmdSnpClaims> {
+        let report = AttestationReport::from_bytes(raw_report)
+            .map_err(|error| tee_error(format!("invalid SEV-SNP report: {error}")))?;
+        let chain = Chain {
+            ca: ca::Chain {
+                ark: Certificate::from_der(ark_der)
+                    .map_err(|error| tee_error(format!("invalid AMD ARK certificate: {error}")))?,
+                ask: Certificate::from_der(ask_der)
+                    .map_err(|error| tee_error(format!("invalid AMD ASK certificate: {error}")))?,
+            },
+            vek: Certificate::from_der(vek_der)
+                .map_err(|error| tee_error(format!("invalid AMD VEK certificate: {error}")))?,
+        };
+        self.verify(&report, &chain, policy, now_secs)
     }
 }
 
@@ -344,6 +371,27 @@ mod tests {
         assert_eq!(claims.report_data, report.report_data);
         assert_eq!(claims.chip_id, report.chip_id);
         assert_eq!(claims.verified_at_secs, 1_740_000_000);
+    }
+
+    #[test]
+    fn decodes_and_verifies_raw_vendor_milan_evidence() {
+        let (report, chain) = milan_fixture();
+        let policy = fixture_policy(&report);
+        let raw_report = report.to_bytes().unwrap();
+        let verifier = AmdSnpVerifier::production_vcek(AmdGeneration::Milan);
+
+        let claims = verifier
+            .verify_der(
+                raw_report.as_ref(),
+                &chain.ca.ark.to_der().unwrap(),
+                &chain.ca.ask.to_der().unwrap(),
+                &chain.vek.to_der().unwrap(),
+                &policy,
+                1_740_000_000,
+            )
+            .unwrap();
+
+        assert_eq!(claims.measurement, report.measurement);
     }
 
     #[test]
