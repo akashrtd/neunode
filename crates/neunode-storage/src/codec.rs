@@ -1,7 +1,9 @@
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-pub type ReadError = bincode::Error;
-pub type WriteError = bincode::Error;
+pub type ReadError = bincode::error::DecodeError;
+pub type WriteError = bincode::error::EncodeError;
+
+const MAX_ENCODED_BYTES: usize = 64 * 1024 * 1024;
 
 /// Serialize using the repository's legacy bincode 1.3 wire format.
 ///
@@ -10,12 +12,19 @@ pub type WriteError = bincode::Error;
 ///
 /// Byte compatibility is an invariant: these bytes are used both as RocksDB keys and values.
 pub fn serialize<T: Serialize + ?Sized>(value: &T) -> Result<Vec<u8>, WriteError> {
-    bincode::serialize(value)
+    bincode::serde::encode_to_vec(
+        value,
+        bincode::config::legacy().with_limit::<MAX_ENCODED_BYTES>(),
+    )
 }
 
 /// Deserialize bytes written by either bincode 1.3 or [`serialize`].
 pub fn deserialize<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, ReadError> {
-    bincode::deserialize(bytes)
+    bincode::serde::decode_from_slice(
+        bytes,
+        bincode::config::legacy().with_limit::<MAX_ENCODED_BYTES>(),
+    )
+    .map(|(value, _consumed)| value)
 }
 
 #[cfg(test)]
@@ -46,5 +55,11 @@ mod tests {
         let expected = [1, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0];
         assert_eq!(serialize(&LegacyState::Second(9)).unwrap(), expected);
         assert_eq!(deserialize::<LegacyState>(&expected).unwrap(), LegacyState::Second(9));
+    }
+
+    #[test]
+    fn rejects_declared_allocation_above_limit() {
+        let declared_length = u64::MAX.to_le_bytes();
+        assert!(deserialize::<Vec<u8>>(&declared_length).is_err());
     }
 }
