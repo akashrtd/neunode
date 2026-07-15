@@ -122,6 +122,28 @@ describe.sequential("Integration: Identity Commands", () => {
 		expect(result).toHaveProperty("document");
 		expect(result).toHaveProperty("verification_methods");
 	});
+
+	it("should honor the global identity override over the configured identity", async () => {
+		const second = await transport.execute<Record<string, string>>([
+			"identity",
+			"create",
+			"--name",
+			`override-control-${Date.now()}`,
+		]);
+		expect(second.DID).not.toBe(createdDid);
+
+		const overridden = new CliTransport({
+			binaryPath: BINARY_PATH ?? "agnetd",
+			timeout: 15_000,
+			env: INTEGRATION_ENV,
+			identity: createdDid,
+		});
+		const result = await overridden.execute<{ did: string }>([
+			"identity",
+			"show",
+		]);
+		expect(result.did).toBe(createdDid);
+	});
 });
 
 // ===========================================================================

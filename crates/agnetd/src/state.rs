@@ -22,25 +22,29 @@ pub struct AppState {
 impl AppState {
     pub fn init(cli: &crate::cli::Cli) -> Result<Self> {
         let config = crate::config::CliConfig::load(cli.config.as_deref())?;
-        Self::init_with_config(config)
+        Self::init_with_config(config, cli.identity.as_deref())
     }
 
     pub fn init_from_globals(args: &crate::cli::GlobalArgs) -> Result<Self> {
         let config = crate::config::CliConfig::load(args.config.as_deref())?;
-        Self::init_with_config(config)
+        Self::init_with_config(config, args.identity.as_deref())
     }
 
-    fn init_with_config(config: crate::config::CliConfig) -> Result<Self> {
+    fn init_with_config(
+        config: crate::config::CliConfig,
+        identity_override: Option<&str>,
+    ) -> Result<Self> {
         let db_path = expand_db_path(&config.app_config.storage.db_path);
         std::fs::create_dir_all(&db_path)
             .with_context(|| format!("failed to create DB directory {}", db_path.display()))?;
 
         let db = NeunodeDb::open(&db_path)?;
 
-        let (active_keyring, active_did) = match &config.active_identity {
+        let selected_identity = identity_override.or(config.active_identity.as_deref());
+        let (active_keyring, active_did) = match selected_identity {
             Some(did_str) => {
                 let kr = load_keyring(did_str).ok();
-                let did = Did(did_str.clone());
+                let did = Did(did_str.to_string());
                 (kr, Some(did))
             }
             None => (None, None),
