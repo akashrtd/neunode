@@ -72,6 +72,12 @@ contract NeunodeReputationTest is Test {
         rep.updateFactorScore(agent, 4, bps);
     }
 
+    function _finalizeCurrentEpoch() internal {
+        NeunodeReputation.EpochInfo memory epoch = rep.getEpochInfo(rep.getCurrentEpoch());
+        vm.roll(epoch.endBlock);
+        rep.finalizeEpoch();
+    }
+
     // ─── Identity wiring for Sybil-resistance tests ───────────────────────
 
     NeunodeIdentity public identity;
@@ -371,7 +377,7 @@ contract NeunodeReputationTest is Test {
         rep.registerValidator();
 
         uint256 epochBefore = rep.getCurrentEpoch();
-        rep.finalizeEpoch();
+        _finalizeCurrentEpoch();
 
         assertEq(rep.getCurrentEpoch(), epochBefore + 1);
 
@@ -379,12 +385,42 @@ contract NeunodeReputationTest is Test {
         assertTrue(info.isFinalized);
     }
 
+    function testRevert_finalizeEpoch_unauthorized() public {
+        NeunodeReputation.EpochInfo memory epoch = rep.getEpochInfo(rep.getCurrentEpoch());
+        vm.roll(epoch.endBlock);
+        bytes32 finalizerRole = rep.EPOCH_FINALIZER_ROLE();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")),
+                alice,
+                finalizerRole
+            )
+        );
+        rep.finalizeEpoch();
+    }
+
+    function testRevert_finalizeEpoch_beforeScheduledEnd() public {
+        NeunodeReputation.EpochInfo memory epoch = rep.getEpochInfo(rep.getCurrentEpoch());
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                NeunodeReputation.EpochNotEnded.selector,
+                rep.getCurrentEpoch(),
+                block.number,
+                epoch.endBlock
+            )
+        );
+        rep.finalizeEpoch();
+    }
+
     function testRevert_finalizeEpoch_alreadyFinalized() public {
         // finalizeEpoch advances to next epoch after finalizing current one.
         // To trigger EpochAlreadyFinalized, we need the current epoch to already be marked.
         // This can happen if the epoch info struct was pre-marked (edge case with manual state).
         // We finalize once normally, then verify the next epoch is NOT finalized.
-        rep.finalizeEpoch();
+        _finalizeCurrentEpoch();
         assertEq(rep.getCurrentEpoch(), 2);
 
         NeunodeReputation.EpochInfo memory info = rep.getEpochInfo(2);
@@ -403,7 +439,7 @@ contract NeunodeReputationTest is Test {
         rep.registerValidator();
 
         uint256 epoch1 = rep.getCurrentEpoch();
-        rep.finalizeEpoch();
+        _finalizeCurrentEpoch();
 
         // Query validator set for epoch 1
         (address[] memory validators, uint256[] memory powers) = rep.getValidatorSetForEpoch(epoch1);
@@ -452,7 +488,7 @@ contract NeunodeReputationTest is Test {
 
         // Advance through epochs to decay penalty
         for (uint256 i = 0; i < 45; i++) {
-            rep.finalizeEpoch();
+            _finalizeCurrentEpoch();
         }
 
         // After 45 epochs, penalty should be half decayed
@@ -476,7 +512,7 @@ contract NeunodeReputationTest is Test {
 
         // Advance 90+ epochs for full decay
         for (uint256 i = 0; i < 91; i++) {
-            rep.finalizeEpoch();
+            _finalizeCurrentEpoch();
         }
 
         assertEq(rep.getPenaltyDecay(alice), 0);
@@ -570,7 +606,7 @@ contract NeunodeReputationTest is Test {
         }
 
         uint256 gasBefore = gasleft();
-        rep.finalizeEpoch();
+        _finalizeCurrentEpoch();
         uint256 gasUsed = gasBefore - gasleft();
 
         // Log gas for snapshot — should be reasonable

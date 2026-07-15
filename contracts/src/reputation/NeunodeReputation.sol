@@ -75,6 +75,7 @@ contract NeunodeReputation is AccessControl {
     bytes32 public constant TENURE_ORACLE_ROLE = keccak256("TENURE_ORACLE_ROLE");
     bytes32 public constant SLASHING_ROLE = keccak256("SLASHING_ROLE");
     bytes32 public constant REPUTATION_ADMIN_ROLE = keccak256("REPUTATION_ADMIN_ROLE");
+    bytes32 public constant EPOCH_FINALIZER_ROLE = keccak256("EPOCH_FINALIZER_ROLE");
 
     // ─── Storage ──────────────────────────────────────────────────────────
 
@@ -122,6 +123,7 @@ contract NeunodeReputation is AccessControl {
     error AlreadyValidator(address agent);
     error EpochNotFinalized(uint256 epoch);
     error EpochAlreadyFinalized(uint256 epoch);
+    error EpochNotEnded(uint256 epoch, uint256 currentBlock, uint256 endBlock);
     error InvalidFactorIndex(uint8 index);
     error InvalidWeightSum(uint256 sum);
     error ScoreOutOfBounds(uint16 score);
@@ -136,6 +138,7 @@ contract NeunodeReputation is AccessControl {
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(REPUTATION_ADMIN_ROLE, msg.sender);
+        _grantRole(EPOCH_FINALIZER_ROLE, msg.sender);
 
         weights =
             FactorWeights({stake: 3000, attest: 2500, activity: 2000, verify: 1500, tenure: 1000});
@@ -307,9 +310,12 @@ contract NeunodeReputation is AccessControl {
 
     /// @notice Finalize the current epoch and start the next one
     /// @dev Snapshots current validator set, marks epoch finalized, creates next epoch
-    function finalizeEpoch() external {
+    function finalizeEpoch() external onlyRole(EPOCH_FINALIZER_ROLE) {
         EpochInfo storage epoch = _epochs[currentEpoch];
         if (epoch.isFinalized) revert EpochAlreadyFinalized(currentEpoch);
+        if (block.number < epoch.endBlock) {
+            revert EpochNotEnded(currentEpoch, block.number, epoch.endBlock);
+        }
 
         epoch.isFinalized = true;
         epoch.endBlock = block.number;
