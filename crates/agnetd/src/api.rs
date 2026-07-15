@@ -40,6 +40,8 @@ pub mod train_api;
 pub mod turboquant_api;
 #[path = "api_types.rs"]
 pub mod types;
+#[path = "api_verification_api.rs"]
+pub mod verification_api;
 
 pub use health_api::health_handler;
 pub use routes::build_api_router;
@@ -49,6 +51,9 @@ pub use routes::build_api_router;
     paths(
         identity_api::show_identity,
         identity_api::export_identity,
+        verification_api::verify_intel_tdx,
+        verification_api::verify_amd_snp,
+        verification_api::verify_amd_vlek,
         inference_api::register_provider,
         lifecycle_api::lifecycle_status,
         lifecycle_api::activate,
@@ -70,6 +75,18 @@ pub use routes::build_api_router;
         identity_api::IdentityQuery,
         identity_api::IdentityDetailResponse,
         identity_api::IdentityExportResponse,
+        verification_api::IntelTdxVerifyRequest,
+        verification_api::AmdPolicyRequest,
+        verification_api::AmdTcbRequest,
+        verification_api::AmdGenerationRequest,
+        verification_api::AmdSnpVerifyRequest,
+        verification_api::AmdVlekVerifyRequest,
+        verification_api::IntelTdxVerifyResponse,
+        verification_api::IntelTdxClaimsResponse,
+        verification_api::AmdSnpVerifyResponse,
+        verification_api::AmdVlekVerifyResponse,
+        verification_api::AmdSnpClaimsResponse,
+        verification_api::AmdTcbClaimsResponse,
         inference_api::RegisterProviderRequest,
         inference_api::RegisterProviderResponse,
         lifecycle_api::LifecycleStatusResponse,

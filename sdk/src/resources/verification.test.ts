@@ -1,142 +1,131 @@
 import { describe, expect, it, vi } from "vitest";
 import { createNeunodeClient } from "../client/client.js";
 
+const policy = {
+	measurement: "11".repeat(48),
+	reportData: "22".repeat(64),
+	minimumTcb: { bootloader: 3, tee: 0, snp: 8, microcode: 115 },
+} as const;
+
 describe("VerificationResource", () => {
-	it("builds a strict Intel TDX verification command", async () => {
-		const client = createNeunodeClient({ cli: { binaryPath: "agnetd" } });
-		const cli = client.cli;
-		if (!cli) throw new Error("expected CLI transport");
-		const execute = vi
-			.spyOn(cli, "execute")
-			.mockResolvedValue({ verified: true });
+	it("posts strict Intel TDX evidence over HTTP", async () => {
+		const client = createNeunodeClient({
+			http: { baseUrl: "http://localhost:8080" },
+		});
+		const http = client.http;
+		if (!http) throw new Error("expected HTTP transport");
+		const post = vi.spyOn(http, "post").mockResolvedValue({ verified: true });
 
 		await client.verification.verifyIntelTdx({
-			quote: "quote.bin",
-			collateral: "collateral.json",
+			quoteHex: "aa55",
+			collateralJson: "{}",
 			mrTd: `0x${"11".repeat(48)}`,
 			reportData: "22".repeat(64),
 			nowSecs: 1_751_000_000,
 		});
 
-		expect(execute).toHaveBeenCalledWith([
-			"verify",
-			"tee",
-			"intel",
-			"--quote",
-			"quote.bin",
-			"--collateral",
-			"collateral.json",
-			"--mr-td",
-			"11".repeat(48),
-			"--report-data",
-			"22".repeat(64),
-			"--now-secs",
-			"1751000000",
-		]);
-	});
-
-	it("keeps AMD SMT and migration disabled unless explicitly requested", async () => {
-		const client = createNeunodeClient({ cli: { binaryPath: "agnetd" } });
-		const cli = client.cli;
-		if (!cli) throw new Error("expected CLI transport");
-		const execute = vi
-			.spyOn(cli, "execute")
-			.mockResolvedValue({ verified: true });
-
-		await client.verification.verifyAmdSnp({
-			report: "report.bin",
-			ark: "ark.der",
-			ask: "ask.der",
-			vek: "vcek.der",
-			generation: "milan",
-			measurement: "11".repeat(48),
-			reportData: "22".repeat(64),
-			minimumTcb: { bootloader: 3, tee: 0, snp: 8, microcode: 115 },
+		expect(post).toHaveBeenCalledWith("/api/v1/verification/tee/intel-tdx", {
+			quote_hex: "aa55",
+			collateral_json: "{}",
+			mr_td: "11".repeat(48),
+			report_data: "22".repeat(64),
+			now_secs: 1_751_000_000,
 		});
-
-		const args = execute.mock.calls[0]?.[0] as readonly string[];
-		expect(args).not.toContain("--allow-smt");
-		expect(args).not.toContain("--allow-migration");
-		expect(args).toContain("--min-microcode");
 	});
 
-	it("rejects malformed policy values before invoking the CLI", async () => {
-		const client = createNeunodeClient({ cli: { binaryPath: "agnetd" } });
-		const cli = client.cli;
-		if (!cli) throw new Error("expected CLI transport");
-		const execute = vi.spyOn(cli, "execute");
+	it("keeps AMD SMT and migration disabled by default", async () => {
+		const client = createNeunodeClient({
+			http: { baseUrl: "http://localhost:8080" },
+		});
+		const http = client.http;
+		if (!http) throw new Error("expected HTTP transport");
+		const post = vi.spyOn(http, "post").mockResolvedValue({ verified: true });
+		await client.verification.verifyAmdSnp({
+			reportHex: "01",
+			arkHex: "02",
+			askHex: "03",
+			vekHex: "04",
+			generation: "milan",
+			...policy,
+		});
+		expect(post).toHaveBeenCalledWith(
+			"/api/v1/verification/tee/amd-snp",
+			expect.objectContaining({ allow_smt: false, allow_migration: false }),
+		);
+	});
 
+	it("rejects malformed policy values before HTTP dispatch", async () => {
+		const client = createNeunodeClient({
+			http: { baseUrl: "http://localhost:8080" },
+		});
+		const http = client.http;
+		if (!http) throw new Error("expected HTTP transport");
+		const post = vi.spyOn(http, "post");
 		await expect(
 			client.verification.verifyIntelTdx({
-				quote: "quote.bin",
-				collateral: "collateral.json",
+				quoteHex: "00",
+				collateralJson: "{}",
 				mrTd: "11",
 				reportData: "22".repeat(64),
 			}),
 		).rejects.toThrow("mrTd must be exactly 48 bytes");
-		expect(execute).not.toHaveBeenCalled();
+		expect(post).not.toHaveBeenCalled();
 	});
 
 	it("requires an FMC floor for Turin", async () => {
-		const client = createNeunodeClient({ cli: { binaryPath: "agnetd" } });
-
+		const client = createNeunodeClient({
+			http: { baseUrl: "http://localhost:8080" },
+		});
 		await expect(
 			client.verification.verifyAmdSnp({
-				report: "report.bin",
-				ark: "ark.der",
-				ask: "ask.der",
-				vek: "vcek.der",
+				reportHex: "01",
+				arkHex: "02",
+				askHex: "03",
+				vekHex: "04",
 				generation: "turin",
-				measurement: "11".repeat(48),
-				reportData: "22".repeat(64),
-				minimumTcb: { bootloader: 1, tee: 1, snp: 1, microcode: 1 },
+				...policy,
 			}),
 		).rejects.toThrow("minimumTcb.fmc is required");
 	});
 
-	it("builds a separately pinned AMD VLEK command", async () => {
-		const client = createNeunodeClient({ cli: { binaryPath: "agnetd" } });
-		const cli = client.cli;
-		if (!cli) throw new Error("expected CLI transport");
-		const execute = vi
-			.spyOn(cli, "execute")
-			.mockResolvedValue({ verified: true });
-
+	it("posts separately pinned AMD VLEK evidence", async () => {
+		const client = createNeunodeClient({
+			http: { baseUrl: "http://localhost:8080" },
+		});
+		const http = client.http;
+		if (!http) throw new Error("expected HTTP transport");
+		const post = vi.spyOn(http, "post").mockResolvedValue({ verified: true });
 		await client.verification.verifyAmdVlek({
-			report: "report.bin",
-			ark: "ark.der",
-			asvk: "asvk.der",
-			vlek: "vlek.der",
-			crl: "vlek.crl",
+			reportHex: "01",
+			arkHex: "02",
+			asvkHex: "03",
+			vlekHex: "04",
+			crlHex: "05",
 			arkSha384: "aa".repeat(48),
 			productName: "Milan-B0",
 			cspId: "cloud.example",
 			generation: "milan",
-			measurement: "11".repeat(48),
-			reportData: "22".repeat(64),
-			minimumTcb: { bootloader: 3, tee: 0, snp: 8, microcode: 115 },
-			nowSecs: 1_783_000_000,
+			...policy,
 		});
-
-		const args = execute.mock.calls[0]?.[0] as readonly string[];
-		expect(args.slice(0, 3)).toEqual(["verify", "tee", "amd-vlek"]);
-		expect(args).toContain("--ark-sha384");
-		expect(args).toContain("--asvk");
-		expect(args).toContain("--crl");
-		expect(args).toContain("cloud.example");
+		expect(post).toHaveBeenCalledWith(
+			"/api/v1/verification/tee/amd-vlek",
+			expect.objectContaining({
+				ark_sha384: "aa".repeat(48),
+				product_name: "Milan-B0",
+				csp_id: "cloud.example",
+			}),
+		);
 	});
 
-	it("requires the CLI transport", async () => {
-		const client = createNeunodeClient({
-			mock: { responses: {} },
-		});
+	it("requires HTTP transport", async () => {
+		const client = createNeunodeClient({ cli: { binaryPath: "agnetd" } });
 		await expect(
 			client.verification.verifyIntelTdx({
-				quote: "quote.bin",
-				collateral: "collateral.json",
+				quoteHex: "00",
+				collateralJson: "{}",
 				mrTd: "11".repeat(48),
 				reportData: "22".repeat(64),
 			}),
-		).rejects.toThrow("CLI transport required");
+		).rejects.toThrow("HTTP transport required");
 	});
 });

@@ -3,8 +3,10 @@ import type { NeunodeClient } from "../client/client.js";
 export type AmdGeneration = "milan" | "genoa" | "turin";
 
 export interface IntelTdxVerifyParams {
-	readonly quote: string;
-	readonly collateral: string;
+	/** Raw TDX quote encoded as hexadecimal. */
+	readonly quoteHex: string;
+	/** Complete Intel DCAP QuoteCollateralV3 JSON. */
+	readonly collateralJson: string;
 	readonly mrTd: string;
 	readonly reportData: string;
 	readonly nowSecs?: number;
@@ -26,19 +28,19 @@ interface AmdPolicyParams {
 }
 
 export interface AmdSnpVerifyParams extends AmdPolicyParams {
-	readonly report: string;
-	readonly ark: string;
-	readonly ask: string;
-	readonly vek: string;
+	readonly reportHex: string;
+	readonly arkHex: string;
+	readonly askHex: string;
+	readonly vekHex: string;
 	readonly generation: AmdGeneration;
 }
 
 export interface AmdVlekVerifyParams extends AmdPolicyParams {
-	readonly report: string;
-	readonly ark: string;
-	readonly asvk: string;
-	readonly vlek: string;
-	readonly crl: string;
+	readonly reportHex: string;
+	readonly arkHex: string;
+	readonly asvkHex: string;
+	readonly vlekHex: string;
+	readonly crlHex: string;
 	readonly arkSha384: string;
 	readonly productName: string;
 	readonly cspId: string;
@@ -98,13 +100,6 @@ export interface VerificationResource {
 	verifyAmdVlek(params: AmdVlekVerifyParams): Promise<AmdVlekVerifyResult>;
 }
 
-function cli(client: NeunodeClient) {
-	if (!client.cli) {
-		throw new Error("CLI transport required for production TEE verification");
-	}
-	return client.cli;
-}
-
 function exactHex(value: string, bytes: number, label: string): string {
 	const normalized = value.startsWith("0x") ? value.slice(2) : value;
 	if (normalized.length !== bytes * 2 || !/^[0-9a-fA-F]+$/.test(normalized)) {
@@ -115,62 +110,57 @@ function exactHex(value: string, bytes: number, label: string): string {
 	return normalized.toLowerCase();
 }
 
-function unsignedInteger(value: number, label: string): string {
+function unsignedInteger(value: number, label: string): number {
 	if (!Number.isSafeInteger(value) || value < 0) {
 		throw new Error(`${label} must be a non-negative safe integer`);
 	}
-	return String(value);
+	return value;
 }
 
-function amdPolicyArgs(params: AmdPolicyParams): string[] {
+function amdPolicyBody(params: AmdPolicyParams) {
 	const tcb = params.minimumTcb;
-	const args = [
-		"--measurement",
-		exactHex(params.measurement, 48, "measurement"),
-		"--report-data",
-		exactHex(params.reportData, 64, "reportData"),
-		"--min-bootloader",
-		unsignedInteger(tcb.bootloader, "minimumTcb.bootloader"),
-		"--min-tee",
-		unsignedInteger(tcb.tee, "minimumTcb.tee"),
-		"--min-snp",
-		unsignedInteger(tcb.snp, "minimumTcb.snp"),
-		"--min-microcode",
-		unsignedInteger(tcb.microcode, "minimumTcb.microcode"),
-	];
-	if (tcb.fmc !== undefined) {
-		args.push("--min-fmc", unsignedInteger(tcb.fmc, "minimumTcb.fmc"));
-	}
-	if (params.allowSmt) args.push("--allow-smt");
-	if (params.allowMigration) args.push("--allow-migration");
-	if (params.nowSecs !== undefined) {
-		args.push("--now-secs", unsignedInteger(params.nowSecs, "nowSecs"));
-	}
-	return args;
+	return {
+		measurement: exactHex(params.measurement, 48, "measurement"),
+		report_data: exactHex(params.reportData, 64, "reportData"),
+		minimum_tcb: {
+			bootloader: unsignedInteger(tcb.bootloader, "minimumTcb.bootloader"),
+			tee: unsignedInteger(tcb.tee, "minimumTcb.tee"),
+			snp: unsignedInteger(tcb.snp, "minimumTcb.snp"),
+			microcode: unsignedInteger(tcb.microcode, "minimumTcb.microcode"),
+			...(tcb.fmc === undefined
+				? {}
+				: { fmc: unsignedInteger(tcb.fmc, "minimumTcb.fmc") }),
+		},
+		allow_smt: params.allowSmt ?? false,
+		allow_migration: params.allowMigration ?? false,
+		...(params.nowSecs === undefined
+			? {}
+			: { now_secs: unsignedInteger(params.nowSecs, "nowSecs") }),
+	};
 }
 
 export function createVerificationResource(
 	client: NeunodeClient,
 ): VerificationResource {
+	const http = () => {
+		if (!client.http)
+			throw new Error("HTTP transport required for TEE verification");
+		return client.http;
+	};
 	return {
 		async verifyIntelTdx(params) {
-			const args = [
-				"verify",
-				"tee",
-				"intel",
-				"--quote",
-				params.quote,
-				"--collateral",
-				params.collateral,
-				"--mr-td",
-				exactHex(params.mrTd, 48, "mrTd"),
-				"--report-data",
-				exactHex(params.reportData, 64, "reportData"),
-			];
-			if (params.nowSecs !== undefined) {
-				args.push("--now-secs", unsignedInteger(params.nowSecs, "nowSecs"));
-			}
-			return cli(client).execute<IntelTdxVerifyResult>(args);
+			return http().post<IntelTdxVerifyResult>(
+				"/api/v1/verification/tee/intel-tdx",
+				{
+					quote_hex: params.quoteHex,
+					collateral_json: params.collateralJson,
+					mr_td: exactHex(params.mrTd, 48, "mrTd"),
+					report_data: exactHex(params.reportData, 64, "reportData"),
+					...(params.nowSecs === undefined
+						? {}
+						: { now_secs: unsignedInteger(params.nowSecs, "nowSecs") }),
+				},
+			);
 		},
 
 		async verifyAmdSnp(params) {
@@ -180,53 +170,38 @@ export function createVerificationResource(
 					"minimumTcb.fmc is required for AMD Turin verification",
 				);
 			}
-			const args = [
-				"verify",
-				"tee",
-				"amd",
-				"--report",
-				params.report,
-				"--ark",
-				params.ark,
-				"--ask",
-				params.ask,
-				"--vek",
-				params.vek,
-				"--generation",
-				params.generation,
-				...amdPolicyArgs(params),
-			];
-			return cli(client).execute<AmdSnpVerifyResult>(args);
+			return http().post<AmdSnpVerifyResult>(
+				"/api/v1/verification/tee/amd-snp",
+				{
+					report_hex: params.reportHex,
+					ark_hex: params.arkHex,
+					ask_hex: params.askHex,
+					vek_hex: params.vekHex,
+					generation: params.generation,
+					...amdPolicyBody(params),
+				},
+			);
 		},
 
 		async verifyAmdVlek(params) {
 			if (params.productName.length === 0 || params.cspId.length === 0) {
 				throw new Error("productName and cspId cannot be empty");
 			}
-			return cli(client).execute<AmdVlekVerifyResult>([
-				"verify",
-				"tee",
-				"amd-vlek",
-				"--report",
-				params.report,
-				"--ark",
-				params.ark,
-				"--asvk",
-				params.asvk,
-				"--vlek",
-				params.vlek,
-				"--crl",
-				params.crl,
-				"--ark-sha384",
-				exactHex(params.arkSha384, 48, "arkSha384"),
-				"--product-name",
-				params.productName,
-				"--csp-id",
-				params.cspId,
-				"--generation",
-				params.generation,
-				...amdPolicyArgs(params),
-			]);
+			return http().post<AmdVlekVerifyResult>(
+				"/api/v1/verification/tee/amd-vlek",
+				{
+					report_hex: params.reportHex,
+					ark_hex: params.arkHex,
+					asvk_hex: params.asvkHex,
+					vlek_hex: params.vlekHex,
+					crl_hex: params.crlHex,
+					ark_sha384: exactHex(params.arkSha384, 48, "arkSha384"),
+					product_name: params.productName,
+					csp_id: params.cspId,
+					generation: params.generation,
+					...amdPolicyBody(params),
+				},
+			);
 		},
 	};
 }

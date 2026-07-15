@@ -232,6 +232,31 @@ describe("Integration: live HTTP resource routes", () => {
 		]);
 	});
 
+	it("exposes fail-closed TEE verification over HTTP", async () => {
+		await expect(
+			client.verification.verifyIntelTdx({
+				quoteHex: "00",
+				collateralJson: "{}",
+				mrTd: "11".repeat(48),
+				reportData: "22".repeat(64),
+				nowSecs: 1_751_000_000,
+			}),
+		).rejects.toThrow("Intel");
+
+		await expect(
+			client.verification.verifyAmdSnp({
+				reportHex: "00",
+				arkHex: "00",
+				askHex: "00",
+				vekHex: "00",
+				generation: "milan",
+				measurement: "11".repeat(48),
+				reportData: "22".repeat(64),
+				minimumTcb: { bootloader: 1, tee: 1, snp: 1, microcode: 1 },
+			}),
+		).rejects.toThrow("SEV-SNP");
+	});
+
 	it("publishes the lifecycle and lineage SDK contract in live OpenAPI", async () => {
 		const response = await fetch(`${baseUrl}/api-docs/openapi.json`);
 		expect(response.ok).toBe(true);
@@ -239,6 +264,15 @@ describe("Integration: live HTTP resource routes", () => {
 			paths?: Record<string, Record<string, unknown>>;
 			components?: { schemas?: Record<string, unknown> };
 		};
+		expect(
+			document.paths?.["/api/v1/verification/tee/intel-tdx"]?.post,
+		).toBeDefined();
+		expect(
+			document.paths?.["/api/v1/verification/tee/amd-snp"]?.post,
+		).toBeDefined();
+		expect(
+			document.paths?.["/api/v1/verification/tee/amd-vlek"]?.post,
+		).toBeDefined();
 		const operations = [
 			["/api/v1/lifecycle/status", "get"],
 			["/api/v1/lifecycle/activate", "post"],

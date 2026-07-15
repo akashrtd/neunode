@@ -116,4 +116,11 @@ pub fn build_api_router() -> Router<Arc<ApiState>> {
         .route("/api/v1/lifecycle/reactivate", post(super::lifecycle_api::reactivate))
         .route("/api/v1/lifecycle/list", get(super::lifecycle_api::list_states))
         .route("/api/v1/lifecycle/reap", post(super::lifecycle_api::reap))
+        // Production TEE verification
+        .route(
+            "/api/v1/verification/tee/intel-tdx",
+            post(super::verification_api::verify_intel_tdx),
+        )
+        .route("/api/v1/verification/tee/amd-snp", post(super::verification_api::verify_amd_snp))
+        .route("/api/v1/verification/tee/amd-vlek", post(super::verification_api::verify_amd_vlek))
 }
