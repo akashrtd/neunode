@@ -1,0 +1,74 @@
+/* The Neunode Guide - theme refinements over Material for MkDocs */
+
+:root {
+  --md-text-font: "Roboto", -apple-system, BlinkMacSystemFont, sans-serif;
+  --md-code-font: "Roboto Mono", ui-monospace, "SF Mono", monospace;
+}
+
+/* Slightly wider content column for reference tables */
+.md-grid {
+  max-width: 68rem;
+}
+
+/* Hero lede on the landing page */
+.md-typeset h1 + p {
+  font-size: 1.1rem;
+  line-height: 1.7;
+}
+
+/* Tables: readable, scrollable on narrow screens, no page-level overflow */
+.md-typeset table:not([class]) {
+  font-size: 0.75rem;
+  display: table;
+  width: 100%;
+}
+.md-typeset__table {
+  overflow-x: auto;
+}
+.md-typeset table:not([class]) th {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Card grids get a visible edge in both themes */
+.md-typeset .grid.cards > ul > li {
+  border-radius: 0.4rem;
+  transition: border-color 200ms, box-shadow 200ms;
+}
+.md-typeset .grid.cards > ul > li:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 0 0.4rem rgba(0, 0, 0, 0.08);
+}
+
+/* ASCII diagrams: keep them tight and let long lines scroll, never wrap */
+.md-typeset pre > code {
+  font-variant-ligatures: none;
+}
+.md-typeset .language-text code {
+  line-height: 1.45;
+}
+
+/* Admonitions read as signal, not decoration */
+.md-typeset .admonition,
+.md-typeset details {
+  border-width: 0 0 0 0.2rem;
+  border-radius: 0.2rem;
+  font-size: 0.72rem;
+}
+
+/* Checkpoint callouts should feel like a milestone */
+.md-typeset .admonition.success > .admonition-title {
+  font-weight: 700;
+}
+
+/* Keyboard-focus visibility for accessibility */
+.md-typeset a:focus-visible,
+.md-nav__link:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+}
+
+/* Footer nav spacing */
+.md-footer__inner {
+  margin-top: 1rem;
+}

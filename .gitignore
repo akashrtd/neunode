@@ -26,3 +26,17 @@ packages/agnetd-*/agnetd*
 
 # Test output artifacts
 sdk/test_output.log
+
+# MkDocs build output
+docs-site/site/
+
+# Single-page artifact build output (source: docs-site/build_artifact.py + _style.css)
+docs-site/_nav.html
+docs-site/_body.html
+docs-site/neunode-guide.html
+
+# MCP server build output
+packages/mcp-server/dist/
+
+# Node dependencies (any package)
+node_modules/
