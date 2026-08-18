@@ -13,6 +13,7 @@ struct PackedUserOperation {
     bytes paymasterAndData;
     bytes signature;
 }
+
 /// @notice Minimal EntryPoint surface used by a paymaster.
 interface IEntryPoint {
     function depositTo(address account) external payable;
