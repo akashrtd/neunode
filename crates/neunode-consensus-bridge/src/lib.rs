@@ -43,7 +43,9 @@ pub mod malachite_handler;
 pub mod single_node;
 pub mod types;
 
-pub use bft::{CommitCertificate, DoubleSignEvidence, SignedVote, VoteCollector, VoteStep};
+pub use bft::{
+    CommitCertificate, ConsensusSnapshot, DoubleSignEvidence, SignedVote, VoteCollector, VoteStep,
+};
 pub use error::{BridgeError, Result};
 pub use malachite_handler::{MalachiteEvent, MalachiteHandler, MalachiteResponse};
 pub use single_node::{SingleNodeConfig, SingleNodeDriver};

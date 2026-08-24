@@ -61,6 +61,11 @@ pub struct CommitCertificate {
     pub votes: Vec<SignedVote>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct ConsensusSnapshot {
+    pub certificates: Vec<CommitCertificate>,
+}
+
 /// Collects authenticated votes for one height and rejects equivocation.
 pub struct VoteCollector {
     validators: ValidatorSet,
@@ -117,6 +122,54 @@ impl VoteCollector {
 
     pub fn evidence(&self) -> &[DoubleSignEvidence] {
         &self.evidence
+    }
+
+    /// Verify an externally received certificate before using it for state sync.
+    pub fn verify_certificate(&self, certificate: &CommitCertificate) -> Result<()> {
+        let mut verifier = Self::new(
+            self.validators.clone(),
+            self.keys.iter().map(|(address, key)| (*address, *key)),
+        )?;
+        let mut verified = None;
+        for vote in &certificate.votes {
+            if vote.height != certificate.height
+                || vote.round != certificate.round
+                || vote.step != VoteStep::Precommit
+                || vote.block_hash != certificate.block_hash
+            {
+                return Err(BridgeError::InvalidProposal(
+                    "certificate contains a vote for a different decision".into(),
+                ));
+            }
+            verified = verifier.add_vote(vote.clone())?.or(verified);
+        }
+        let verified = verified.ok_or_else(|| {
+            BridgeError::InvalidProposal("certificate does not contain >2/3 voting power".into())
+        })?;
+        if verified.signed_power != certificate.signed_power
+            || verified.total_power != certificate.total_power
+        {
+            return Err(BridgeError::InvalidProposal(
+                "certificate voting-power metadata is inconsistent".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Verify a consecutive sequence of finalized decisions received from a peer.
+    pub fn verify_snapshot(&self, snapshot: &ConsensusSnapshot, after_height: u64) -> Result<()> {
+        let mut expected = after_height + 1;
+        for certificate in &snapshot.certificates {
+            if certificate.height != expected {
+                return Err(BridgeError::InvalidProposal(format!(
+                    "state sync height gap: expected {expected}, got {}",
+                    certificate.height
+                )));
+            }
+            self.verify_certificate(certificate)?;
+            expected += 1;
+        }
+        Ok(())
     }
 
     fn certificate_for(
@@ -266,5 +319,47 @@ mod tests {
             &validators[1].1,
         );
         assert!(collector.add_vote(forged).unwrap_err().to_string().contains("signature"));
+    }
+
+    #[test]
+    fn joining_validator_verifies_missed_certificates() {
+        let (mut producer, validators) = network(4);
+        let mut certificates = Vec::new();
+        for height in 1..=5 {
+            let hash = B256::from(U256::from(height));
+            let mut certificate = None;
+            for (address, key) in validators.iter().take(3) {
+                certificate = producer
+                    .add_vote(SignedVote::sign(height, 0, VoteStep::Precommit, hash, *address, key))
+                    .unwrap()
+                    .or(certificate);
+            }
+            certificates.push(certificate.unwrap());
+        }
+
+        let (joining_validator, _) = network(4);
+        joining_validator.verify_snapshot(&ConsensusSnapshot { certificates }, 0).unwrap();
+    }
+
+    #[test]
+    fn state_sync_rejects_height_gaps_and_tampering() {
+        let (mut producer, validators) = network(4);
+        let hash = B256::repeat_byte(9);
+        let mut certificate = None;
+        for (address, key) in validators.iter().take(3) {
+            certificate = producer
+                .add_vote(SignedVote::sign(2, 0, VoteStep::Precommit, hash, *address, key))
+                .unwrap()
+                .or(certificate);
+        }
+        let mut certificate = certificate.unwrap();
+        assert!(producer
+            .verify_snapshot(&ConsensusSnapshot { certificates: vec![certificate.clone()] }, 0)
+            .unwrap_err()
+            .to_string()
+            .contains("height gap"));
+
+        certificate.signed_power = 4;
+        assert!(producer.verify_certificate(&certificate).is_err());
     }
 }
