@@ -284,12 +284,61 @@ D_mse ≥ 1/4^b
 
 ---
 
+## 2026 production-readiness review
+
+The original note above summarizes the TurboQuant paper, but it does not establish that
+TurboQuant is safe for distributed gradient aggregation. The paper evaluates vector retrieval and
+KV-cache workloads, not end-to-end pre-training of a model larger than 1B parameters. In contrast,
+INTELLECT-1 reports a completed 10B-parameter, one-trillion-token training run using DiLoCo and a
+custom int8 all-reduce. That is the appropriate production baseline.
+
+A later technical note comparing TurboQuant with the earlier DRIVE/EDEN family also reports that
+unbiased EDEN is more accurate than `TurboQuant_prod`, often by more than one bit. This weakens the
+case for investing specifically in `TurboQuant_prod`; any future low-bit experiment must include
+EDEN as a baseline rather than treating TurboQuant as the state of the art.
+
+### Reproducible local benchmark
+
+Run:
+
+```bash
+cargo run --release -p neunode-turboquant --example gradient_benchmark
+```
+
+Apple Silicon CPU result for 1,048,576 deterministic synthetic gradient values, averaged over 20
+encodes (2026-08-24):
+
+| Method | Target payload | Compression vs f32 | MSE | Cosine similarity | Encode |
+|---|---:|---:|---:|---:|---:|
+| f32 copy | 4,194,304 B | 1× | 0 | 1.000000 | 0.153 ms |
+| symmetric int8 | 1,048,580 B | 4× | 0.00000518 | 0.999992 | 0.380 ms |
+| 1-bit `TQ_mse` | 131,084 B | 32× | 0.33931235 | 0.798153 | 8.542 ms |
+
+These are codec measurements, not convergence results. `TQ_mse` is a biased reconstruction codec
+and cannot substitute for the unimplemented `TQ_prod` residual estimator. Its current
+`CompressedVector` also stores every index as a `u32`; the 1-bit row reports the intended packed
+wire size, which still needs an actual bit-packing transport implementation.
+
+### Decision
+
+**Remain deferred.** Do not select 1–2-bit TurboQuant for training. Continue using int8 for gradient
+communication because it has dramatically lower error, lower CPU encode cost, and real 10B-scale
+evidence. Reconsider low-bit gradients only after all of the following are available:
+
+1. a packed wire format and GPU WHT kernel;
+2. an unbiased implementation tested against EDEN, not only `TQ_mse`;
+3. controlled convergence runs at 1B+ parameters covering dense transformers and MoE;
+4. evidence that communication remains a material bottleneck after DiLoCo and int8.
+
+The prototype is still useful for KV-cache and retrieval experimentation, where TurboQuant was
+actually evaluated. It must not be advertised as proven for decentralized pre-training.
+
 ## Limitations
 
 1. **Unit norm assumption** — general vectors need separate norm storage (minor overhead)
-2. **O(d²) rotation cost** — structured rotations could reduce this (future work)
+2. **Rotation implementation gap** — WHT is O(d log d) on CPU, but no fused GPU kernel exists here
 3. **Entropy encoding not implemented** — could save ~5% additional bits
-4. **Only tested on decoder transformers** (Llama, Ministral) — no encoder/diffusion results
+4. **No gradient convergence evidence** — published TurboQuant benchmarks target retrieval/KV cache
 5. **No weight-only quantization experiments** — focuses on KV cache and embeddings
 
 ---
@@ -308,10 +357,10 @@ D_mse ≥ 1/4^b
 
 ---
 
-## Bottom Line for Neunode
+## Original integration hypothesis (not a production claim)
 
 ```
-TurboQuant solves the LAST major technical objection to decentralized training:
+TurboQuant could reduce one major cost in decentralized training:
 
   "But bandwidth is too expensive / slow / limited"
 
@@ -321,7 +370,7 @@ Combined with:
   • SWARM (dynamic rewiring on failure)
   • TurboQuant (8× compression, unbiased, microseconds)
 
-Neunode agents can train LLMs across consumer hardware on home internet.
+This hypothesis requires the validation gates in the 2026 review above.
 ```
 
 ---
@@ -331,3 +380,5 @@ Neunode agents can train LLMs across consumer hardware on home internet.
 - [TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate](https://arxiv.org/html/2504.19874v1)
 - [Google Research Blog: TurboQuant](https://research.google/blog/turboquant-redefining-ai-efficiency-with-extreme-compression/)
 - [QJL: 1-Bit Quantization](https://arxiv.org/abs/2405.14553) (foundation for TurboQuant_prod)
+- [INTELLECT-1 Technical Report](https://arxiv.org/abs/2412.01152)
+- [A Note on TurboQuant and the Earlier DRIVE/EDEN Line of Work](https://arxiv.org/abs/2604.18555)
