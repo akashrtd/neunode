@@ -58,7 +58,8 @@ impl TeeVerifier {
     ///
     /// With the opt-in `tee-sim` feature, this performs a simulated
     /// verification checking measurement hash and nonce match. Without `tee-sim`,
-    /// this returns an error — production TEE verification is not yet implemented.
+    /// this generic interface returns an error; production callers must use the
+    /// vendor-backed Intel TDX or AMD SEV-SNP verifier.
     #[cfg(feature = "tee-sim")]
     pub fn verify_quote(
         &self,
@@ -78,7 +79,8 @@ impl TeeVerifier {
         })
     }
 
-    /// Production stub — returns an error since real TEE verification is not yet implemented.
+    /// Generic production interface — fails closed so callers cannot accidentally
+    /// substitute it for the vendor-backed Intel TDX or AMD SEV-SNP verifiers.
     #[cfg(not(feature = "tee-sim"))]
     pub fn verify_quote(
         &self,
@@ -87,7 +89,8 @@ impl TeeVerifier {
         _challenge_nonce: &[u8],
     ) -> Result<TeeAttestation> {
         Err(VerificationError::TeeAttestationFailed(
-            "production TEE verification not yet implemented".to_string(),
+            "generic TEE verification is unavailable; select Intel TDX or AMD SEV-SNP verification"
+                .to_string(),
         ))
     }
 

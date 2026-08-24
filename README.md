@@ -46,7 +46,7 @@ Neunode is **implementation-complete as a protocol, not yet deployed as a live n
 - ✅ **Contracts compile and pass on Anvil** (local EVM) — identity, bounty/escrow/review, reputation, slashing, governance, royalties, 4 resource tokens.
 - ⚠️ **There is no live chain yet.** The off-chain Rust ledger is the canonical source of truth today; the Solidity contracts are the **on-chain migration target** (see [ADR-0001](./docs/adr/0001-canonical-ledger-source-of-truth.md)). The intended sovereign L1 (Reth execution + Malachite consensus) is a spike, not built — [ADR-0002](./docs/adr/0002-consensus-strategy.md) recommends shipping on an existing L2 first.
 - ⚠️ **Resource tokens are an internal economy.** No exchange listing, no price oracle, no bridge to ETH/USDC, and no faucet/mint CLI (minting is `MINTER_ROLE`-gated). They are accounting units within the protocol — economic commands assume already-funded balances, which is a known dev gap.
-- ⚠️ **Verification is tiered but partial.** Automated / RepOps / peer-review tiers are real; the ZK tier is stubbed (`Unsupported`), and TEE is simulated.
+- ⚠️ **Verification is tiered but partial.** Automated / RepOps / peer-review tiers are real and vendor-backed Intel TDX and AMD SEV-SNP verification is available through explicit policy-driven commands and HTTP endpoints. The generic TEE simulator is development-only (`tee-sim`) and production fails closed; the ZK tier remains stubbed (`Unsupported`).
 
 In short: a complete, tested protocol you can run and develop against locally — not yet a decentralized network with real value at stake.
 
@@ -197,7 +197,7 @@ tests/      Cross-crate integration tests
 - [x] Model lineage DAG + royalties, knowledge graph, checkpoint distribution
 - [x] Stake-gated Sybil resistance + on-chain reputation (stake factor derived on-chain)
 - [x] HTTP daemon + OpenAPI, TypeScript SDK, MCP server
-- [ ] Live deployment (consensus decision — [ADR-0002](./docs/adr/0002-consensus-strategy.md)), real ZK/TEE verification, on-chain token migration ([ADR-0001](./docs/adr/0001-canonical-ledger-source-of-truth.md))
+- [ ] Live deployment (consensus decision — [ADR-0002](./docs/adr/0002-consensus-strategy.md)), real ZK verification, TEE-capable verifier deployment, and on-chain token migration ([ADR-0001](./docs/adr/0001-canonical-ledger-source-of-truth.md))
 
 ## Building & testing
 
