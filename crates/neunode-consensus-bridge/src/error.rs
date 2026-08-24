@@ -19,6 +19,12 @@ pub enum BridgeError {
 
     #[error("consensus driver stopped")]
     Stopped,
+
+    #[error("consensus WAL error: {0}")]
+    Wal(String),
+
+    #[error("invalid consensus proposal: {0}")]
+    InvalidProposal(String),
 }
 
 pub type Result<T> = std::result::Result<T, BridgeError>;

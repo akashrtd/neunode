@@ -13,17 +13,19 @@ use anyhow::{bail, Context, Result};
 use tokio::process::{Child, Command};
 use tracing::{error, info, warn};
 
-use neunode_consensus_bridge::{SingleNodeConfig, SingleNodeDriver};
+use neunode_consensus_bridge::{MalachiteEvent, MalachiteHandler, MalachiteResponse};
 use neunode_engine_api_client::EngineApiClientConfig;
 
 /// Handle to spawned chain processes.
 pub struct ChainHandle {
     reth: Option<Child>,
+    bridge: tokio::task::JoinHandle<()>,
 }
 
 impl ChainHandle {
     /// Shut down spawned processes.
     pub fn shutdown(&mut self) {
+        self.bridge.abort();
         if let Some(ref mut child) = self.reth {
             let _ = child.start_kill();
             warn!("Reth process terminated");
@@ -97,30 +99,80 @@ pub async fn start_sovereign_chain(config: crate::cli::ChainModeConfig) -> Resul
         ..Default::default()
     };
 
-    let bridge_config = SingleNodeConfig {
-        engine_api: engine_config,
-        fee_recipient: neunode_chain_spec::DEPLOYER_ADDRESS,
-        block_time_secs: config.block_time,
-        genesis_hash: None,
-    };
-
-    tokio::spawn(async move {
-        match SingleNodeDriver::new(bridge_config).await {
-            Ok(driver) => {
-                info!("Consensus bridge driver started");
-                if let Err(e) = driver.run_loop().await {
-                    error!(error = %e, "Consensus bridge driver exited with error");
-                }
-            }
-            Err(e) => {
-                error!(error = %e, "Failed to create consensus bridge driver");
-            }
+    let wal_path = dirs::data_local_dir()
+        .or_else(dirs::data_dir)
+        .context("could not determine data dir")?
+        .join("agnetd")
+        .join("consensus-bridge.wal");
+    let block_time = config.block_time;
+    let bridge = tokio::spawn(async move {
+        if let Err(error) = run_consensus_events(engine_config, wal_path, block_time).await {
+            error!(%error, "consensus event bridge exited");
         }
     });
 
     println!("{}  Chain mode: sovereign (Reth + consensus bridge)", console::style("INFO").dim());
 
-    Ok(ChainHandle { reth: reth_child })
+    Ok(ChainHandle { reth: reth_child, bridge })
+}
+
+async fn run_consensus_events(
+    engine_config: EngineApiClientConfig,
+    wal_path: PathBuf,
+    block_time: u64,
+) -> Result<()> {
+    let engine = neunode_engine_api_client::EngineApiClient::new(engine_config).await?;
+    let handler = MalachiteHandler::open(engine, neunode_chain_spec::DEPLOYER_ADDRESS, wal_path)?;
+    let (sender, receiver) = tokio::sync::mpsc::channel(32);
+    tokio::spawn(async move {
+        if let Err(error) = handler.run(receiver).await {
+            error!(%error, "Malachite handler stopped");
+        }
+    });
+
+    let (reply, response) = tokio::sync::oneshot::channel();
+    sender.send(MalachiteEvent::ConsensusReady { reply }).await?;
+    let MalachiteResponse::Ready { mut height } = response.await?? else {
+        bail!("unexpected consensus-ready response")
+    };
+    info!(height, "consensus event bridge ready");
+
+    loop {
+        sender
+            .send(MalachiteEvent::StartedRound {
+                height,
+                round: 0,
+                proposer: "single-node-validator".to_string(),
+            })
+            .await?;
+        let (reply, response) = tokio::sync::oneshot::channel();
+        sender.send(MalachiteEvent::GetValue { height, round: 0, reply }).await?;
+        let MalachiteResponse::Proposal(proposal) = response.await?? else {
+            bail!("unexpected proposal response")
+        };
+        let (reply, response) = tokio::sync::oneshot::channel();
+        sender
+            .send(MalachiteEvent::ValidationRequest { height, round: 0, proposal, reply })
+            .await?;
+        if !matches!(response.await??, MalachiteResponse::Validity(true)) {
+            bail!("execution layer rejected proposed block at height {height}")
+        }
+        let (reply, response) = tokio::sync::oneshot::channel();
+        sender
+            .send(MalachiteEvent::Decided {
+                height,
+                round: 0,
+                certificate: format!("single-node:{height}").into_bytes(),
+                reply,
+            })
+            .await?;
+        let MalachiteResponse::Finalized { block_hash, .. } = response.await?? else {
+            bail!("unexpected finalization response")
+        };
+        info!(height, %block_hash, "consensus decision finalized");
+        height += 1;
+        tokio::time::sleep(tokio::time::Duration::from_secs(block_time)).await;
+    }
 }
 
 fn write_genesis_file() -> Result<PathBuf> {

@@ -5410,10 +5410,12 @@ name = "neunode-consensus-bridge"
 version = "0.1.0"
 dependencies = [
  "alloy",
+ "async-trait",
  "neunode-chain-spec",
  "neunode-engine-api-client",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-test",

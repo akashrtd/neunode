@@ -219,12 +219,14 @@ impl EngineApiClient {
         &self,
         number: u64,
     ) -> Result<serde_json::Value, EngineApiError> {
+        self.get_block_by_tag(&format!("0x{number:x}")).await
+    }
+
+    /// Read an execution block by canonical quantity or tag (`latest`, `safe`, `finalized`).
+    pub async fn get_block_by_tag(&self, tag: &str) -> Result<serde_json::Value, EngineApiError> {
         self.rpc_call(
             "eth_getBlockByNumber",
-            vec![
-                serde_json::Value::String(format!("0x{number:x}")),
-                serde_json::Value::Bool(false),
-            ],
+            vec![serde_json::Value::String(tag.to_owned()), serde_json::Value::Bool(false)],
         )
         .await
     }
