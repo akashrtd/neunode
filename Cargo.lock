@@ -5411,6 +5411,7 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "async-trait",
+ "ed25519-dalek",
  "neunode-chain-spec",
  "neunode-engine-api-client",
  "serde",

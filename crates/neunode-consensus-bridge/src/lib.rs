@@ -37,11 +37,13 @@
 //! 3. `engine_newPayloadV3` → submit for validation
 //! 4. `engine_forkchoiceUpdatedV3` → advance head + safe + finalized
 
+pub mod bft;
 pub mod error;
 pub mod malachite_handler;
 pub mod single_node;
 pub mod types;
 
+pub use bft::{CommitCertificate, DoubleSignEvidence, SignedVote, VoteCollector, VoteStep};
 pub use error::{BridgeError, Result};
 pub use malachite_handler::{MalachiteEvent, MalachiteHandler, MalachiteResponse};
 pub use single_node::{SingleNodeConfig, SingleNodeDriver};
