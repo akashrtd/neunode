@@ -20,6 +20,7 @@ members = [
     "crates/neunode-engine-api-client",
     "crates/neunode-verification",
     "crates/neunode-discovery",
+    "crates/neunode-consensus-bridge",
     "crates/agnetd",
     "tests",
 ]
@@ -79,6 +80,9 @@ tokio-test = "0.4"
 
 # Encryption
 aes-gcm = "0.10"
+
+# Async trait
+async-trait = "0.1"
 
 # Misc
 thiserror = "2.0"

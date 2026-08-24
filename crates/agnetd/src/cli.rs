@@ -47,6 +47,26 @@ pub enum AmdGenerationArg {
     Turin,
 }
 
+/// Chain operating mode for `agnetd serve`.
+#[derive(Debug, Clone, Copy, clap::ValueEnum, PartialEq, Eq)]
+pub enum ChainMode {
+    /// No chain - agnetd operates with local RocksDB only (default).
+    Off,
+    /// Sovereign L1 - spawn Reth + consensus bridge for block production.
+    Sovereign,
+}
+
+/// Configuration passed to `cmd_serve` for chain mode.
+#[derive(Debug, Clone)]
+pub struct ChainModeConfig {
+    pub mode: ChainMode,
+    pub reth_path: Option<String>,
+    pub jwt_secret_path: Option<String>,
+    pub engine_api_endpoint: String,
+    pub block_time: u64,
+    pub external_engine: bool,
+}
+
 /// Global flags shared across all commands.
 /// Extracted from Cli for cleaner function signatures.
 #[derive(Debug, Clone)]
@@ -193,6 +213,30 @@ pub enum Commands {
         /// Port to listen on
         #[arg(long, default_value = "8080")]
         port: u16,
+
+        /// Chain mode: "off" (default, no chain), "sovereign" (run embedded L1)
+        #[arg(long, default_value = "off", value_name = "MODE")]
+        chain_mode: ChainMode,
+
+        /// Path to Reth binary (for --chain-mode sovereign)
+        #[arg(long, value_name = "PATH")]
+        reth_path: Option<String>,
+
+        /// Path to JWT secret file for Engine API (for --chain-mode sovereign)
+        #[arg(long, value_name = "PATH")]
+        jwt_secret_path: Option<String>,
+
+        /// Engine API endpoint (for --chain-mode sovereign)
+        #[arg(long, default_value = "http://127.0.0.1:8551", value_name = "URL")]
+        engine_api_endpoint: String,
+
+        /// Block time in seconds (for --chain-mode sovereign)
+        #[arg(long, default_value = "2", value_name = "SECS")]
+        block_time: u64,
+
+        /// Connect to an already-running Reth node instead of spawning one
+        #[arg(long)]
+        external_engine: bool,
     },
     /// Show version info
     Version,

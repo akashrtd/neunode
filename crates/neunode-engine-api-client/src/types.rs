@@ -44,7 +44,7 @@ mod tests {
             safe_block_hash: B256::repeat_byte(0x02),
             finalized_block_hash: B256::repeat_byte(0x03),
         };
-        let json = serde_json::to_value(&state).unwrap();
+        let json = serde_json::to_value(state).unwrap();
         let back: ForkchoiceState = serde_json::from_value(json).unwrap();
         assert_eq!(back.head_block_hash, state.head_block_hash);
         assert_eq!(back.safe_block_hash, state.safe_block_hash);
@@ -207,7 +207,7 @@ mod tests {
             terminal_block_hash: B256::ZERO,
             terminal_block_number: 0,
         };
-        let json = serde_json::to_value(&config).unwrap();
+        let json = serde_json::to_value(config).unwrap();
         let back: TransitionConfiguration = serde_json::from_value(json).unwrap();
         assert_eq!(back.terminal_total_difficulty, config.terminal_total_difficulty);
     }

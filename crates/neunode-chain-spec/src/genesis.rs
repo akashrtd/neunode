@@ -68,18 +68,29 @@ pub fn validator_balance() -> U256 {
     U256::from(VALIDATOR_BALANCE) * U256::from(10u128).pow(U256::from(18))
 }
 
-/// Placeholder validator addresses.
-/// TODO: Replace with actual validator addresses before mainnet.
+/// Devnet validator addresses derived from the test mnemonic at BIP-44 paths
+/// `m/44'/60'/0'/0/{1..4}`. These are accounts 1-4 from the Anvil default mnemonic.
+///
+/// Mnemonic: `test test test test test test test test test test test junk`
+///
+/// WARNING: These are DEVNET/TESTNET keys only. Mainnet validators must use
+/// independently generated keys. Never use these addresses with real value.
 pub const VALIDATOR_ADDRESSES: [Address; INITIAL_VALIDATORS] = [
-    address!("1000000000000000000000000000000000000000"),
-    address!("2000000000000000000000000000000000000000"),
-    address!("3000000000000000000000000000000000000000"),
-    address!("4000000000000000000000000000000000000000"),
+    address!("70997970C51812dc3A010C7d01b50e0d17dc79C8"),
+    address!("3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"),
+    address!("90F79bf6EB2c4f870365E785982E1f101E93b906"),
+    address!("15d34AAf54267DB7D7c367839AAf71A00a2C6A65"),
 ];
 
-/// Placeholder deployer address (receives contract ownership).
-/// TODO: Replace with actual deployer/multisig address.
-pub const DEPLOYER_ADDRESS: Address = address!("dEaD000000000000000000000000000000000000");
+/// Devnet deployer address (Anvil account 0 from the same mnemonic).
+/// This address owns all predeployed contracts (roles, ownership) and must
+/// match the owner stored in `genesis_predeploys.json` storage slots.
+///
+/// Mnemonic: `test test test test test test test test test test test junk`
+/// Path: `m/44'/60'/0'/0/0`
+///
+/// WARNING: DEVNET/TESTNET only. Mainnet must use a multisig or governance-owned deployer.
+pub const DEPLOYER_ADDRESS: Address = address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
 
 /// Builds the complete Neunode genesis configuration.
 pub fn neunode_genesis() -> NeunodeGenesis {

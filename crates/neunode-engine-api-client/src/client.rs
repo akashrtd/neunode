@@ -214,6 +214,21 @@ impl EngineApiClient {
         .await
     }
 
+    /// Read an execution block through Reth's authenticated RPC endpoint.
+    pub async fn get_block_by_number(
+        &self,
+        number: u64,
+    ) -> Result<serde_json::Value, EngineApiError> {
+        self.rpc_call(
+            "eth_getBlockByNumber",
+            vec![
+                serde_json::Value::String(format!("0x{number:x}")),
+                serde_json::Value::Bool(false),
+            ],
+        )
+        .await
+    }
+
     // ----------------------------------------------------------------
     // Convenience: full block proposal flow
     // ----------------------------------------------------------------
@@ -256,7 +271,7 @@ impl EngineApiClient {
     // ----------------------------------------------------------------
 
     /// Make an authenticated JSON-RPC call to the Engine API.
-    async fn rpc_call<T: serde::de::DeserializeOwned>(
+    async fn rpc_call<T: serde::de::DeserializeOwned + Send>(
         &self,
         method: &str,
         params: Vec<serde_json::Value>,
@@ -264,12 +279,13 @@ impl EngineApiClient {
         self.rpc_call_with_retry(method, params, 0).await
     }
 
-    fn rpc_call_with_retry<'a, T: serde::de::DeserializeOwned + 'a>(
+    fn rpc_call_with_retry<'a, T: serde::de::DeserializeOwned + Send + 'a>(
         &'a self,
         method: &'a str,
         params: Vec<serde_json::Value>,
         attempt: u32,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, EngineApiError>> + 'a>> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, EngineApiError>> + Send + 'a>>
+    {
         Box::pin(async move {
             let token = self.jwt.generate_token()?;
 
@@ -436,7 +452,7 @@ mod tests {
     #[test]
     fn json_rpc_request_format() {
         let method = "engine_newPayloadV3";
-        let params = vec![
+        let params = [
             serde_json::json!({"blockNumber": "0x1"}),
             serde_json::json!([]),
             serde_json::json!("0x0000000000000000000000000000000000000000000000000000000000000000"),
@@ -585,7 +601,7 @@ mod tests {
         let start: u64 = 1;
         let count: u64 = 10;
 
-        let params = vec![
+        let params = [
             serde_json::Value::String(format!("0x{start:x}")),
             serde_json::Value::String(format!("0x{count:x}")),
         ];

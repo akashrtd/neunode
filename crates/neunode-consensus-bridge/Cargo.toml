@@ -1,0 +1,18 @@
+[package]
+name = "neunode-consensus-bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+neunode-engine-api-client = { path = "../neunode-engine-api-client" }
+neunode-chain-spec = { path = "../neunode-chain-spec" }
+alloy = { workspace = true, features = ["rpc-types-engine"] }
+tokio = { workspace = true, features = ["time", "sync", "macros"] }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }

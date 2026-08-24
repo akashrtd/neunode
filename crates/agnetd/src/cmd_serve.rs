@@ -1135,7 +1135,12 @@ async fn feed_sse_handler(
 )]
 struct DashboardApiDoc;
 
-pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) -> Result<()> {
+pub async fn execute(
+    port: u16,
+    _args: &GlobalArgs,
+    app_state: &mut AppState,
+    chain_config: crate::cli::ChainModeConfig,
+) -> Result<()> {
     let (feed_tx, _) = tokio::sync::broadcast::channel(256);
 
     let server_state = Arc::new(ServerState {
@@ -1195,6 +1200,14 @@ pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) ->
         console::style("INFO").dim(),
         port
     );
+
+    // Start chain mode if requested.
+    let _bridge_handle = if chain_config.mode == crate::cli::ChainMode::Sovereign {
+        println!("{}  Starting sovereign L1 chain mode...", console::style("INFO").dim());
+        Some(crate::cmd_serve_chain::start_sovereign_chain(chain_config).await?)
+    } else {
+        None
+    };
 
     println!("{}  Press Ctrl+C to shut down gracefully", console::style("INFO").dim());
 

@@ -52,6 +52,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn block_gas_limit_is_reasonable() {
         assert!(BLOCK_GAS_LIMIT >= 1_000_000, "gas limit too low");
         assert!(BLOCK_GAS_LIMIT <= 100_000_000, "gas limit unreasonably high");
@@ -95,11 +96,13 @@ mod tests {
     #[test]
     fn predeploys_covers_all_expected_contracts() {
         let predeploys = neunode_predeploys();
-        let names: HashSet<_> = predeploys.iter().map(|c| c.name).collect();
+        let names: HashSet<String> = predeploys.iter().map(|c| c.name.clone()).collect();
 
         // Verify all expected contracts are present.
         let expected = [
             "DiamondProxy",
+            "DiamondCutFacet",
+            "DiamondLoupeFacet",
             "NeunodeIdentity",
             "NeunodeBounty",
             "NeunodeEscrow",
@@ -115,7 +118,7 @@ mod tests {
             "BountyReview",
         ];
         for name in &expected {
-            assert!(names.contains(name), "missing predeploy: {name}");
+            assert!(names.contains(*name), "missing predeploy: {name}");
         }
         assert_eq!(predeploys.len(), expected.len());
     }
@@ -123,12 +126,12 @@ mod tests {
     #[test]
     fn predeploy_addresses_are_deterministic() {
         // Verify specific known addresses.
-        assert_eq!(format!("{:#x}", DIAMOND_PROXY), "0x0000000000000000000000000000000000000001");
+        assert_eq!(format!("{:#x}", DIAMOND_PROXY), "0x0000000000000000000000000000000000001001");
         assert_eq!(
             format!("{:#x}", NEUNODE_IDENTITY),
-            "0x0000000000000000000000000000000000000002"
+            "0x0000000000000000000000000000000000001002"
         );
-        assert_eq!(format!("{:#x}", COMPUTE_TOKEN), "0x0000000000000000000000000000000000000006");
+        assert_eq!(format!("{:#x}", COMPUTE_TOKEN), "0x0000000000000000000000000000000000001006");
         assert_eq!(format!("{:#x}", BEACON_ROOTS), "0x000f3df6d732807ef1319fb7b8bb8522d0beac02");
     }
 
@@ -229,7 +232,7 @@ mod tests {
         let alloc = parsed.get("alloc").unwrap().as_object().unwrap();
         // 4 validators + 1 deployer + 14 predeploys = 19 accounts.
         assert!(
-            alloc.len() >= INITIAL_VALIDATORS + 1,
+            alloc.len() > INITIAL_VALIDATORS,
             "expected at least {} alloc entries, got {}",
             INITIAL_VALIDATORS + 1,
             alloc.len()

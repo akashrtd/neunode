@@ -451,8 +451,8 @@ mod tests {
 
         let barrier = Arc::new(Barrier::new(3));
         let handles: Vec<_> = claimants
-            .iter()
-            .cloned()
+            .clone()
+            .into_iter()
             .map(|claimant| {
                 let db = Arc::clone(&db);
                 let barrier = Arc::clone(&barrier);

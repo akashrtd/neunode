@@ -21,6 +21,7 @@ mod cmd_model;
 mod cmd_reputation;
 mod cmd_security;
 mod cmd_serve;
+mod cmd_serve_chain;
 mod cmd_token;
 mod cmd_train;
 mod cmd_turboquant;
@@ -107,9 +108,27 @@ fn main() -> ExitCode {
         }
         Commands::Turboquant { command } => cmd_turboquant::execute(command, &global_args),
         Commands::Dashboard => rt.block_on(cmd_dashboard::execute(&global_args, &mut app_state)),
-        Commands::Serve { port } => {
-            rt.block_on(cmd_serve::execute(*port, &global_args, &mut app_state))
-        }
+        Commands::Serve {
+            port,
+            chain_mode,
+            reth_path,
+            jwt_secret_path,
+            engine_api_endpoint,
+            block_time,
+            external_engine,
+        } => rt.block_on(cmd_serve::execute(
+            *port,
+            &global_args,
+            &mut app_state,
+            cli::ChainModeConfig {
+                mode: *chain_mode,
+                reth_path: reth_path.clone(),
+                jwt_secret_path: jwt_secret_path.clone(),
+                engine_api_endpoint: engine_api_endpoint.clone(),
+                block_time: *block_time,
+                external_engine: *external_engine,
+            },
+        )),
         Commands::Version => {
             println!("agnetd v{}", env!("CARGO_PKG_VERSION"));
             Ok(())
