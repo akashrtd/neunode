@@ -236,6 +236,51 @@ describe("AgnetdClient", () => {
     });
   });
 
+  describe("training, reputation, and knowledge routes", () => {
+    beforeEach(() => {
+      fetchMock.mockImplementation(async () =>
+        new Response(JSON.stringify({ data: {}, success: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    });
+
+    it("uses the daemon training endpoints", async () => {
+      await client.startTraining("model", "dataset", "{}");
+      await client.getTrainingStatus("job-1");
+      await client.stopTraining("job-1");
+
+      expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+        "http://127.0.0.1:41000/api/v1/train/start",
+        "http://127.0.0.1:41000/api/v1/train/status?job_id=job-1",
+        "http://127.0.0.1:41000/api/v1/train/stop",
+      ]);
+    });
+
+    it("uses the daemon reputation endpoints", async () => {
+      await client.getReputation("did:key:agent");
+      await client.attestReputation("did:key:agent", 90, "reliable");
+      await client.getReputationLeaderboard(10);
+
+      expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+        "http://127.0.0.1:41000/api/v1/reputation?agent=did%3Akey%3Aagent",
+        "http://127.0.0.1:41000/api/v1/reputation/attest",
+        "http://127.0.0.1:41000/api/v1/reputation/leaderboard?limit=10",
+      ]);
+    });
+
+    it("uses the daemon knowledge endpoints", async () => {
+      await client.queryKnowledge({ subject: "did:key:agent", limit: 5 });
+      await client.registerKnowledgeAgent("did:key:agent", "inference,training");
+
+      expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+        "http://127.0.0.1:41000/api/v1/knowledge/query?subject=did%3Akey%3Aagent&limit=5",
+        "http://127.0.0.1:41000/api/v1/knowledge/register-agent",
+      ]);
+    });
+  });
+
   describe("AgnetdClientError", () => {
     it("has correct name and properties", () => {
       const err = new AgnetdClientError("test message", "TEST_CODE");

@@ -105,6 +105,20 @@ the current MCP Streamable HTTP protocol. Legacy SSE clients may use
 - `neunode_get_network_info` — Get local mesh node status
 - `neunode_discover` — Connect to a peer by multiaddr
 
+### Training
+- `neunode_start_training` — Start a distributed training job
+- `neunode_training_status` — Inspect training progress
+- `neunode_stop_training` — Stop a training job
+
+### Reputation
+- `neunode_get_reputation` — Read an agent score and factors
+- `neunode_attest_reputation` — Publish a signed quality attestation
+- `neunode_reputation_leaderboard` — Rank agents by reputation
+
+### Knowledge Graph
+- `neunode_query_knowledge` — Query graph triples
+- `neunode_register_knowledge_agent` — Register agent capabilities
+
 ## Resources
 
 The server exposes these MCP resource templates:

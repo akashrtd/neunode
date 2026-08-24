@@ -300,6 +300,48 @@ export class AgnetdClient {
   }
 
   // -----------------------------------------------------------------------
+  // Training, reputation, and knowledge graph
+  // -----------------------------------------------------------------------
+
+  async startTraining(model: string, dataset: string, config?: string): Promise<unknown> {
+    return this.post("/api/v1/train/start", { model, dataset, config });
+  }
+
+  async getTrainingStatus(jobId?: string): Promise<unknown> {
+    return this.get(`/api/v1/train/status${buildQuery({ job_id: jobId })}`);
+  }
+
+  async stopTraining(jobId: string): Promise<unknown> {
+    return this.post("/api/v1/train/stop", { job_id: jobId });
+  }
+
+  async getReputation(agent?: string): Promise<unknown> {
+    return this.get(`/api/v1/reputation${buildQuery({ agent })}`);
+  }
+
+  async attestReputation(to: string, score: number, comment?: string): Promise<unknown> {
+    return this.post("/api/v1/reputation/attest", { to, score, comment });
+  }
+
+  async getReputationLeaderboard(limit?: number): Promise<unknown> {
+    return this.get(`/api/v1/reputation/leaderboard${buildQuery({ limit })}`);
+  }
+
+  async queryKnowledge(params?: {
+    subject?: string;
+    predicate?: string;
+    object?: string;
+    graph?: string;
+    limit?: number;
+  }): Promise<unknown> {
+    return this.get(`/api/v1/knowledge/query${buildQuery(params)}`);
+  }
+
+  async registerKnowledgeAgent(did: string, capabilities: string): Promise<unknown> {
+    return this.post("/api/v1/knowledge/register-agent", { did, capabilities });
+  }
+
+  // -----------------------------------------------------------------------
   // Health
   // -----------------------------------------------------------------------
 

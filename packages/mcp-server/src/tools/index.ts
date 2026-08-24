@@ -11,6 +11,9 @@ import { registerBountyTools } from "./bounty.js";
 import { registerTokenTools } from "./token.js";
 import { registerModelTools } from "./model.js";
 import { registerMeshTools } from "./mesh.js";
+import { registerKnowledgeTools } from "./knowledge.js";
+import { registerReputationTools } from "./reputation.js";
+import { registerTrainingTools } from "./training.js";
 
 export function registerAllTools(
   server: McpServer,
@@ -23,4 +26,7 @@ export function registerAllTools(
   registerTokenTools(server, client);
   registerModelTools(server, client);
   registerMeshTools(server, client);
+  registerTrainingTools(server, client);
+  registerReputationTools(server, client);
+  registerKnowledgeTools(server, client);
 }
