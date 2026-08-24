@@ -56,6 +56,14 @@ pub enum ChainMode {
     Sovereign,
 }
 
+#[derive(Debug, Clone, Copy, clap::ValueEnum, PartialEq, Eq)]
+pub enum ConsensusMode {
+    /// Development-only immediate finality without validator networking.
+    Single,
+    /// Pinned Malachite/Malaketh process with Tendermint BFT networking.
+    Malachite,
+}
+
 /// Configuration passed to `cmd_serve` for chain mode.
 #[derive(Debug, Clone)]
 pub struct ChainModeConfig {
@@ -65,6 +73,10 @@ pub struct ChainModeConfig {
     pub engine_api_endpoint: String,
     pub block_time: u64,
     pub external_engine: bool,
+    pub consensus_mode: ConsensusMode,
+    pub malachite_path: Option<String>,
+    pub malachite_home: Option<String>,
+    pub malachite_working_dir: Option<String>,
 }
 
 /// Global flags shared across all commands.
@@ -237,6 +249,22 @@ pub enum Commands {
         /// Connect to an already-running Reth node instead of spawning one
         #[arg(long)]
         external_engine: bool,
+
+        /// Consensus runtime for sovereign mode
+        #[arg(long, default_value = "single", value_name = "MODE")]
+        consensus_mode: ConsensusMode,
+
+        /// Path to the pinned malachitebft-eth-app binary
+        #[arg(long, value_name = "PATH", requires = "malachite_home")]
+        malachite_path: Option<String>,
+
+        /// Validator-specific Malachite home containing config/genesis/key files
+        #[arg(long, value_name = "DIR", requires = "malachite_path")]
+        malachite_home: Option<String>,
+
+        /// Working directory for relative paths in the Malachite configuration
+        #[arg(long, value_name = "DIR", requires = "malachite_path")]
+        malachite_working_dir: Option<String>,
     },
     /// Show version info
     Version,
@@ -1413,6 +1441,37 @@ mod tests {
     fn parse_default_network_is_testnet() {
         let cli = Cli::try_parse_from(["agnetd", "version"]).expect("parse");
         assert_eq!(cli.network, "testnet");
+    }
+
+    #[test]
+    fn parse_malachite_consensus_runtime() {
+        let cli = Cli::try_parse_from([
+            "agnetd",
+            "serve",
+            "--chain-mode",
+            "sovereign",
+            "--consensus-mode",
+            "malachite",
+            "--malachite-path",
+            "/opt/neunode/malachitebft-eth-app",
+            "--malachite-home",
+            "/var/lib/neunode/validator-0",
+            "--malachite-working-dir",
+            "/opt/neunode/malaketh-layered",
+            "--external-engine",
+        ])
+        .expect("parse Malachite runtime");
+        assert!(matches!(
+            cli.command,
+            Commands::Serve {
+                consensus_mode: ConsensusMode::Malachite,
+                malachite_path: Some(_),
+                malachite_home: Some(_),
+                malachite_working_dir: Some(_),
+                external_engine: true,
+                ..
+            }
+        ));
     }
 
     #[test]

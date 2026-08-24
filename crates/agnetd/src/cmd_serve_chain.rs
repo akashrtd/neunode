@@ -19,13 +19,20 @@ use neunode_engine_api_client::EngineApiClientConfig;
 /// Handle to spawned chain processes.
 pub struct ChainHandle {
     reth: Option<Child>,
-    bridge: tokio::task::JoinHandle<()>,
+    bridge: Option<tokio::task::JoinHandle<()>>,
+    consensus: Option<Child>,
 }
 
 impl ChainHandle {
     /// Shut down spawned processes.
     pub fn shutdown(&mut self) {
-        self.bridge.abort();
+        if let Some(bridge) = &self.bridge {
+            bridge.abort();
+        }
+        if let Some(ref mut child) = self.consensus {
+            let _ = child.start_kill();
+            warn!("Malachite process terminated");
+        }
         if let Some(ref mut child) = self.reth {
             let _ = child.start_kill();
             warn!("Reth process terminated");
@@ -104,16 +111,46 @@ pub async fn start_sovereign_chain(config: crate::cli::ChainModeConfig) -> Resul
         .context("could not determine data dir")?
         .join("agnetd")
         .join("consensus-bridge.wal");
-    let block_time = config.block_time;
-    let bridge = tokio::spawn(async move {
-        if let Err(error) = run_consensus_events(engine_config, wal_path, block_time).await {
-            error!(%error, "consensus event bridge exited");
+    let (bridge, consensus) = match config.consensus_mode {
+        crate::cli::ConsensusMode::Single => {
+            let block_time = config.block_time;
+            let bridge = tokio::spawn(async move {
+                if let Err(error) = run_consensus_events(engine_config, wal_path, block_time).await
+                {
+                    error!(%error, "consensus event bridge exited");
+                }
+            });
+            (Some(bridge), None)
         }
-    });
+        crate::cli::ConsensusMode::Malachite => {
+            let binary = config.malachite_path.as_deref().context(
+                "--malachite-path is required when --consensus-mode malachite is selected",
+            )?;
+            let home = config.malachite_home.as_deref().context(
+                "--malachite-home is required when --consensus-mode malachite is selected",
+            )?;
+            let mut command = Command::new(binary);
+            command
+                .arg("--home")
+                .arg(home)
+                .arg("start")
+                .stdin(Stdio::null())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit());
+            if let Some(working_dir) = &config.malachite_working_dir {
+                command.current_dir(working_dir);
+            }
+            let child = command
+                .spawn()
+                .with_context(|| format!("failed to start Malachite binary at {binary}"))?;
+            info!(home, "Malachite BFT validator started");
+            (None, Some(child))
+        }
+    };
 
     println!("{}  Chain mode: sovereign (Reth + consensus bridge)", console::style("INFO").dim());
 
-    Ok(ChainHandle { reth: reth_child, bridge })
+    Ok(ChainHandle { reth: reth_child, bridge, consensus })
 }
 
 async fn run_consensus_events(

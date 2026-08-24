@@ -45,6 +45,28 @@ upgrade passes the same compile, three-node liveness, restart, and Engine API
 conformance gates. Git dependencies must remain revision-pinned, never branch-
 pinned.
 
+## Running a network validator
+
+Build `malachitebft-eth-app` from the pinned `malaketh-layered` revision recorded above and generate
+one validator home per node with its `testnet` command. Each home must contain the same genesis
+validator set and a distinct private validator key; its Engine RPC configuration must point to that
+node's Reth instance. Start each node through agnetd:
+
+```bash
+agnetd serve --chain-mode sovereign \
+  --consensus-mode malachite \
+  --malachite-path /opt/neunode/malachitebft-eth-app \
+  --malachite-home /var/lib/neunode/validator-0 \
+  --malachite-working-dir /opt/neunode/malaketh-layered \
+  --external-engine \
+  --engine-api-endpoint http://127.0.0.1:8551 \
+  --jwt-secret-path /var/lib/neunode/reth/jwt.hex
+```
+
+In this mode agnetd supervises the external Malachite process, which supplies Tendermint networking,
+crash recovery, proposal propagation, commit certificates, and decided-value synchronization. The
+default `single` consensus mode is explicitly development-only and does not claim BFT finality.
+
 `cargo metadata` also found MPL-2.0 transitive crates (`attohttpc`, `fastrlp`,
 `option-ext`, and `webpki-roots`) plus `ring 0.16.20`, whose Cargo metadata has
 no SPDX expression. MPL-2.0 is OSI-approved weak copyleft, so this is not a

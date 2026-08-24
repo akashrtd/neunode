@@ -116,6 +116,10 @@ fn main() -> ExitCode {
             engine_api_endpoint,
             block_time,
             external_engine,
+            consensus_mode,
+            malachite_path,
+            malachite_home,
+            malachite_working_dir,
         } => rt.block_on(cmd_serve::execute(
             *port,
             &global_args,
@@ -127,6 +131,10 @@ fn main() -> ExitCode {
                 engine_api_endpoint: engine_api_endpoint.clone(),
                 block_time: *block_time,
                 external_engine: *external_engine,
+                consensus_mode: *consensus_mode,
+                malachite_path: malachite_path.clone(),
+                malachite_home: malachite_home.clone(),
+                malachite_working_dir: malachite_working_dir.clone(),
             },
         )),
         Commands::Version => {
