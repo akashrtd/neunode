@@ -290,6 +290,13 @@ pub async fn request_inference(
     State(state): State<Arc<ApiState>>,
     Json(body): Json<InferenceRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
+    Ok(types::ok(submit_inference(&state.db, body)?))
+}
+
+pub(crate) fn submit_inference(
+    db: &NeunodeDb,
+    body: InferenceRequest,
+) -> Result<InferenceResponse, ApiError> {
     if body.model.is_empty() {
         return Err(ApiError::BadRequest("model cannot be empty".to_string()));
     }
@@ -326,7 +333,7 @@ pub async fn request_inference(
 
     let estimated_tokens = request.estimate_tokens();
 
-    let providers = load_all_providers(&state.db);
+    let providers = load_all_providers(db);
     let pricing_info = providers.iter().find_map(|p| p.find_model(&body.model)).map(|m| {
         let cost =
             ((estimated_tokens as u128 * m.input_price_per_million.0 / 1_000_000).max(1)) as u64;
@@ -337,7 +344,7 @@ pub async fn request_inference(
         }
     });
 
-    Ok(types::ok(InferenceResponse {
+    Ok(InferenceResponse {
         model: body.model,
         prompt: body.prompt,
         max_tokens: body.max_tokens,
@@ -345,7 +352,7 @@ pub async fn request_inference(
         estimated_input_tokens: estimated_tokens,
         status: "submitted".to_string(),
         pricing: pricing_info,
-    }))
+    })
 }
 
 #[utoipa::path(

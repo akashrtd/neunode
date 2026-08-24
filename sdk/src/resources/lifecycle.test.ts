@@ -44,11 +44,4 @@ describe("LifecycleResource", () => {
 			"POST /api/v1/lifecycle/reap",
 		]);
 	});
-
-	it("rejects lifecycle calls without HTTP", async () => {
-		const client = createNeunodeClient({ cli: { binaryPath: "agnetd" } });
-		await expect(client.lifecycle.status()).rejects.toThrow(
-			"HTTP transport required for lifecycle operations",
-		);
-	});
 });

@@ -82,6 +82,11 @@ export interface InferenceResource {
 	): Promise<InferenceRegisterProviderResult>;
 	/** Send an inference request to a model. */
 	request(params: InferenceRequestParams): Promise<InferenceRequestResult>;
+	/** Submit an inference request and receive its result over WebSocket. */
+	stream(
+		params: InferenceRequestParams,
+		callback: (result: InferenceRequestResult) => void,
+	): () => void;
 	/** List available models, optionally filtered by provider. */
 	listModels(provider?: string): Promise<InferenceListModelsResult>;
 	/** List inference providers, optionally filtered by model. */
@@ -101,127 +106,79 @@ export function createInferenceResource(
 ): InferenceResource {
 	return {
 		async registerProvider(params) {
-			if (client.http) {
-				return client.http.post<InferenceRegisterProviderResult>(
-					"/api/v1/inference/providers",
-					params,
-				);
-			}
-			const cli = client.cli;
-			if (!cli) {
-				throw new Error(
-					"HTTP or CLI transport required for inference operations",
-				);
-			}
-			return cli.execute<InferenceRegisterProviderResult>([
-				"inference",
-				"register-provider",
-				"--name",
-				params.name,
-				"--endpoint",
-				params.endpoint,
-				"--models",
-				params.models.join(","),
-			]);
+			return client.http.post<InferenceRegisterProviderResult>(
+				"/api/v1/inference/providers",
+				params,
+			);
 		},
 
 		async request(
 			params: InferenceRequestParams,
 		): Promise<InferenceRequestResult> {
-			if (client.http) {
-				return client.http.post<InferenceRequestResult>(
-					"/api/v1/inference/request",
-					params,
+			return client.http.post<InferenceRequestResult>(
+				"/api/v1/inference/request",
+				{
+					model: params.model,
+					prompt: params.prompt,
+					max_tokens: params.maxTokens,
+					temperature: params.temperature,
+				},
+			);
+		},
+
+		stream(params, callback): () => void {
+			const url = `${client.http.getBaseUrl().replace(/^http/, "ws")}/ws/inference`;
+			const socket = new WebSocket(url);
+			socket.onopen = () =>
+				socket.send(
+					JSON.stringify({
+						model: params.model,
+						prompt: params.prompt,
+						max_tokens: params.maxTokens,
+						temperature: params.temperature,
+					}),
 				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for inference operations",
-				);
-			const args = [
-				"inference",
-				"request",
-				"--model",
-				params.model,
-				"--prompt",
-				params.prompt,
-				"--max-tokens",
-				String(params.maxTokens),
-			];
-			if (params.temperature !== undefined)
-				args.push("--temperature", String(params.temperature));
-			return cli.execute<InferenceRequestResult>(args);
+			socket.onmessage = (event: MessageEvent) => {
+				const result = JSON.parse(
+					event.data as string,
+				) as InferenceRequestResult;
+				callback(result);
+			};
+			return () => socket.close();
 		},
 
 		async listModels(provider?: string): Promise<InferenceListModelsResult> {
-			if (client.http) {
-				const qs = new URLSearchParams();
-				if (provider) qs.set("provider", provider);
-				const query = qs.toString();
-				return client.http.get<InferenceListModelsResult>(
-					query
-						? `/api/v1/inference/models?${query}`
-						: "/api/v1/inference/models",
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for inference operations",
-				);
-			const args = ["inference", "list-models"];
-			if (provider) args.push("--provider", provider);
-			return cli.execute<InferenceListModelsResult>(args);
+			const qs = new URLSearchParams();
+			if (provider) qs.set("provider", provider);
+			const query = qs.toString();
+			return client.http.get<InferenceListModelsResult>(
+				query
+					? `/api/v1/inference/models?${query}`
+					: "/api/v1/inference/models",
+			);
 		},
 
 		async providers(model?: string): Promise<InferenceProvidersResult> {
-			if (client.http) {
-				const qs = new URLSearchParams();
-				if (model) qs.set("model", model);
-				const query = qs.toString();
-				return client.http.get<InferenceProvidersResult>(
-					query
-						? `/api/v1/inference/providers?${query}`
-						: "/api/v1/inference/providers",
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for inference operations",
-				);
-			const args = ["inference", "providers"];
-			if (model) args.push("--model", model);
-			return cli.execute<InferenceProvidersResult>(args);
+			const qs = new URLSearchParams();
+			if (model) qs.set("model", model);
+			const query = qs.toString();
+			return client.http.get<InferenceProvidersResult>(
+				query
+					? `/api/v1/inference/providers?${query}`
+					: "/api/v1/inference/providers",
+			);
 		},
 
 		async route(
 			model: string,
 			strategy?: string,
 		): Promise<InferenceRouteResult> {
-			if (client.http) {
-				const qs = new URLSearchParams();
-				qs.set("model", model);
-				qs.set("strategy", strategy ?? "cheapest");
-				return client.http.get<InferenceRouteResult>(
-					`/api/v1/inference/route?${qs.toString()}`,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for inference operations",
-				);
-			const args = [
-				"inference",
-				"route",
-				"--model",
-				model,
-				"--strategy",
-				strategy ?? "cheapest",
-			];
-			return cli.execute<InferenceRouteResult>(args);
+			const qs = new URLSearchParams();
+			qs.set("model", model);
+			qs.set("strategy", strategy ?? "cheapest");
+			return client.http.get<InferenceRouteResult>(
+				`/api/v1/inference/route?${qs.toString()}`,
+			);
 		},
 
 		async pricing(
@@ -229,30 +186,13 @@ export function createInferenceResource(
 			inputTokens: number,
 			outputTokens: number,
 		): Promise<InferencePricingResult> {
-			if (client.http) {
-				const qs = new URLSearchParams();
-				qs.set("model", model);
-				qs.set("input_tokens", String(inputTokens));
-				qs.set("output_tokens", String(outputTokens));
-				return client.http.get<InferencePricingResult>(
-					`/api/v1/inference/pricing?${qs.toString()}`,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for inference operations",
-				);
-			return cli.execute<InferencePricingResult>([
-				"inference",
-				"pricing",
-				"--model",
-				model,
-				"--input-tokens",
-				String(inputTokens),
-				"--output-tokens",
-				String(outputTokens),
-			]);
+			const qs = new URLSearchParams();
+			qs.set("model", model);
+			qs.set("input_tokens", String(inputTokens));
+			qs.set("output_tokens", String(outputTokens));
+			return client.http.get<InferencePricingResult>(
+				`/api/v1/inference/pricing?${qs.toString()}`,
+			);
 		},
 	};
 }

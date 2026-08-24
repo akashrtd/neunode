@@ -41,18 +41,6 @@ describe("Package exports", () => {
 		expect(typeof mod.createNeunodeClient).toBe("function");
 	});
 
-	it("should export CliTransport", async () => {
-		const mod = await import(join(distDir, "index.js"));
-		expect(mod.CliTransport).toBeDefined();
-		expect(typeof mod.CliTransport).toBe("function");
-	});
-
-	it("should export CliTransportError", async () => {
-		const mod = await import(join(distDir, "index.js"));
-		expect(mod.CliTransportError).toBeDefined();
-		expect(typeof mod.CliTransportError).toBe("function");
-	});
-
 	it("should export ViemTransport", async () => {
 		const mod = await import(join(distDir, "index.js"));
 		expect(mod.ViemTransport).toBeDefined();

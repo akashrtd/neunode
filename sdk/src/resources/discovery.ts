@@ -100,126 +100,53 @@ export function createDiscoveryResource(
 		async search(
 			params: DiscoverySearchParams,
 		): Promise<DiscoverySearchResult> {
-			if (client.http) {
-				const qs = new URLSearchParams();
-				qs.set("capabilities", params.capabilities);
-				if (params.minReputation !== undefined && params.minReputation > 0) {
-					qs.set("minReputation", String(params.minReputation));
-				}
-				if (params.maxCost !== undefined) {
-					qs.set("maxCost", String(params.maxCost));
-				}
-				if (params.onlineOnly) qs.set("onlineOnly", "true");
-				if (params.limit !== undefined) {
-					qs.set("limit", String(params.limit));
-				}
-				return client.http.get<DiscoverySearchResult>(
-					`/api/v1/discovery/search?${qs.toString()}`,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for discovery operations",
-				);
-			const args = [
-				"discover",
-				"search",
-				"--capabilities",
-				params.capabilities,
-			];
+			const qs = new URLSearchParams();
+			qs.set("capabilities", params.capabilities);
 			if (params.minReputation !== undefined && params.minReputation > 0) {
-				args.push("--min-reputation", String(params.minReputation));
+				qs.set("minReputation", String(params.minReputation));
 			}
 			if (params.maxCost !== undefined) {
-				args.push("--max-cost", String(params.maxCost));
+				qs.set("maxCost", String(params.maxCost));
 			}
-			if (params.onlineOnly) args.push("--online-only");
+			if (params.onlineOnly) qs.set("onlineOnly", "true");
 			if (params.limit !== undefined) {
-				args.push("--limit", String(params.limit));
+				qs.set("limit", String(params.limit));
 			}
-			return cli.execute<DiscoverySearchResult>(args);
+			return client.http.get<DiscoverySearchResult>(
+				`/api/v1/discovery/search?${qs.toString()}`,
+			);
 		},
 
 		async complement(
 			params: DiscoveryComplementParams,
 		): Promise<DiscoveryComplementResult> {
-			if (client.http) {
-				const qs = new URLSearchParams();
-				qs.set("capabilities", params.capabilities);
-				if (params.limit !== undefined) {
-					qs.set("limit", String(params.limit));
-				}
-				return client.http.get<DiscoveryComplementResult>(
-					`/api/v1/discovery/complement?${qs.toString()}`,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for discovery operations",
-				);
-			const args = [
-				"discover",
-				"complement",
-				"--capabilities",
-				params.capabilities,
-			];
+			const qs = new URLSearchParams();
+			qs.set("capabilities", params.capabilities);
 			if (params.limit !== undefined) {
-				args.push("--limit", String(params.limit));
+				qs.set("limit", String(params.limit));
 			}
-			return cli.execute<DiscoveryComplementResult>(args);
+			return client.http.get<DiscoveryComplementResult>(
+				`/api/v1/discovery/complement?${qs.toString()}`,
+			);
 		},
 
 		async gaps(): Promise<DiscoveryGapsResult> {
-			if (client.http) {
-				return client.http.get<DiscoveryGapsResult>("/api/v1/discovery/gaps");
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for discovery operations",
-				);
-			return cli.execute<DiscoveryGapsResult>(["discover", "gaps"]);
+			return client.http.get<DiscoveryGapsResult>("/api/v1/discovery/gaps");
 		},
 
 		async score(params: DiscoveryScoreParams): Promise<DiscoveryScoreResult> {
-			if (client.http) {
-				const qs = new URLSearchParams();
-				qs.set("agent", params.agent);
-				qs.set("capabilities", params.capabilities);
-				return client.http.get<DiscoveryScoreResult>(
-					`/api/v1/discovery/score?${qs.toString()}`,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for discovery operations",
-				);
-			const args = [
-				"discover",
-				"score",
-				"--agent",
-				params.agent,
-				"--capabilities",
-				params.capabilities,
-			];
-			return cli.execute<DiscoveryScoreResult>(args);
+			const qs = new URLSearchParams();
+			qs.set("agent", params.agent);
+			qs.set("capabilities", params.capabilities);
+			return client.http.get<DiscoveryScoreResult>(
+				`/api/v1/discovery/score?${qs.toString()}`,
+			);
 		},
 
 		async weights(): Promise<DiscoveryWeightsResult> {
-			if (client.http) {
-				return client.http.get<DiscoveryWeightsResult>(
-					"/api/v1/discovery/weights",
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for discovery operations",
-				);
-			return cli.execute<DiscoveryWeightsResult>(["discover", "weights"]);
+			return client.http.get<DiscoveryWeightsResult>(
+				"/api/v1/discovery/weights",
+			);
 		},
 	};
 }

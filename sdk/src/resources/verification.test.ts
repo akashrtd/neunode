@@ -116,16 +116,4 @@ describe("VerificationResource", () => {
 			}),
 		);
 	});
-
-	it("requires HTTP transport", async () => {
-		const client = createNeunodeClient({ cli: { binaryPath: "agnetd" } });
-		await expect(
-			client.verification.verifyIntelTdx({
-				quoteHex: "00",
-				collateralJson: "{}",
-				mrTd: "11".repeat(48),
-				reportData: "22".repeat(64),
-			}),
-		).rejects.toThrow("HTTP transport required");
-	});
 });

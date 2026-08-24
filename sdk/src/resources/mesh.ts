@@ -39,65 +39,28 @@ export interface MeshResource {
 export function createMeshResource(client: NeunodeClient): MeshResource {
 	return {
 		async status(): Promise<MeshStatusResult> {
-			if (client.http) {
-				return client.http.get<MeshStatusResult>("/api/v1/mesh/status");
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error("HTTP or CLI transport required for mesh operations");
-			return cli.execute<MeshStatusResult>(["mesh", "status"]);
+			return client.http.get<MeshStatusResult>("/api/v1/mesh/status");
 		},
 
 		async peers(verbose?: boolean): Promise<MeshPeersResult> {
-			if (client.http) {
-				const qs = new URLSearchParams();
-				if (verbose) qs.set("verbose", "true");
-				const query = qs.toString();
-				return client.http.get<MeshPeersResult>(
-					query ? `/api/v1/mesh/peers?${query}` : "/api/v1/mesh/peers",
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error("HTTP or CLI transport required for mesh operations");
-			const args = ["mesh", "peers"];
-			if (verbose) args.push("--verbose");
-			return cli.execute<MeshPeersResult>(args);
+			const qs = new URLSearchParams();
+			if (verbose) qs.set("verbose", "true");
+			const query = qs.toString();
+			return client.http.get<MeshPeersResult>(
+				query ? `/api/v1/mesh/peers?${query}` : "/api/v1/mesh/peers",
+			);
 		},
 
 		async connect(addr: string): Promise<MeshConnectResult> {
-			if (client.http) {
-				return client.http.post<MeshConnectResult>("/api/v1/mesh/connect", {
-					addr,
-				});
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error("HTTP or CLI transport required for mesh operations");
-			return cli.execute<MeshConnectResult>([
-				"mesh",
-				"connect",
-				"--addr",
+			return client.http.post<MeshConnectResult>("/api/v1/mesh/connect", {
 				addr,
-			]);
+			});
 		},
 
 		async disconnect(peerId: string): Promise<MeshDisconnectResult> {
-			if (client.http) {
-				return client.http.post<MeshDisconnectResult>(
-					"/api/v1/mesh/disconnect",
-					{ peerId },
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error("HTTP or CLI transport required for mesh operations");
-			return cli.execute<MeshDisconnectResult>([
-				"mesh",
-				"disconnect",
-				"--peer-id",
+			return client.http.post<MeshDisconnectResult>("/api/v1/mesh/disconnect", {
 				peerId,
-			]);
+			});
 		},
 	};
 }

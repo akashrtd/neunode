@@ -58,77 +58,19 @@ export function createTurboquantResource(
 		async compress(
 			params: TurboquantCompressParams,
 		): Promise<TurboquantCompressResult> {
-			if (client.http) {
-				return client.http.post<TurboquantCompressResult>(
-					"/api/v1/turboquant/compress",
-					params,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for turboquant operations",
-				);
-			const args = [
-				"turboquant",
-				"compress",
-				"--profile",
-				params.profile,
-				"--dimension",
-				String(params.dimension),
-			];
-			if (params.profile === "gradient") {
-				if (params.workers !== undefined) {
-					args.push("--workers", String(params.workers));
-				}
-				if (params.bandwidthMbps !== undefined) {
-					args.push("--bandwidth-mbps", String(params.bandwidthMbps));
-				}
-			}
-			if (params.profile === "kv_cache" && params.targetBits !== undefined) {
-				args.push("--target-bits", String(params.targetBits));
-			}
-			if (params.profile === "custom" && params.bits !== undefined) {
-				args.push("--bits", String(params.bits));
-			}
-			return cli.execute<TurboquantCompressResult>(args);
+			return client.http.post<TurboquantCompressResult>(
+				"/api/v1/turboquant/compress",
+				params,
+			);
 		},
 
 		async generateCodebook(
 			params: TurboquantCodebookParams,
 		): Promise<TurboquantCodebookResult> {
-			if (client.http) {
-				return client.http.post<TurboquantCodebookResult>(
-					"/api/v1/turboquant/codebook",
-					params,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for turboquant operations",
-				);
-			const args = [
-				"turboquant",
-				"generate-codebook",
-				"--bits",
-				String(params.bits),
-				"--dimension",
-				String(params.dimension),
-			];
-			if (params.maxIterations !== undefined) {
-				args.push("--max-iterations", String(params.maxIterations));
-			}
-			if (params.convergenceThreshold !== undefined) {
-				args.push(
-					"--convergence-threshold",
-					String(params.convergenceThreshold),
-				);
-			}
-			if (params.numSamples !== undefined) {
-				args.push("--num-samples", String(params.numSamples));
-			}
-			return cli.execute<TurboquantCodebookResult>(args);
+			return client.http.post<TurboquantCodebookResult>(
+				"/api/v1/turboquant/codebook",
+				params,
+			);
 		},
 	};
 }

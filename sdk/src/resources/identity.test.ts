@@ -19,7 +19,6 @@ function makeClient(): {
 	return {
 		client: {
 			http,
-			cli: undefined,
 			viem: undefined,
 			transportMode: "http",
 			identity: {} as never,
@@ -51,11 +50,6 @@ describe("createIdentityResource", () => {
 	let post: ReturnType<typeof vi.fn>;
 
 	beforeEach(() => ({ client, get, post } = makeClient()));
-
-	it("requires HTTP transport", async () => {
-		const resource = createIdentityResource({ ...client, http: undefined });
-		await expect(resource.list()).rejects.toThrow("HTTP transport required");
-	});
 
 	it("creates identities over HTTP", async () => {
 		const expected = {

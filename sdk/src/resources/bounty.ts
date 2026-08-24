@@ -121,153 +121,58 @@ export interface BountyResource {
 export function createBountyResource(client: NeunodeClient): BountyResource {
 	return {
 		async create(params: BountyCreateParams): Promise<BountyCreateResult> {
-			if (client.http) {
-				return client.http.post<BountyCreateResult>("/api/v1/bounties", params);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error("HTTP or CLI transport required for bounty operations");
-			const args = [
-				"bounty",
-				"create",
-				"--title",
-				params.title,
-				"--description",
-				params.description,
-				"--reward",
-				String(params.reward),
-				"--token",
-				params.token,
-			];
-			if (params.claimDeadline)
-				args.push("--claim-deadline", String(params.claimDeadline));
-			if (params.workDeadline)
-				args.push("--work-deadline", String(params.workDeadline));
-			return cli.execute<BountyCreateResult>(args);
+			return client.http.post<BountyCreateResult>("/api/v1/bounties", params);
 		},
 
 		async claim(params: BountyClaimParams): Promise<BountyClaimResult> {
-			if (client.http) {
-				return client.http.post<BountyClaimResult>(
-					`/api/v1/bounties/${encodeURIComponent(params.id)}/claim`,
-					{ stake: params.stake },
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error("HTTP or CLI transport required for bounty operations");
-			return cli.execute<BountyClaimResult>([
-				"bounty",
-				"claim",
-				"--id",
-				params.id,
-				"--stake",
-				String(params.stake),
-			]);
+			return client.http.post<BountyClaimResult>(
+				`/api/v1/bounties/${encodeURIComponent(params.id)}/claim`,
+				{ stake: params.stake },
+			);
 		},
 
 		async submit(params: BountySubmitParams): Promise<BountySubmitResult> {
-			if (client.http) {
-				return client.http.post<BountySubmitResult>(
-					`/api/v1/bounties/${encodeURIComponent(params.id)}/submit`,
-					params,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error("HTTP or CLI transport required for bounty operations");
-			const args = [
-				"bounty",
-				"submit",
-				"--id",
-				params.id,
-				"--artifact",
-				params.artifact,
-			];
-			if (params.evidence) args.push("--evidence", params.evidence);
-			return cli.execute<BountySubmitResult>(args);
+			return client.http.post<BountySubmitResult>(
+				`/api/v1/bounties/${encodeURIComponent(params.id)}/submit`,
+				params,
+			);
 		},
 
 		async review(params: BountyReviewParams): Promise<BountyReviewResult> {
-			if (client.http) {
-				return client.http.post<BountyReviewResult>(
-					`/api/v1/bounties/${encodeURIComponent(params.id)}/review`,
-					params,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error("HTTP or CLI transport required for bounty operations");
-			return cli.execute<BountyReviewResult>([
-				"bounty",
-				"review",
-				"--id",
-				params.id,
-				"--score",
-				String(params.score),
-				"--feedback",
-				params.feedback,
-			]);
+			return client.http.post<BountyReviewResult>(
+				`/api/v1/bounties/${encodeURIComponent(params.id)}/review`,
+				params,
+			);
 		},
 
 		async list(params?: BountyListParams): Promise<BountyListItem[]> {
-			if (client.http) {
-				const qs = new URLSearchParams();
-				if (params?.state) qs.set("state", params.state);
-				if (params?.creator) qs.set("creator", params.creator);
-				if (params?.limit) qs.set("limit", String(params.limit));
-				const query = qs.toString();
-				return client.http.get<BountyListItem[]>(
-					query ? `/api/v1/bounties?${query}` : "/api/v1/bounties",
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error("HTTP or CLI transport required for bounty operations");
-			const args = ["bounty", "list"];
-			if (params?.state) args.push("--state", params.state);
-			if (params?.creator) args.push("--creator", params.creator);
-			if (params?.limit) args.push("--limit", String(params.limit));
-			return cli.execute<BountyListItem[]>(args);
+			const qs = new URLSearchParams();
+			if (params?.state) qs.set("state", params.state);
+			if (params?.creator) qs.set("creator", params.creator);
+			if (params?.limit) qs.set("limit", String(params.limit));
+			const query = qs.toString();
+			return client.http.get<BountyListItem[]>(
+				query ? `/api/v1/bounties?${query}` : "/api/v1/bounties",
+			);
 		},
 
 		async show(id: string): Promise<BountyShowResult> {
-			if (client.http) {
-				return client.http.get<BountyShowResult>(
-					`/api/v1/bounties/${encodeURIComponent(id)}`,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error("HTTP or CLI transport required for bounty operations");
-			return cli.execute<BountyShowResult>(["bounty", "show", "--id", id]);
+			return client.http.get<BountyShowResult>(
+				`/api/v1/bounties/${encodeURIComponent(id)}`,
+			);
 		},
 
 		async cancel(id: string, reason?: string): Promise<BountyCancelResult> {
-			if (client.http) {
-				return client.http.post<BountyCancelResult>(
-					`/api/v1/bounties/${encodeURIComponent(id)}/cancel`,
-					reason ? { reason } : undefined,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error("HTTP or CLI transport required for bounty operations");
-			const args = ["bounty", "cancel", "--id", id];
-			if (reason) args.push("--reason", reason);
-			return cli.execute<BountyCancelResult>(args);
+			return client.http.post<BountyCancelResult>(
+				`/api/v1/bounties/${encodeURIComponent(id)}/cancel`,
+				reason ? { reason } : undefined,
+			);
 		},
 
 		async pay(id: string): Promise<BountyPayResult> {
-			if (client.http) {
-				return client.http.post<BountyPayResult>(
-					`/api/v1/bounties/${encodeURIComponent(id)}/pay`,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error("HTTP or CLI transport required for bounty operations");
-			return cli.execute<BountyPayResult>(["bounty", "pay", "--id", id]);
+			return client.http.post<BountyPayResult>(
+				`/api/v1/bounties/${encodeURIComponent(id)}/pay`,
+			);
 		},
 	};
 }

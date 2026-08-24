@@ -109,167 +109,64 @@ export function createKnowledgeResource(
 		async query(
 			params?: KnowledgeQueryParams,
 		): Promise<KnowledgeQueryListResult> {
-			if (client.http) {
-				const qs = new URLSearchParams();
-				if (params?.subject) qs.set("subject", params.subject);
-				if (params?.predicate) qs.set("predicate", params.predicate);
-				if (params?.object) qs.set("object", params.object);
-				if (params?.graph) qs.set("graph", params.graph);
-				if (params?.limit) qs.set("limit", String(params.limit));
-				const query = qs.toString();
-				return client.http.get<KnowledgeQueryListResult>(
-					query
-						? `/api/v1/knowledge/query?${query}`
-						: "/api/v1/knowledge/query",
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for knowledge operations",
-				);
-			const args = ["knowledge", "query"];
-			if (params?.subject) args.push("--subject", params.subject);
-			if (params?.predicate) args.push("--predicate", params.predicate);
-			if (params?.object) args.push("--object", params.object);
-			if (params?.graph) args.push("--graph", params.graph);
-			if (params?.limit) args.push("--limit", String(params.limit));
-			return cli.execute<KnowledgeQueryListResult>(args);
+			const qs = new URLSearchParams();
+			if (params?.subject) qs.set("subject", params.subject);
+			if (params?.predicate) qs.set("predicate", params.predicate);
+			if (params?.object) qs.set("object", params.object);
+			if (params?.graph) qs.set("graph", params.graph);
+			if (params?.limit) qs.set("limit", String(params.limit));
+			const query = qs.toString();
+			return client.http.get<KnowledgeQueryListResult>(
+				query ? `/api/v1/knowledge/query?${query}` : "/api/v1/knowledge/query",
+			);
 		},
 
 		async registerAgent(
 			params: KnowledgeRegisterAgentParams,
 		): Promise<KnowledgeRegisterAgentResult> {
-			if (client.http) {
-				return client.http.post<KnowledgeRegisterAgentResult>(
-					"/api/v1/knowledge/register-agent",
-					params,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for knowledge operations",
-				);
-			const args = [
-				"knowledge",
-				"register-agent",
-				"--did",
-				params.did,
-				"--capabilities",
-				params.capabilities,
-			];
-			return cli.execute<KnowledgeRegisterAgentResult>(args);
+			return client.http.post<KnowledgeRegisterAgentResult>(
+				"/api/v1/knowledge/register-agent",
+				params,
+			);
 		},
 
 		async registerModel(
 			params: KnowledgeRegisterModelParams,
 		): Promise<KnowledgeRegisterModelResult> {
-			if (client.http) {
-				return client.http.post<KnowledgeRegisterModelResult>(
-					"/api/v1/knowledge/register-model",
-					params,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for knowledge operations",
-				);
-			const args = [
-				"knowledge",
-				"register-model",
-				"--did",
-				params.did,
-				"--cid",
-				params.cid,
-			];
-			if (params.parent) args.push("--parent", params.parent);
-			return cli.execute<KnowledgeRegisterModelResult>(args);
+			return client.http.post<KnowledgeRegisterModelResult>(
+				"/api/v1/knowledge/register-model",
+				params,
+			);
 		},
 
 		async registerBounty(
 			params: KnowledgeRegisterBountyParams,
 		): Promise<KnowledgeRegisterBountyResult> {
-			if (client.http) {
-				return client.http.post<KnowledgeRegisterBountyResult>(
-					"/api/v1/knowledge/register-bounty",
-					params,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for knowledge operations",
-				);
-			const args = [
-				"knowledge",
-				"register-bounty",
-				"--id",
-				params.id,
-				"--capabilities",
-				params.capabilities,
-			];
-			return cli.execute<KnowledgeRegisterBountyResult>(args);
+			return client.http.post<KnowledgeRegisterBountyResult>(
+				"/api/v1/knowledge/register-bounty",
+				params,
+			);
 		},
 
 		async joinJob(
 			params: KnowledgeJoinJobParams,
 		): Promise<KnowledgeJoinJobResult> {
-			if (client.http) {
-				return client.http.post<KnowledgeJoinJobResult>(
-					"/api/v1/knowledge/join-job",
-					params,
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for knowledge operations",
-				);
-			const args = [
-				"knowledge",
-				"join-job",
-				"--did",
-				params.did,
-				"--job-id",
-				params.jobId,
-			];
-			return cli.execute<KnowledgeJoinJobResult>(args);
+			return client.http.post<KnowledgeJoinJobResult>(
+				"/api/v1/knowledge/join-job",
+				params,
+			);
 		},
 
 		async listClasses(): Promise<KnowledgeListClassesResult> {
-			if (client.http) {
-				return client.http.get<KnowledgeListClassesResult>(
-					"/api/v1/knowledge/classes",
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for knowledge operations",
-				);
-			return cli.execute<KnowledgeListClassesResult>([
-				"knowledge",
-				"list-classes",
-			]);
+			return client.http.get<KnowledgeListClassesResult>(
+				"/api/v1/knowledge/classes",
+			);
 		},
 
 		async listPredicates(): Promise<KnowledgeListPredicatesResult> {
-			if (client.http) {
-				return client.http.get<KnowledgeListPredicatesResult>(
-					"/api/v1/knowledge/predicates",
-				);
-			}
-			const cli = client.cli;
-			if (!cli)
-				throw new Error(
-					"HTTP or CLI transport required for knowledge operations",
-				);
-			return cli.execute<KnowledgeListPredicatesResult>([
-				"knowledge",
-				"list-predicates",
-			]);
+			return client.http.get<KnowledgeListPredicatesResult>(
+				"/api/v1/knowledge/predicates",
+			);
 		},
 	};
 }

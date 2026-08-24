@@ -141,8 +141,16 @@ pub async fn post_feed(
     };
     store.append(&stored).map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let event_id =
-        format!("evt_{}_{}", hex::encode(&did.0.as_bytes()[..8.min(did.0.len())]), next_seq);
+    let event_id = event_id(&did.0, next_seq);
+
+    let _ = state.feed_tx.send(crate::api::state::FeedEventUpdate {
+        kind: body.kind as u16,
+        author_did: did.0.clone(),
+        author_short: did.0.chars().take(18).collect(),
+        kind_label: body.kind.to_string(),
+        preview: body.content.chars().take(80).collect(),
+        time_ago: "now".to_string(),
+    });
 
     let resp = PostFeedResponse {
         event_id,
@@ -176,9 +184,9 @@ pub async fn show_feed_event(
 
     let events = store.get_all(&did.0).map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let found = events.iter().find(|e| {
-        let id_hex = hex::encode(&e.signature);
-        id_hex.contains(&event_id) || event_id.starts_with(&format!("seq:{}", e.sequence))
+    let found = events.iter().find(|event| {
+        event_id == self::event_id(&event.agent_did, event.sequence)
+            || event_id == format!("seq:{}", event.sequence)
     });
 
     match found {
@@ -196,6 +204,10 @@ pub async fn show_feed_event(
         }
         None => Err(ApiError::NotFound(format!("event '{event_id}' not found"))),
     }
+}
+
+fn event_id(did: &str, sequence: u64) -> String {
+    format!("evt_{}_{}", hex::encode(&did.as_bytes()[..8.min(did.len())]), sequence)
 }
 
 // ---------------------------------------------------------------------------

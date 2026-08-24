@@ -1057,6 +1057,36 @@ async fn feed_ws_client(socket: WebSocket, state: Arc<ServerState>) {
     }
 }
 
+async fn inference_ws_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<ServerState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| inference_ws_client(socket, state))
+}
+
+async fn inference_ws_client(mut socket: WebSocket, state: Arc<ServerState>) {
+    while let Some(Ok(message)) = socket.recv().await {
+        let Message::Text(text) = message else {
+            if matches!(message, Message::Close(_)) {
+                break;
+            }
+            continue;
+        };
+        let response: anyhow::Result<String> =
+            match serde_json::from_str::<crate::api::inference_api::InferenceRequest>(&text) {
+                Ok(request) => crate::api::inference_api::submit_inference(&state.db, request)
+                    .map_err(|error| anyhow::anyhow!("{error:?}"))
+                    .and_then(|result| serde_json::to_string(&result).map_err(Into::into)),
+                Err(error) => Err(anyhow::anyhow!("invalid inference request: {error}")),
+            };
+        let payload = response
+            .unwrap_or_else(|error| serde_json::json!({ "error": error.to_string() }).to_string());
+        if socket.send(Message::Text(payload.into())).await.is_err() {
+            break;
+        }
+    }
+}
+
 async fn feed_sse_handler(
     State(state): State<Arc<ServerState>>,
 ) -> Sse<impl Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>> {
@@ -1146,6 +1176,7 @@ pub async fn execute(port: u16, _args: &GlobalArgs, app_state: &mut AppState) ->
         .route("/events/stream", get(feed_sse_handler))
         // WebSocket stream
         .route("/ws/feed", get(feed_ws_handler))
+        .route("/ws/inference", get(inference_ws_handler))
         .with_state(server_state.clone());
 
     // Mount REST API v1

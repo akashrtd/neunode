@@ -47,11 +47,4 @@ describe("LineageResource", () => {
 		expect(mock.requests[6]?.body).toEqual({ amount: 10_000 });
 		expect(mock.requests[8]?.body).toEqual({ cid });
 	});
-
-	it("rejects lineage calls without HTTP", async () => {
-		const client = createNeunodeClient({ cli: { binaryPath: "agnetd" } });
-		await expect(client.lineage.show("sha256:a" as CID)).rejects.toThrow(
-			"HTTP transport required for lineage operations",
-		);
-	});
 });

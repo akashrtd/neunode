@@ -161,6 +161,17 @@ describe("Integration: live HTTP resource routes", () => {
 		);
 	});
 
+	it("round-trips canonical feed event IDs over HTTP", async () => {
+		const posted = await client.feed.post({ kind: 4242, content: "http feed event" });
+		expect(posted).toMatchObject({ sequence: 1, kind: 4242 });
+		const shown = await client.feed.show(posted.event_id);
+		expect(shown).toMatchObject({
+			sequence: posted.sequence,
+			kind: 4242,
+			content: "http feed event",
+		});
+	});
+
 	it("uses the daemon's canonical train jobs route", async () => {
 		const jobs = await client.train.list();
 		expect(jobs).toBeDefined();
@@ -230,6 +241,26 @@ describe("Integration: live HTTP resource routes", () => {
 		expect(providers.providers).toEqual([
 			expect.objectContaining({ name: "HTTP provider", model_count: 1 }),
 		]);
+	});
+
+	it("streams inference results over WebSocket", async () => {
+		const result = await new Promise<unknown>((resolve, reject) => {
+			const timeout = setTimeout(() => reject(new Error("inference stream timed out")), 5_000);
+			const cancel = client.inference.stream(
+				{ model: "tiny", prompt: "hello", maxTokens: 16 },
+				(value) => {
+					clearTimeout(timeout);
+					cancel();
+					resolve(value);
+				},
+			);
+		});
+		expect(result).toMatchObject({
+			model: "tiny",
+			prompt: "hello",
+			max_tokens: 16,
+			status: "submitted",
+		});
 	});
 
 	it("exposes fail-closed TEE verification over HTTP", async () => {

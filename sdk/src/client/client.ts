@@ -47,8 +47,6 @@ import {
 	createVerificationResource,
 	type VerificationResource,
 } from "../resources/verification.js";
-import type { CliTransportConfig } from "../transport/cli-transport.js";
-import { CliTransport } from "../transport/cli-transport.js";
 import type { HttpTransportConfig } from "../transport/http-transport.js";
 import { HttpTransport } from "../transport/http-transport.js";
 import type { MockTransportConfig } from "../transport/mock-transport.js";
@@ -56,10 +54,8 @@ import { MockTransport } from "../transport/mock-transport.js";
 import type { ViemTransportConfig } from "../transport/viem-transport.js";
 import { ViemTransport } from "../transport/viem-transport.js";
 
-/** Configuration for creating a Neunode client. At least one transport must be provided. */
+/** Configuration for the HTTP SDK client. */
 export interface NeunodeClientConfig {
-	/** CLI subprocess transport config. Spawns `agnetd` as a child process. */
-	readonly cli?: CliTransportConfig;
 	/** HTTP REST transport config. Talks to a running `agnetd serve` instance. */
 	readonly http?: HttpTransportConfig;
 	/** Viem (Ethereum) transport config. Direct on-chain reads/writes via RPC. */
@@ -69,16 +65,14 @@ export interface NeunodeClientConfig {
 }
 
 /** Which transport(s) the client was configured with. */
-export type TransportMode = "cli" | "http" | "viem" | "mock" | "dual";
+export type TransportMode = "http" | "mock" | "dual";
 
 /** Root client for interacting with the Neunode network. */
 export interface NeunodeClient {
 	/** Which transport(s) are active. */
 	readonly transportMode: TransportMode;
-	/** CLI subprocess transport, if configured. */
-	readonly cli: CliTransport | undefined;
-	/** HTTP REST transport, if configured. */
-	readonly http: HttpTransport | undefined;
+	/** HTTP-compatible transport used by every SDK resource. */
+	readonly http: HttpTransport;
 	/** Viem on-chain transport, if configured. */
 	readonly viem: ViemTransport | undefined;
 	/** DID creation, listing, and export. */
@@ -118,8 +112,7 @@ export interface NeunodeClient {
 }
 
 class NeunodeClientImpl implements NeunodeClient {
-	readonly cli: CliTransport | undefined;
-	readonly http: HttpTransport | undefined;
+	readonly http: HttpTransport;
 	readonly viem: ViemTransport | undefined;
 	readonly mock: MockTransport | undefined;
 	readonly identity: IdentityResource;
@@ -140,15 +133,14 @@ class NeunodeClientImpl implements NeunodeClient {
 	readonly verification: VerificationResource;
 
 	constructor(
-		cliConfig?: CliTransportConfig,
 		httpConfig?: HttpTransportConfig,
 		viemConfig?: ViemTransportConfig,
 		mockConfig?: MockTransportConfig,
 	) {
-		if (!cliConfig && !httpConfig && !viemConfig && !mockConfig) {
+		if (!httpConfig && !mockConfig) {
 			throw new Error(
-				"NeunodeClient requires at least one transport (cli, http, viem, or mock). " +
-					"Pass { cli: { ... } }, { http: { ... } }, { viem: { ... } }, or { mock: { ... } } to createNeunodeClient().",
+				"NeunodeClient requires an HTTP-compatible transport. " +
+					"Pass { http: { baseUrl } } or { mock: { ... } } to createNeunodeClient().",
 			);
 		}
 		if (httpConfig && mockConfig) {
@@ -156,10 +148,14 @@ class NeunodeClientImpl implements NeunodeClient {
 				"NeunodeClient cannot use http and mock transports together",
 			);
 		}
-		this.cli = cliConfig ? new CliTransport(cliConfig) : undefined;
 		this.mock = mockConfig ? new MockTransport(mockConfig) : undefined;
-		this.http =
-			this.mock ?? (httpConfig ? new HttpTransport(httpConfig) : undefined);
+		if (this.mock) {
+			this.http = this.mock;
+		} else if (httpConfig) {
+			this.http = new HttpTransport(httpConfig);
+		} else {
+			throw new Error("HTTP-compatible transport configuration is missing");
+		}
 		this.viem = viemConfig ? new ViemTransport(viemConfig) : undefined;
 		this.identity = createIdentityResource(this);
 		this.config = createConfigResource(this);
@@ -180,20 +176,14 @@ class NeunodeClientImpl implements NeunodeClient {
 	}
 
 	get transportMode(): TransportMode {
-		if (this.cli && this.http && this.viem) return "dual";
-		if (this.cli && this.http) return "dual";
-		if (this.cli && this.viem) return "dual";
 		if (this.http && this.viem) return "dual";
 		if (this.mock) return "mock";
-		if (this.http) return "http";
-		if (this.viem) return "viem";
-		return "cli";
+		return "http";
 	}
 
 	extend<T>(extender: (client: NeunodeClient) => T): NeunodeClient & T {
 		const extension = extender(this);
 		const builtInKeys = new Set([
-			"cli",
 			"http",
 			"viem",
 			"mock",
@@ -241,11 +231,6 @@ class NeunodeClientImpl implements NeunodeClient {
  *   http: { baseUrl: "http://127.0.0.1:41000" },
  * });
  *
- * // CLI-only (spawns agnetd subprocess)
- * const client = createNeunodeClient({
- *   cli: { binaryPath: "/usr/local/bin/agnetd" },
- * });
- *
  * // Mock transport (no daemon required)
  * const mockClient = createNeunodeClient({
  *   mock: {
@@ -255,16 +240,9 @@ class NeunodeClientImpl implements NeunodeClient {
  *   },
  * });
  *
- * // Dual transport (HTTP + CLI fallback)
+ * // HTTP plus optional direct on-chain access
  * const client = createNeunodeClient({
  *   http: { baseUrl: "http://127.0.0.1:41000" },
- *   cli: { timeout: 60_000 },
- * });
- *
- * // Full stack (HTTP + CLI + on-chain)
- * const client = createNeunodeClient({
- *   http: { baseUrl: "http://127.0.0.1:41000" },
- *   cli: { timeout: 60_000 },
  *   viem: { publicClient, chain, walletClient },
  * });
  *
@@ -278,10 +256,5 @@ class NeunodeClientImpl implements NeunodeClient {
 export function createNeunodeClient(
 	config: NeunodeClientConfig = {},
 ): NeunodeClient {
-	return new NeunodeClientImpl(
-		config.cli,
-		config.http,
-		config.viem,
-		config.mock,
-	);
+	return new NeunodeClientImpl(config.http, config.viem, config.mock);
 }
