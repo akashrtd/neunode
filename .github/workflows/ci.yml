@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request:
@@ -15,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.93.0
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
@@ -28,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.93.0
       - uses: Swatinem/rust-cache@v2
       - name: Run tests
         run: cargo test --workspace
@@ -37,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.93.0
       - uses: Swatinem/rust-cache@v2
       - name: Check all features
         run: cargo check --workspace --all-features
@@ -46,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.93.0
       - uses: taiki-e/install-action@cargo-audit
       - name: Audit reachable dependencies
         run: ./scripts/security_audit.sh
@@ -60,14 +61,14 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: sdk/package-lock.json
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.93.0
       - uses: Swatinem/rust-cache@v2
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: "v1.5.1"
       - name: Install dependencies
-        run: cd sdk && npm install
+        run: cd sdk && npm ci
       - name: Build daemon for integration tests
         run: cargo build -p agnetd
       - name: Build contracts for E2E tests
@@ -90,6 +91,10 @@ jobs:
         run: cd sdk && npm test
       - name: Test (CLI integration)
         run: cd sdk && npm run test:integration
+      - name: Typecheck beta acceptance tests
+        run: cd sdk && npx tsc --noEmit -p tests/beta/tsconfig.json
+      - name: Test real agent beta acceptance
+        run: cd sdk && npm run test:beta
       - name: Test (contract E2E)
         run: cd sdk && npm run test:e2e
 

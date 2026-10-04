@@ -1,191 +1,47 @@
-# Known Issues & Gaps
-
-**Last updated:** 2026-05-14
-**Tested against:** Rust 2,512 tests (all pass), Solidity 254 tests (all pass), SDK 272 tests (all pass after build).
-
----
-
-## Critical
-
-### Token escrow not validated at bounty creation
-
-Bounty creation succeeds even when the creator has zero liquid balance. The escrow transfer silently fails with a warning:
-
-```
-WARN escrow transfer failed (creator may have insufficient balance): insufficient balance: required 500, available 0
-```
-
-The bounty enters `Open` state with unfunded escrow. When the creator later runs `bounty pay`, it also fails with `insufficient balance`. There is no pre-validation or partial-escrow mechanism.
-
-**Files:** `crates/agnetd/src/cmd_bounty.rs`, `crates/neunode-bounty/src/lifecycle.rs`
-**Fix:** Either reject bounty creation when balance is insufficient, or track escrow as a separate owed amount that blocks other operations until funded.
-
----
-
-### No `active_identity` config setter
-
-The `config set` command does not support the `active_identity` key. It can only be set during `identity create`, which overwrites it each time. Switching between agents requires manually editing `~/.agnetd/config.toml`, and the field must be placed before any `[section]` headers (TOML scoping).
-
-```
-$ agnetd config set active_identity did:neunode:0x...
-✗ unknown config key: active_identity
-```
-
-**Files:** `crates/agnetd/src/config.rs:68-121` (the `set()` method)
-**Fix:** Add `["active_identity"]` arm to the `set()` match and `get()` match in `CliConfig`.
-
----
-
-### RocksDB single-process lock
-
-The RocksDB instance uses a file lock (`LOCK` in the DB directory). Only one `agnetd` process can hold it at a time. Multi-agent scenarios require sequential execution — no concurrent agent operations against the same DB.
-
-```
-fatal: initialization failed: RocksDB error: IO error: While lock file: .../LOCK: Resource temporarily unavailable
-```
-
-**Files:** `crates/neunode-storage/src/db.rs`
-**Fix options:** (1) Per-agent DB paths via `--config`, (2) use a server mode where `agnetd serve` holds the DB and CLI commands connect to it, (3) use advisory locking with retry.
-
----
-
-## Formatting / CI
-
-### `cargo fmt` — one file off
-
-```
-Diff in crates/neunode-inference/src/provider.rs:118:
--        provider.avg_latency_ms =
--            ((alpha * measured_latency_ms as f64) + ((1.0 - alpha) * provider.avg_latency_ms as f64))
--                as u32;
-+        provider.avg_latency_ms = ((alpha * measured_latency_ms as f64)
-+            + ((1.0 - alpha) * provider.avg_latency_ms as f64))
-+            as u32;
-```
-
-**File:** `crates/neunode-inference/src/provider.rs:118`
-**Fix:** Run `cargo fmt`.
-
----
-
-### `forge fmt` — test file formatting
-
-Solidity test file has formatting issues around lines 444-446 in `test/bounty/Bounty.t.sol`.
-
-**File:** `contracts/test/bounty/Bounty.t.sol`
-**Fix:** Run `forge fmt`.
-
----
-
-## SDK
-
-### Build-dependent tests fail without `dist/`
-
-The `build.test.ts` suite (10 tests) imports from `dist/index.js`. If the SDK hasn't been built yet (`npm run build`), these tests fail:
-
-```
-Error: Cannot find module '.../sdk/dist/index.js'
-```
-
-After building, all 272 tests pass.
-
-**File:** `sdk/src/build.test.ts:39`
-**Fix:** Either (1) add a `setupFiles` script that runs build before tests, (2) skip these tests if `dist/` is absent, or (3) move them to the integration test tier.
-
----
-
-### E2E tests require Anvil + deployed contracts
-
-The E2E test suite (`sdk/tests/e2e/`) requires a running Anvil instance with deployed contracts. Not runnable without:
-- `anvil` binary (installed via Foundry)
-- Sequential execution (shared Anvil state)
-- Known flaky test: `bounty.e2e.ts > Review System > submitReview` (snapshot isolation issue)
-
-**Files:** `sdk/tests/e2e/`, `sdk/tests/e2e/helpers/`
-**Status:** 69/70 tests pass when run correctly.
-
----
-
-## Design Gaps
-
-### P2P bootstrap peers are placeholders
-
-The default config contains placeholder peer IDs:
-```
-bootstrap_peers = ["/dns4/bootstrap-1.neunode.dev/tcp/41000/p2p/PLACEHOLDER_PEER_ID_1", ...]
-```
-Attempting `mesh start` with these fails with `invalid bootstrap address`. The mesh only works in standalone mode (empty bootstrap list).
-
-**File:** `crates/agnetd/src/config.rs:190-204`
-**Fix:** Replace with real bootstrap node peer IDs when infrastructure is deployed, or default to empty list.
-
----
-
-### `discover search` returns empty pool
-
-Agent capability search always returns `empty candidate pool` because agents are not automatically registered in the knowledge graph with their capabilities when posting to the feed. The discovery system and the feed/posting system are not linked.
-
-```
-$ agnetd discover search --capabilities "sentiment-analysis,fine-tuning"
-✗ empty candidate pool
-```
-
-**Files:** `crates/neunode-discovery/src/`, `crates/neunode-knowledge/src/`
-**Fix:** Auto-register capabilities in the knowledge graph when an agent posts a feed event with `capabilities`, or add an explicit `discover register` command.
-
----
-
-### 7-day unbonding period with no testnet override
-
-Token unstaking locks funds for 7 days (`unbonding_period_secs = 604800`). This makes rapid testing and demo workflows impractical. There is no config override or `--network testnet` shortcut.
-
-```
-$ agnetd token unstake --amount 50
-{ "state": "Unbonding", "unbond_at": 1779356865 }  # 7 days from now
-```
-
-**File:** `crates/neunode-token/src/`, config `tokens.unbonding_period_secs`
-**Fix:** Allow overriding via config or use a shorter period (e.g., 60s) when `--network testnet`.
-
----
-
-### `--identity` flag does not override active identity
-
-The global `--identity` flag exists on all commands but does not function as an identity selector. It requires `active_identity` to already be set in the config file. When no active identity is configured, all commands fail regardless of `--identity`.
-
-```
-$ agnetd feed post --kind 1000 --content '...' --identity did:neunode:0x7903...
-✗ no active identity — run 'agnetd identity create'
-```
-
-**Files:** `crates/agnetd/src/cli.rs`, `crates/agnetd/src/state.rs:40-47`
-**Fix:** When `--identity` is provided via CLI, use it to override `config.active_identity` in `State::init_with_config()` before attempting keyring lookup.
-
----
-
-### `inference list-models` and `providers` return empty
-
-Both commands produce no output when no models or providers have been registered in the local DB. There is no way to register a model or provider via the CLI — it requires programmatic insertion.
-
-```
-$ agnetd inference list-models --output json
-(no output)
-
-$ agnetd inference providers --output json
-(no output)
-```
-
-**Files:** `crates/neunode-inference/src/`, `crates/agnetd/src/cmd_inference.rs`
-**Fix:** Add `inference register-provider` and `inference register-model` CLI commands, or auto-register when an agent posts an inference-capability feed event.
-
----
-
-## Summary
-
-| Category | Count |
-|----------|-------|
-| Critical bugs | 3 |
-| Formatting / CI | 2 |
-| SDK issues | 2 |
-| Design gaps | 5 |
-| **Total** | **12** |
+# Known issues and release gates
+
+Updated: 2026-10-04. Current evidence is in
+[the beta implementation report](docs/beta/implementation-validation.md) and
+[its validation record](docs/beta/remediation-results.json).
+The earlier 2026-05 snapshot had obsolete formatting, onboarding and escrow findings;
+it is preserved in Git history rather than presented as current status.
+
+## Remaining beta blockers
+
+| Area | Current limitation | Tracking |
+| --- | --- | --- |
+| Canonical ledger | HTTP/CLI economics use local RocksDB. Chain supervision and direct SDK contract calls do not establish one shared authoritative ledger. Finalized receipts, event replay, reorg rollback and chain-derived mirrors remain. | Beads `neunode-zva.13`, `neunode-77j`; GitHub #37, #39, #40 |
+| Sovereign consensus | Library vote-domain and validator-set checks pass. A real multi-validator Reth/Malachite network, reputation weights, epoch changes, outage/catchup and Byzantine tests have not run. | GitHub #30, #32, #35 |
+| Economic policy | Local arithmetic is checked/integer and bootstrap grants are one-time per identity. Proof-backed issuance, sybil resistance, membrane enforcement, on-chain decay/redistribution and Rust/Solidity equivalence remain. | Beads `neunode-zva.17`; GitHub #41 |
+| Training | Job IDs are unique and durable metadata can be queued. The daemon has no running model executor/scheduler; health reports `training_executor: unavailable`. Queuing does not train a model or produce a checkpoint. | Beads `neunode-zva.10` |
+| Incremental inference | Real provider execution and local reservation/settlement work. WebSocket completion is authenticated, but upstream calls currently request a whole response rather than incremental SSE tokens. Further disconnect/crash/fault testing is needed. | Beads `neunode-zva.9` |
+| Operations | Manual stops are enforced. Automatic anomaly monitoring, complete capability/budget sandboxing, decay/lifecycle scheduling, bounded global dashboard snapshots, pagination/load limits, backup/restore and sustained fault tests are not qualified. | Beads `neunode-zva.14`, `.17`; GitHub #42 |
+| Distribution | Fresh SDK/MCP tarballs and installed `npx` tools pass locally. Three-platform native artifact gates and publication are configured but have not run in hosted CI. No release has been published during this work. External coding/research/provider reference workloads remain to qualify. | Beads `neunode-zva.15`; GitHub #3, #4 |
+| Security review | Existing suites and new adversarial cases do not establish a complete per-line audit. Hardware TEE, real ML workloads, wider network adversaries and an independent review remain. | Beads `neunode-zva.16` |
+
+## Operational constraints
+
+RocksDB deliberately holds a single-process database lock. Use one daemon per data directory
+and drive it through HTTP/SDK/MCP; do not open another CLI process against the same database.
+Use separate homes/configurations/data directories for independent nodes.
+
+The unattended keystore uses a private independent master-secret file, or `NEUNODE_KEYSTORE_KEY`.
+Back up the key material and its secret together. Loss of the modern master secret cannot be
+repaired by regenerating it. Compromise of the same operating-system account can expose both.
+
+Daemon mutations require the operator access token. This grants the active daemon authority;
+per-client least-privilege credentials are still an extension. Identity selection loads owned
+keys; changing the running mesh identity requires restarting the daemon.
+
+Default unstaking remains seven days. The configurable `tokens.unbonding_period_secs` supports
+isolated testing; acceptance fixtures set it to zero. A locked unbond is not a liquid balance.
+
+Build the SDK before running its distribution tests. Anvil tests require Foundry and run
+sequentially against deployed test contracts. Current full runs pass; historical snapshot
+isolation failures are not treated as evidence of present chain readiness.
+
+Contract factory/paymaster helpers now import from `@neunode/sdk/contracts`. Installing `viem`
+is necessary only when using those helpers; HTTP ESM/CJS imports work without it.
+
+Public peer bootstrap infrastructure is not qualified. Local peer tests use explicit loopback
+addresses and independent identities; they do not establish reachable public bootstrap nodes.

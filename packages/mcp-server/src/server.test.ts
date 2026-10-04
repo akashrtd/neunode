@@ -58,6 +58,18 @@ describe("HTTP+SSE MCP transport", () => {
     await client.close();
   });
 
+  it("requires authentication before exposing upstream daemon authority", async () => {
+    const token = "mcp-fixture-authority-token-32-characters";
+    const endpoint = await listen("/mcp", { getApiKey: () => token } as unknown as AgnetdClient);
+    const body = JSON.stringify({ jsonrpc: "2.0", method: "ping", id: 1 });
+    expect((await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body })).status).toBe(401);
+    expect((await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer wrong" }, body })).status).toBe(401);
+    const client = new Client({ name: "authenticated-test", version: "1.0.0" });
+    await client.connect(new StreamableHTTPClientTransport(endpoint, { requestInit: { headers: { Authorization: `Bearer ${token}` } } }));
+    expect((await client.listTools()).tools.length).toBeGreaterThan(0);
+    await client.close();
+  });
+
   it("keeps the legacy SSE session POST path protocol-complete", async () => {
     const endpoint = await listen("/sse");
     const client = new Client({ name: "legacy-integration-test", version: "1.0.0" });

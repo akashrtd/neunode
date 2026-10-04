@@ -174,7 +174,14 @@ pub(crate) fn register_agent_capabilities(
     let dict = neunode_knowledge::StringDictionary::new(db);
     let batch = neunode_knowledge::register_agent(&dict, did, &cap_refs)?;
     let count = batch.len();
-    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
+    neunode_knowledge::apply_authorized(
+        &batch,
+        db,
+        &auth,
+        &payload,
+        keyring.to_did().as_str(),
+        &keyring.ed25519_public_key().to_bytes(),
+    )?;
     Ok(count)
 }
 
@@ -203,7 +210,14 @@ fn register_model(
     let db = state.db();
     let dict = neunode_knowledge::StringDictionary::new(db);
     let batch = neunode_knowledge::register_model(&dict, did, cid, parent)?;
-    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
+    neunode_knowledge::apply_authorized(
+        &batch,
+        db,
+        &auth,
+        &payload,
+        keyring.to_did().as_str(),
+        &keyring.ed25519_public_key().to_bytes(),
+    )?;
 
     let mut out = serde_json::json!({
         "owner": did,
@@ -243,7 +257,14 @@ fn register_bounty(
     let db = state.db();
     let dict = neunode_knowledge::StringDictionary::new(db);
     let batch = neunode_knowledge::register_bounty(&dict, id, &cap_refs)?;
-    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
+    neunode_knowledge::apply_authorized(
+        &batch,
+        db,
+        &auth,
+        &payload,
+        keyring.to_did().as_str(),
+        &keyring.ed25519_public_key().to_bytes(),
+    )?;
 
     let out = serde_json::json!({
         "id": id,
@@ -274,7 +295,14 @@ fn join_job(did: &str, job_id: &str, writer: &OutputWriter, state: &AppState) ->
     let db = state.db();
     let dict = neunode_knowledge::StringDictionary::new(db);
     let batch = neunode_knowledge::join_training_job(&dict, did, job_id)?;
-    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
+    neunode_knowledge::apply_authorized(
+        &batch,
+        db,
+        &auth,
+        &payload,
+        keyring.to_did().as_str(),
+        &keyring.ed25519_public_key().to_bytes(),
+    )?;
 
     let out = serde_json::json!({
         "agent": did,
@@ -328,6 +356,10 @@ fn sign_mutation(
     signer_did: &str,
     payload: &[u8],
 ) -> Result<neunode_knowledge::MutationAuthorization> {
+    anyhow::ensure!(
+        signer_did == keyring.to_did().as_str(),
+        "mutation signer does not control the supplied identity"
+    );
     let (ed_bytes, _) = keyring.to_bytes();
     let mut ed_signing = [0u8; 32];
     ed_signing.copy_from_slice(&ed_bytes[..32]);
@@ -349,6 +381,17 @@ fn sign_mutation(
 mod tests {
     use super::*;
     use crate::testutil::{human_writer, json_writer as test_writer, test_state};
+
+    #[test]
+    fn cannot_attribute_mutations_to_an_unowned_identity() {
+        let state = test_state();
+        let writer = test_writer();
+        assert!(register_agent("did:neunode:foreign", "NLP", &writer, &state).is_err());
+        assert!(
+            register_model("did:neunode:foreign", "ipfs://model", None, &writer, &state).is_err()
+        );
+        assert!(join_job("did:neunode:foreign", "job:foreign", &writer, &state).is_err());
+    }
 
     // ── parse_capabilities tests ──
 
@@ -387,22 +430,24 @@ mod tests {
     #[test]
     fn register_agent_valid() {
         let state = test_state();
+        let owned_did = state.require_keyring().unwrap().to_did();
         let writer = test_writer();
-        register_agent("did:neunode:test", "NLP,Vision", &writer, &state).unwrap();
+        register_agent(owned_did.as_str(), "NLP,Vision", &writer, &state).unwrap();
     }
 
     #[test]
     fn register_agent_persists() {
         let state = test_state();
+        let owned_did = state.require_keyring().unwrap().to_did();
         let writer = test_writer();
-        register_agent("did:neunode:persist", "Training", &writer, &state).unwrap();
+        register_agent(owned_did.as_str(), "Training", &writer, &state).unwrap();
 
         // Query back by subject
         let db = state.db();
         let dict = neunode_knowledge::StringDictionary::new(db);
         let engine = neunode_knowledge::QueryEngine::new(db, &dict);
         let pattern = neunode_knowledge::QueryPattern {
-            subject: Some(neunode_knowledge::StringDictionary::hash("did:neunode:persist")),
+            subject: Some(neunode_knowledge::StringDictionary::hash(owned_did.as_str())),
             ..Default::default()
         };
         let results = engine.query(&pattern).unwrap();
@@ -413,14 +458,15 @@ mod tests {
     #[test]
     fn register_agent_no_capabilities() {
         let state = test_state();
+        let owned_did = state.require_keyring().unwrap().to_did();
         let writer = test_writer();
-        register_agent("did:neunode:nocap", "", &writer, &state).unwrap();
+        register_agent(owned_did.as_str(), "", &writer, &state).unwrap();
 
         let db = state.db();
         let dict = neunode_knowledge::StringDictionary::new(db);
         let engine = neunode_knowledge::QueryEngine::new(db, &dict);
         let pattern = neunode_knowledge::QueryPattern {
-            subject: Some(neunode_knowledge::StringDictionary::hash("did:neunode:nocap")),
+            subject: Some(neunode_knowledge::StringDictionary::hash(owned_did.as_str())),
             ..Default::default()
         };
         let results = engine.query(&pattern).unwrap();
@@ -438,14 +484,15 @@ mod tests {
     #[test]
     fn register_agent_multiple_capabilities() {
         let state = test_state();
+        let owned_did = state.require_keyring().unwrap().to_did();
         let writer = test_writer();
-        register_agent("did:neunode:multi", "A,B,C", &writer, &state).unwrap();
+        register_agent(owned_did.as_str(), "A,B,C", &writer, &state).unwrap();
 
         let db = state.db();
         let dict = neunode_knowledge::StringDictionary::new(db);
         let engine = neunode_knowledge::QueryEngine::new(db, &dict);
         let pattern = neunode_knowledge::QueryPattern {
-            subject: Some(neunode_knowledge::StringDictionary::hash("did:neunode:multi")),
+            subject: Some(neunode_knowledge::StringDictionary::hash(owned_did.as_str())),
             ..Default::default()
         };
         let results = engine.query(&pattern).unwrap();
@@ -458,16 +505,18 @@ mod tests {
     #[test]
     fn register_model_valid() {
         let state = test_state();
+        let owned_did = state.require_keyring().unwrap().to_did();
         let writer = test_writer();
-        register_model("did:neunode:dev", "ipfs://QmModel", None, &writer, &state).unwrap();
+        register_model(owned_did.as_str(), "ipfs://QmModel", None, &writer, &state).unwrap();
     }
 
     #[test]
     fn register_model_with_parent() {
         let state = test_state();
+        let owned_did = state.require_keyring().unwrap().to_did();
         let writer = test_writer();
         register_model(
-            "did:neunode:dev",
+            owned_did.as_str(),
             "ipfs://QmChild",
             Some("ipfs://QmParent"),
             &writer,
@@ -500,8 +549,9 @@ mod tests {
     #[test]
     fn register_model_empty_cid_fails() {
         let state = test_state();
+        let owned_did = state.require_keyring().unwrap().to_did();
         let writer = test_writer();
-        assert!(register_model("did:neunode:dev", "", None, &writer, &state).is_err());
+        assert!(register_model(owned_did.as_str(), "", None, &writer, &state).is_err());
     }
 
     // ── register_bounty tests ──
@@ -543,21 +593,23 @@ mod tests {
     #[test]
     fn join_job_valid() {
         let state = test_state();
+        let owned_did = state.require_keyring().unwrap().to_did();
         let writer = test_writer();
-        join_job("did:neunode:worker", "job:101", &writer, &state).unwrap();
+        join_job(owned_did.as_str(), "job:101", &writer, &state).unwrap();
     }
 
     #[test]
     fn join_job_persists() {
         let state = test_state();
+        let owned_did = state.require_keyring().unwrap().to_did();
         let writer = test_writer();
-        join_job("did:neunode:worker2", "job:202", &writer, &state).unwrap();
+        join_job(owned_did.as_str(), "job:202", &writer, &state).unwrap();
 
         let db = state.db();
         let dict = neunode_knowledge::StringDictionary::new(db);
         let engine = neunode_knowledge::QueryEngine::new(db, &dict);
         let pattern = neunode_knowledge::QueryPattern {
-            subject: Some(neunode_knowledge::StringDictionary::hash("did:neunode:worker2")),
+            subject: Some(neunode_knowledge::StringDictionary::hash(owned_did.as_str())),
             ..Default::default()
         };
         let results = engine.query(&pattern).unwrap();
@@ -621,15 +673,15 @@ mod tests {
     #[test]
     fn query_by_subject_after_register() {
         let state = test_state();
+        let owned_did = state.require_keyring().unwrap().to_did();
         let writer = test_writer();
 
         // Register agent first
-        register_agent("did:neunode:queryable", "NLP", &writer, &state).unwrap();
+        register_agent(owned_did.as_str(), "NLP", &writer, &state).unwrap();
 
         // Now query by subject
         let writer2 = human_writer();
-        query_knowledge(Some("did:neunode:queryable"), None, None, None, 20, &writer2, &state)
-            .unwrap();
+        query_knowledge(Some(owned_did.as_str()), None, None, None, 20, &writer2, &state).unwrap();
     }
 
     #[test]
@@ -644,12 +696,12 @@ mod tests {
     #[test]
     fn query_with_limit() {
         let state = test_state();
+        let owned_did = state.require_keyring().unwrap().to_did();
         let writer = test_writer();
-        register_agent("did:neunode:limited", "A,B,C", &writer, &state).unwrap();
+        register_agent(owned_did.as_str(), "A,B,C", &writer, &state).unwrap();
 
         // Query with limit 1 — should succeed even though 4 triples exist
         let writer2 = test_writer();
-        query_knowledge(Some("did:neunode:limited"), None, None, None, 1, &writer2, &state)
-            .unwrap();
+        query_knowledge(Some(owned_did.as_str()), None, None, None, 1, &writer2, &state).unwrap();
     }
 }

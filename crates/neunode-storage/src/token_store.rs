@@ -75,6 +75,7 @@ impl<'a> TokenStore<'a> {
 
     pub fn stake(&self, agent_did: &str, token_type: u8, amount: u128) -> Result<TokenBalance> {
         self.db.with_ledger_write(|| {
+            crate::breaker_store::ensure_closed(self.db, "token_volume")?;
             let mut balance = self.get_balance(agent_did, token_type)?;
             if balance.balance < amount {
                 return Err(StorageError::InsufficientBalance {
@@ -107,6 +108,7 @@ impl<'a> TokenStore<'a> {
         token_type: u8,
         amount: u128,
     ) -> Result<()> {
+        crate::breaker_store::ensure_closed(self.db, "token_volume")?;
         let mut from_balance = self.get_balance(from_did, token_type)?;
         if from_balance.balance < amount {
             return Err(StorageError::InsufficientBalance {
@@ -115,6 +117,9 @@ impl<'a> TokenStore<'a> {
             });
         }
 
+        if from_did == to_did {
+            return Ok(());
+        }
         let mut to_balance = self.get_balance(to_did, token_type)?;
         from_balance.balance -= amount;
         to_balance.balance = to_balance
@@ -173,6 +178,37 @@ mod tests {
     use std::sync::{Arc, Barrier};
 
     static TEST_ID: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn self_transfer_preserves_balance_and_manual_stop_prevents_mutation() {
+        let db = temp_db();
+        let store = TokenStore::new(&db);
+        store
+            .set_balance(
+                "did:agent",
+                TOKEN_COMPUTE,
+                &TokenBalance { balance: 100, ..Default::default() },
+            )
+            .unwrap();
+        store.transfer("did:agent", "did:agent", TOKEN_COMPUTE, 50).unwrap();
+        assert_eq!(store.get_balance("did:agent", TOKEN_COMPUTE).unwrap().balance, 100);
+        crate::breaker_store::save(
+            &db,
+            "token_volume",
+            &crate::breaker_store::BreakerRecord {
+                state: crate::breaker_store::BreakerState::Open,
+                tripped_at: Some(1),
+                trip_count: 1,
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            store.transfer("did:agent", "did:other", TOKEN_COMPUTE, 10),
+            Err(StorageError::CircuitBreakerOpen(_))
+        ));
+        assert_eq!(store.get_balance("did:agent", TOKEN_COMPUTE).unwrap().balance, 100);
+        assert_eq!(store.get_balance("did:other", TOKEN_COMPUTE).unwrap().balance, 0);
+    }
 
     fn temp_db() -> NeunodeDb {
         let id = TEST_ID.fetch_add(1, Ordering::Relaxed);

@@ -129,6 +129,12 @@ export type {
 } from "./reputation.js";
 export { createReputationResource } from "./reputation.js";
 export type {
+	BreakerName,
+	BreakerStatus,
+	SecurityResource,
+} from "./security.js";
+export { createSecurityResource } from "./security.js";
+export type {
 	TokenAllBalancesResult,
 	TokenBalanceResult,
 	TokenClaimUnbondedResult,

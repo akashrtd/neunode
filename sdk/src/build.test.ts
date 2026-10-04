@@ -35,6 +35,12 @@ describe("Build output verification", () => {
 });
 
 describe("Package exports", () => {
+	it("publishes a separate entry point for optional contract helpers", async () => {
+		expect(existsSync(join(distDir, "contracts.cjs"))).toBe(true);
+		const mod = await import(join(distDir, "contracts.js"));
+		expect(typeof mod.getNeunodeIdentity).toBe("function");
+		expect(typeof mod.encodeAgentPaymasterData).toBe("function");
+	});
 	it("should export createNeunodeClient", async () => {
 		const mod = await import(join(distDir, "index.js"));
 		expect(mod.createNeunodeClient).toBeDefined();

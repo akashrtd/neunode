@@ -59,7 +59,7 @@ pub async fn search_agents(
         min_reputation: (query.min_reputation > 0.0).then_some(query.min_reputation),
         max_cost_per_unit: query.max_cost,
         must_be_online: query.online_only,
-        max_results: query.limit,
+        max_results: query.limit.min(1000),
         requester_capabilities: Vec::new(),
     };
     let results = search(&candidates, &request, &ScoringWeights::default())
@@ -149,7 +149,13 @@ fn parse_capabilities(value: &str) -> Result<Vec<String>, ApiError> {
         .split(',')
         .map(str::trim)
         .filter(|capability| !capability.is_empty())
-        .map(str::to_string)
+        .map(|capability| {
+            if capability.starts_with("https://neunode.io/ontology/") {
+                capability.to_string()
+            } else {
+                neunode_knowledge::nn(capability)
+            }
+        })
         .collect::<Vec<_>>();
     if capabilities.is_empty() {
         return Err(ApiError::BadRequest("capabilities cannot be empty".into()));
@@ -161,20 +167,13 @@ fn candidates(state: &ApiState) -> Result<Vec<AgentCandidate>, ApiError> {
     let dict = neunode_knowledge::StringDictionary::new(&state.db);
     let engine = neunode_knowledge::QueryEngine::new(&state.db, &dict);
     let grouped = grouped_objects(&engine, neunode_knowledge::PRED_HAS_CAPABILITY)?;
-    Ok(grouped
+    grouped
         .into_iter()
-        .enumerate()
-        .map(|(index, (did, capabilities))| AgentCandidate {
-            did,
-            capabilities,
-            reputation_score: 3.0 + (index as f64 * 0.2).min(2.0),
-            stake_amount: 500 + index as u64 * 100,
-            availability_score: 0.8 + (index as f64 * 0.02).min(0.2),
-            latency_ms: 30 + index as u32 * 10,
-            cost_per_unit: 5.0 + index as f64 * 2.0,
-            is_online: index % 3 != 2,
+        .map(|(did, capabilities)| {
+            crate::reputation_service::candidate(&state.db, did, capabilities)
+                .map_err(ApiError::from)
         })
-        .collect())
+        .collect()
 }
 
 fn grouped_objects(

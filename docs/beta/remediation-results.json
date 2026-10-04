@@ -1,0 +1,266 @@
+{
+  "date": "2026-10-04",
+  "implementation_parent": "ac26675",
+  "branch": "codex/beta-readiness-audit",
+  "environment": {
+    "os": "macOS ARM64",
+    "rust": "1.93.1",
+    "node": "26.7.0",
+    "foundry": "1.5.1",
+    "hosted_native_platform_jobs_executed": false
+  },
+  "rust_workspace": {
+    "passed": 2944,
+    "failed": 0,
+    "ignored": 1
+  },
+  "gates": {
+    "sdk_unit": {
+      "passed": 142,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "sdk_integration": {
+      "passed": 16,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "beta_acceptance": {
+      "passed": 21,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "sdk_anvil": {
+      "passed": 68,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "mcp_unit": {
+      "passed": 58,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "solidity": {
+      "passed": 397,
+      "failed": 0,
+      "exit_code": 0
+    },
+    "rust_build": {
+      "exit_code": 0
+    },
+    "rust_clippy": {
+      "exit_code": 0
+    },
+    "rust_all-features": {
+      "exit_code": 0
+    },
+    "browser": {
+      "passed": [
+        "locked mutations rejected",
+        "unlock authorizes HTMX",
+        "signed post and tags persisted",
+        "reload renders persisted history",
+        "reload preserves tab access",
+        "lock clears access"
+      ]
+    },
+    "packed_packages": {
+      "passed": [
+        "fresh tarball installation",
+        "ESM and CJS without optional viem",
+        "authenticated SDK signed feed",
+        "SDK safety controls",
+        "npx MCP initialize and tool discovery",
+        "MCP authenticated signed feed"
+      ],
+      "tool_count": 36
+    },
+    "additional": {
+      "passed": [
+        "Rust formatting",
+        "SDK and MCP strict typecheck and builds",
+        "SDK/example lint and example typecheck",
+        "beta test strict typecheck",
+        "protocol and ABI drift",
+        "Forge formatting, size build and gas snapshot",
+        "dependency security audit with 7 existing allowed warnings",
+        "six-package version preparation on isolated manifest copies and invalid tag rejection"
+      ]
+    }
+  },
+  "binary_sha256": "7a3f9ab39efcec17aed2a7e4401c3432efd07ab9e52f4b1b349da2199dfea794",
+  "github_open_issues": [
+    {
+      "number": 42,
+      "title": "Phase 7: Liveness, ops hardening & migration \u2014 deprecate Ethereum paths",
+      "url": "https://github.com/akashrtd/neunode/issues/42",
+      "status": "open; milestone acceptance unmet"
+    },
+    {
+      "number": 41,
+      "title": "Phase 6: Economic correctness \u2014 decay fixes, membrane, resource-backed minting",
+      "url": "https://github.com/akashrtd/neunode/issues/41",
+      "status": "open; milestone acceptance unmet"
+    },
+    {
+      "number": 40,
+      "title": "Flip BalanceSheet/StakingManager to chain-derived cache; remove local decay authority",
+      "url": "https://github.com/akashrtd/neunode/issues/40",
+      "status": "open; milestone acceptance unmet"
+    },
+    {
+      "number": 39,
+      "title": "Event-sync loop in agnetd serve (logs -> local mirror, replay)",
+      "url": "https://github.com/akashrtd/neunode/issues/39",
+      "status": "open; milestone acceptance unmet"
+    },
+    {
+      "number": 37,
+      "title": "Phase 5: Runtime bridge \u2014 wire agnetd to the chain as source of truth",
+      "url": "https://github.com/akashrtd/neunode/issues/37",
+      "status": "open; milestone acceptance unmet"
+    },
+    {
+      "number": 35,
+      "title": "Epoch-boundary validator-set updates from governance contract",
+      "url": "https://github.com/akashrtd/neunode/issues/35",
+      "status": "open; milestone acceptance unmet"
+    },
+    {
+      "number": 32,
+      "title": "Phase 4: Reputation-weighted validation \u2014 5-factor score to voting power",
+      "url": "https://github.com/akashrtd/neunode/issues/32",
+      "status": "open; milestone acceptance unmet"
+    },
+    {
+      "number": 30,
+      "title": "Phase 3: Multi-validator BFT \u2014 static validator set, networking, finality, sync",
+      "url": "https://github.com/akashrtd/neunode/issues/30",
+      "status": "open; milestone acceptance unmet"
+    },
+    {
+      "number": 4,
+      "title": "ROADMAP: Neunode v2 \u2014 Mainstream Agent Adoption",
+      "url": "https://github.com/akashrtd/neunode/issues/4",
+      "status": "open; milestone acceptance unmet"
+    },
+    {
+      "number": 3,
+      "title": "PHASE 4: MCP Server + Example Agents (Weeks 6-8)",
+      "url": "https://github.com/akashrtd/neunode/issues/3",
+      "status": "open; milestone acceptance unmet"
+    },
+    {
+      "number": 2,
+      "title": "EPIC: Neunode L1 \u2014 Reth + Malachite reputation-weighted EVM chain",
+      "url": "https://github.com/akashrtd/neunode/issues/2",
+      "status": "open; milestone acceptance unmet"
+    }
+  ],
+  "unqualified": [
+    "real Reth/Malaketh multi-validator network",
+    "canonical chain transactions, replay and reorgs",
+    "chain-derived economic policy and proof-backed minting",
+    "actual training executor/model artifact",
+    "incremental provider SSE",
+    "sustained load/fault/restore qualification",
+    "hardware TEE and complete per-file/independent security review",
+    "hosted native release jobs and publication",
+    "strict TypeScript packed-consumer validation without optional peer"
+  ],
+  "source_sha256": {
+    ".github/workflows/ci.yml": "b1abedc055b9c7b7c741bbe42fcccec383673530997d1deb606bc4c7af096c49",
+    ".github/workflows/contracts-ci.yml": "e226abe02ed56e5c9c6c02b1dc6d68bea202610a8a881621af654d5f960024a7",
+    ".github/workflows/release.yml": "88554f41e3c3ab87b5e91fdf0d8e8a58ac7a20c807af13a4b439b6fabe557414",
+    "Cargo.lock": "b8eb8c916e4c8c93193da8c2b4fd41e12c2db38bf007e502c2f70008c630af55",
+    "Cargo.toml": "cdec46e8cbdccc53d019e22d3eecfa17f113bf5e39b9c33f7dbc1961e3689b25",
+    "crates/agnetd/Cargo.toml": "a9d8a4017c4118f3b151e2ec898fe2756f7afbcfa298b5c17403834cafcd9373",
+    "crates/agnetd/src/api.rs": "2eae2e27904a83c4ce542e34547a26aad196024ff120ecec253bfc57efc4f454",
+    "crates/agnetd/src/api_auth.rs": "259b876129b45c8b6c66e41f1119cbb65fc93fecae2a780ac91bf1b9c12ef6ae",
+    "crates/agnetd/src/api_bounty_api.rs": "67e0a9afe21853e1aaa0458bffded2958953fbab0b07ff26df3cc9e564aaa772",
+    "crates/agnetd/src/api_discovery_api.rs": "e2919f31983e20a19014f52fd8987480ffaae8f9c808ec82463f464c72d5e03d",
+    "crates/agnetd/src/api_error.rs": "81fbabd9aaceac13b35ad6b5edb79e4e5366cb42e81c6f32edfca556b1ab3f9c",
+    "crates/agnetd/src/api_feed_api.rs": "8514a07bc03393bd1d4ed1d3b825be794753982d508a9c4f0de8113425b3f9f1",
+    "crates/agnetd/src/api_health_api.rs": "4dd46951d3505a37e70b7bfd074094c942e976095cc2776db48a8ae08bfd7dfb",
+    "crates/agnetd/src/api_identity_api.rs": "37e59f03bb52278041037c6bffff807274a4bd75e4745aa884d4cb6fd83a58ee",
+    "crates/agnetd/src/api_inference_api.rs": "289b188b2bf8a5fd47c7dc84e9fe5337f50ac8b2aa1b62f3237110bf085765fa",
+    "crates/agnetd/src/api_knowledge_api.rs": "0f2793cbb42e450e2f419f4c61326b77dd68061c7154e486277968cada88c120",
+    "crates/agnetd/src/api_reputation_api.rs": "aa073f85f2ffbc5db53efca62c37929ff255ad2152f540087508eaa8c4df1163",
+    "crates/agnetd/src/api_routes.rs": "967728df8ea6d5de04df1f5576d563a44479360711d9664e129254d5600ecbe2",
+    "crates/agnetd/src/api_security_api.rs": "bb4d56092d80c07273ed71a53748896834f5f896cf8c38b5cbfe996c7be86636",
+    "crates/agnetd/src/api_state.rs": "842636b05fe04079d3c855b081974d858952b4dd7f577b1110b78110043dde92",
+    "crates/agnetd/src/api_train_api.rs": "aa32b9c636c028d4f33e07bd064d37dcf738814d56c320d3c65df6940a50fc4d",
+    "crates/agnetd/src/bounty_service.rs": "fd8a90cf65345dd57eabe03cabc2b907f7d392125d21ca1360cc953d40a763d0",
+    "crates/agnetd/src/cmd_discover.rs": "0dbb53d86b213527353cb5c54b16752485054bb3ad632810e2f23f23c95fdaea",
+    "crates/agnetd/src/cmd_feed.rs": "a70e85fa1684d75a0c31e5fb9a8d5d96134520c682bb1cb143f815ac8b909c5a",
+    "crates/agnetd/src/cmd_identity.rs": "9e0bb9a06a263d62439c6be8fe2a98c23b1b62f3f09a1a3f0044cfae90611298",
+    "crates/agnetd/src/cmd_inference.rs": "34a441b0b926aa94ccc292ccd41d2db55aadb8666380682ceec8942890021201",
+    "crates/agnetd/src/cmd_knowledge.rs": "4673711700d1e49e2f049106fed85a55bca731f170719d5c865314d81ecc8e46",
+    "crates/agnetd/src/cmd_mesh.rs": "7d79e1c56d3742634c2ff4a9e4f0fea86d334d3e356d1ae53373a827a3a6555d",
+    "crates/agnetd/src/cmd_reputation.rs": "afe8b96b41caa2c5daccfef015078af8d371232588b26ba5a9d4aede76252fab",
+    "crates/agnetd/src/cmd_security.rs": "497f997772945368d38aa53deca9694ecf7bc36f19371edf13e0b9cea25c4f47",
+    "crates/agnetd/src/cmd_serve.rs": "d42afbcec83b7d113955883c265bd7e82bbe02b3ec9f02d1f825b1d6ab4e26ef",
+    "crates/agnetd/src/cmd_token.rs": "ee220c0aa141d91ba6d156a02108902b4d8ff512c69e6765ef5373a9bb89ce89",
+    "crates/agnetd/src/cmd_train.rs": "35f0ca68cd2f43854549105412805a230576377d96b16c835a5251ae92a7197b",
+    "crates/agnetd/src/feed_wire.rs": "b01a3118ed3dfd52c7aa290895d072dfe2c270e6d1bc2504c4c240c45466a4a9",
+    "crates/agnetd/src/inference_service.rs": "63f2f8ca03abafce4343e82a82d9b841643478c08dc86bbdc3819a89d20e533e",
+    "crates/agnetd/src/keystore.rs": "83bc6461eacef609cb2968c90e60d2a8f7785bca6bb40775e1f203aabe15ca5b",
+    "crates/agnetd/src/main.rs": "1c108b04e082ce95317164d29e17742eb539f4b43d0a623423c90b9b69a2ee4c",
+    "crates/agnetd/src/mesh_handle.rs": "15c60dd1a9b924a1dc6a25e06d3cbb9a9cf188383fa31c54abce31675de4d739",
+    "crates/agnetd/src/reputation_service.rs": "2d7d8cb468a19cb864c6ad6d1bde24a713ceb362706e69c024f91f0a2febccde",
+    "crates/agnetd/src/state.rs": "ab802b5bf070630d124a43588ca4ebb3dc933443ee107a3dca8f5ccf3a185133",
+    "crates/agnetd/templates/analytics.html": "b6b0125f5b75a3f464055b99cba6f4c309f8df7d2aa05b1e2d4ef08c3aa819af",
+    "crates/agnetd/templates/base.html": "d7e708c6d7f12f8eeb9e9daf92abb57c0a6042ca3afafa75eb9b6efb158934f3",
+    "crates/agnetd/templates/feed.html": "ae2917cca73200cbe176eefa59df06354afab195ba004740f668570650b46801",
+    "crates/neunode-consensus-bridge/src/bft.rs": "925ee5707f4e3a8421ded309d1e9f1d295c748832cb363b95cafb0e69e8ec97e",
+    "crates/neunode-consensus-bridge/src/lib.rs": "40a0477b74f6dae19c5c5ee698e259755b17671612c45e8ff0045eb9f1303946",
+    "crates/neunode-core/src/kind.rs": "d33f6c4af79247193c757c5adea2f431c4da2ce0491cbe5bd300b8e432602818",
+    "crates/neunode-identity/src/keyring.rs": "3e7ad0805af5a77202771ab84611447a3a3adb3cc20ebc7c766d912aa0b1e277",
+    "crates/neunode-inference/src/settlement.rs": "2f6aa0f4687b52df6c9b61c89d32f72b0ca297ef5fc5a9355359725c5fd6b8c6",
+    "crates/neunode-inference/src/streaming_settlement.rs": "92fb7d24d5756eeb574a345ec74af3c6ac3eb0541a57b5a3df3683a135448344",
+    "crates/neunode-knowledge/src/authorization.rs": "1f54f2baf4cc178b2cb95f650492721abcf3dbff37af715f618f199a37e7d631",
+    "crates/neunode-knowledge/src/mutations.rs": "772d2f37e25830521cb136df09a30a3bb0c3046185519d3d99f555fe22ab416d",
+    "crates/neunode-knowledge/src/ontology.rs": "ea9c0796a4dcb4a72e8585bb3c485cd280cad03cea9fabad278ed1f4f1e8bc31",
+    "crates/neunode-p2p/src/catchup.rs": "80983d4382da323c0fc9a9ec9a66b89d0a352a66c8868fbe8cabd30c3a1e394e",
+    "crates/neunode-p2p/src/gossipsub.rs": "14dafe55f8a64c1ce5857c255a167b2bc8921476023a700b884c2ed9c42ebf3b",
+    "crates/neunode-p2p/src/node.rs": "e5e978c6b9e370724d480a20847cc8ff8c8ac5ca0c6702cb5dd79cdb8a997233",
+    "crates/neunode-storage/src/breaker_store.rs": "d57e6b13d126bb3b082fbef142988e25141c1a2533ed2514050ed7a6bda8e517",
+    "crates/neunode-storage/src/db.rs": "1d4b4f23f26ac3280beacfdb0fd4d4995be07806cf78312c2cc52c4ad7234b8e",
+    "crates/neunode-storage/src/error.rs": "7b95e6bc141e6887e404309db8cae3e31243e853c9ebd7f50d5a81f4c3f10e41",
+    "crates/neunode-storage/src/feed_store.rs": "898050eea3871869135dafbad7b50d1d6bc043af0d6f366ab3f582d0e94c18f3",
+    "crates/neunode-storage/src/lib.rs": "24ac547a902fc9c844366d49250e2d2ac1268adf93e2b21cf943a2ca961597fa",
+    "crates/neunode-storage/src/token_store.rs": "3f9cc282a7b23b2ac2e7cef4cae27f466ffe98541122af76a4cee2d19fe26709",
+    "crates/neunode-token/src/decay.rs": "01cd7d7be99c6d1afac431452cf82a1f2c4b7c063ca728faed1c1030e8876353",
+    "examples/client.ts": "dd3883c4ff8f72c72bc0f3cfc85c9fbfe74954d68df2eda3bd9dc55f0bd6d272",
+    "packages/mcp-server/src/client.ts": "46083b711f449132b15eefde542dbc2266a7d8fdf26817138d3385ae57de2ba6",
+    "packages/mcp-server/src/index.ts": "8c4d3a657ee931cce2f61335ecece9b9150a5788fdfb0ecec2e7e4318290a4ef",
+    "packages/mcp-server/src/server.test.ts": "3068b992862e1e2f527036d8dda876e566192a36939de857d6ae03b2c9a5c4cf",
+    "packages/mcp-server/src/server.ts": "50480ab7efedad5c83ca2c83d47ef50b388e139ade09e8f675900097f74fc76d",
+    "packages/mcp-server/src/tools/index.ts": "71e728cd922b0d2143f11fbe1e5369a9023c19dfb1ae84ecb284ec377f313f29",
+    "packages/mcp-server/src/tools/inference.ts": "a550fafa1a30b76862f605f6ec6f3833a6a9195f80ebe981c991df988881aacf",
+    "packages/mcp-server/src/types.ts": "02837d7ede50ce27873864581b76486aa9774ce2958caf29367abddf84ffaad7",
+    "scripts/beta_dashboard_test.py": "aab17bd23b9f093b8354f2a7643d88ca8ff76d4ca1ea3f2d681247db51459de5",
+    "scripts/beta_package_smoke.mjs": "11e89225a3ec97ef7db1b2882a31cf8e24b3e2a5e5c2c97d641ddd4638514ab5",
+    "scripts/prepare_npm_release.mjs": "84c31cb6e06ee8e27eb2b23a4b84dba5e4a1f0dabd076c8f24064e17842072da",
+    "sdk/package.json": "3b9843f0847e6e0535fff0bdbf869c2e7bba312a9f30733f1273d11c71c06264",
+    "sdk/src/build.test.ts": "5e5fecc77033481657798888fc07962fbc1b5c4e44c43176c15a234614cff8f0",
+    "sdk/src/client/client.ts": "20d3237ee14e9a9fb88042dd40237707ca2a3c45cacb57b112547e20a200e99c",
+    "sdk/src/contracts/data.ts": "632e5b35bdd084d8ef4ed9aef29b8781fd41cd697438ec78fda36416c79b81ff",
+    "sdk/src/contracts/index.ts": "171b5229b59c5b8c057169bc68ba59ea8b843d002c81aa9ad8144935b5a07762",
+    "sdk/src/index.ts": "3b6881328eeea2ff9add044f082e44b3c52242f5eb78ecb90dc10b0af681c1ab",
+    "sdk/src/resources/feed.test.ts": "1aea14be254b06d6cfc41babff9f2d05189f3d21d9ae9c6f53921eafaefda718",
+    "sdk/src/resources/feed.ts": "b14b1e1fd1f83d451485ce61ab4711ff396f36b946bc1c3b792173d998b1fc02",
+    "sdk/src/resources/identity.test.ts": "4cf43a997a56a0c6ad5c3d0a21c926c694a18acd7505d3dd4dd725efd0d89f4d",
+    "sdk/src/resources/index.ts": "459154501c2417297627f204ea9529868fe848044778160492d57b9ed5a73f8f",
+    "sdk/src/resources/inference.ts": "c65e2ab39bb79ecb58c61b3f9975870d43de2cb5fe13a07a7cb5b82924f4c35f",
+    "sdk/src/resources/security.ts": "12d8ae2a2327833aa79dd35f6a9faeaaf90fbab40a29477125acf4f1662b872b",
+    "sdk/src/transport/http-transport.ts": "777c3e30999ebecd0a3559c381843fe6effc967ea30b7ae7764e3ec4a81c53b1",
+    "sdk/src/types/protocol.generated.ts": "c8894167a14ccf056146f4a10985a1344d66bcfa80c71de280cec52a64c4b274",
+    "sdk/src/types/types.test.ts": "548bfef59028a571971cc6cb179062907e827f6f23fb7ea94cd63a9fbdbc7e1d",
+    "sdk/tests/beta/agent.acceptance.test.ts": "30ca433fec0df213836c65c78a7d08ed5e7692bead0f3bf68f8ce0fd5c6f1a56",
+    "sdk/tests/integration/helpers/agnetd.ts": "24907a2af624ec1e05baf61ad9c84574642174d225592761793db45da0cd1cfb",
+    "sdk/tests/integration/http-routes.integration.test.ts": "9089510ed33858981b75586657a3bbdca86931cd43451edbc49bd229a5ed5e76",
+    "sdk/tsup.config.ts": "4270d12b915c327ba2ffc38dd88e6a0023049b3168c47aa024e510a832592aa9",
+    "tests/inference_flow.rs": "3bd2ce54ace08538611943267ce9ad69cd74c9dd9d0480011020d7516029d97f"
+  }
+}

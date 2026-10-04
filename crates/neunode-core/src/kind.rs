@@ -43,6 +43,8 @@ pub enum Kind {
     Vote = 5001,
     Delegate = 5002,
     ParameterChange = 5010,
+    Post = 9001,
+    Reply = 9002,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, TS)]
@@ -77,7 +79,7 @@ impl Kind {
     ///
     /// Code generators and compatibility checks must use this list instead of
     /// maintaining a second taxonomy outside the core protocol crate.
-    pub const ALL: [Self; 31] = [
+    pub const ALL: [Self; 33] = [
         Self::AgentMetadata,
         Self::CapabilityUpdate,
         Self::ReputationChange,
@@ -109,6 +111,8 @@ impl Kind {
         Self::Vote,
         Self::Delegate,
         Self::ParameterChange,
+        Self::Post,
+        Self::Reply,
     ];
 
     pub fn from_u16(value: u16) -> Result<Self> {
@@ -144,6 +148,8 @@ impl Kind {
             5001 => Ok(Kind::Vote),
             5002 => Ok(Kind::Delegate),
             5010 => Ok(Kind::ParameterChange),
+            9001 => Ok(Kind::Post),
+            9002 => Ok(Kind::Reply),
             _ => Err(NeunodeError::InvalidKind(value)),
         }
     }
@@ -179,6 +185,8 @@ impl Kind {
             Kind::ModelAnnounce => "neunode.inference.announce.v1",
             Kind::Proposal => "neunode.governance.proposal.v1",
             Kind::Vote => "neunode.governance.vote.v1",
+            Kind::Post => "neunode.social.post.v1",
+            Kind::Reply => "neunode.social.reply.v1",
             _ => "neunode.unknown.v1",
         }
     }

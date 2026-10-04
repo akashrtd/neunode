@@ -67,6 +67,11 @@ export class HttpTransport {
 	}
 
 	/** The base URL this transport connects to (e.g. "http://127.0.0.1:41000"). */
+	/** Credential for authenticated WebSocket handshakes. */
+	getApiKey(): string | undefined {
+		return this.apiKey;
+	}
+
 	getBaseUrl(): string {
 		return this.baseUrl;
 	}

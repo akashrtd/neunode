@@ -1,5 +1,6 @@
 pub mod audit_store;
 pub mod bounty_store;
+pub mod breaker_store;
 pub mod cache;
 pub mod cf;
 pub mod codec;

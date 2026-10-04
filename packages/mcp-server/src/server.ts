@@ -5,7 +5,7 @@ import http, {
   type Server as HttpServer,
   type ServerResponse,
 } from "node:http";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -40,7 +40,8 @@ export async function startStdio(client: AgnetdClient): Promise<void> {
  * an isolated protocol server because the MCP SDK permits one transport per
  * server.
  */
-export function createHttpServer(client: AgnetdClient): HttpServer {
+export function createHttpServer(client: AgnetdClient, apiKey = client.getApiKey?.()): HttpServer {
+  if (apiKey && apiKey.length < 32) throw new Error("MCP access token must contain at least 32 characters");
   const sessions = new Map<string, HttpSession>();
 
   const httpServer = http.createServer(async (req, res) => {
@@ -48,6 +49,16 @@ export function createHttpServer(client: AgnetdClient): HttpServer {
       if (!isLocalRequest(req)) {
         respond(res, 403, "Forbidden");
         return;
+      }
+      // An HTTP MCP gateway must not hand its upstream authority to arbitrary callers.
+      if (apiKey) {
+        const supplied = req.headers.authorization?.replace(/^Bearer /, "") ?? "";
+        const expectedBytes = Buffer.from(apiKey);
+        const suppliedBytes = Buffer.from(supplied);
+        if (expectedBytes.length !== suppliedBytes.length || !timingSafeEqual(expectedBytes, suppliedBytes)) {
+          respond(res, 401, "MCP requests require the daemon bearer token");
+          return;
+        }
       }
 
       const url = new URL(req.url ?? "/", "http://localhost");

@@ -8,7 +8,14 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  verify-contracts:
+    uses: ./.github/workflows/contracts-ci.yml
+
   build:
+    needs: [verify, verify-contracts]
     strategy:
       fail-fast: false
       matrix:
@@ -25,7 +32,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.93.0
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
@@ -59,8 +66,40 @@ jobs:
           name: agnetd-${{ matrix.platform }}
           path: target/${{ matrix.target }}/release/agnetd
 
-  release:
+  smoke-artifact:
     needs: build
+    strategy:
+      matrix:
+        include:
+          - platform: linux-x64
+            os: ubuntu-latest
+          - platform: linux-arm64
+            os: ubuntu-24.04-arm
+          - platform: darwin-arm64
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: agnetd-${{ matrix.platform }}
+          path: release-bin
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: chmod +x release-bin/agnetd
+      - run: cd sdk && npm ci && npm run test:beta
+        env:
+          NEUNODE_TEST_BINARY: ${{ github.workspace }}/release-bin/agnetd
+      - name: Verify packed SDK and MCP against the native release binary
+        run: |
+          mkdir -p packed
+          (cd sdk && npm run build && npm pack --pack-destination "$GITHUB_WORKSPACE/packed")
+          (cd packages/mcp-server && npm ci && npm run build && npm pack --pack-destination "$GITHUB_WORKSPACE/packed")
+          node scripts/beta_package_smoke.mjs release-bin/agnetd packed/neunode-sdk-*.tgz packed/neunode-mcp-server-*.tgz
+
+  release:
+    needs: [build, smoke-artifact]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -79,6 +118,7 @@ jobs:
         with:
           files: artifacts/**/*
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
   publish-npm:
     needs: release
@@ -96,25 +136,12 @@ jobs:
         with:
           path: artifacts
 
-      - name: Set versions from tag
+      - name: Build SDK and MCP packages
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          for pkg in packages/agnetd packages/agnetd-linux-x64 packages/agnetd-linux-arm64 packages/agnetd-darwin-arm64; do
-            if [ -f "$pkg/package.json" ]; then
-              node -e "
-                const fs = require('fs');
-                const p = '$pkg/package.json';
-                const j = JSON.parse(fs.readFileSync(p, 'utf8'));
-                j.version = '$VERSION';
-                if (j.optionalDependencies) {
-                  for (const dep in j.optionalDependencies) {
-                    j.optionalDependencies[dep] = '$VERSION';
-                  }
-                }
-                fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
-              "
-            fi
-          done
+          (cd sdk && npm ci && npm run build)
+          (cd packages/mcp-server && npm ci && npm run build)
+      - name: Set versions from tag
+        run: node scripts/prepare_npm_release.mjs "${GITHUB_REF_NAME#v}"
 
       - name: Place binaries in platform packages
         run: |
@@ -125,17 +152,22 @@ jobs:
 
       - name: Publish platform packages
         run: |
+          NPM_DIST_TAG=latest
+          [[ "$GITHUB_REF_NAME" == *-* ]] && NPM_DIST_TAG=beta
           for pkg in packages/agnetd-linux-x64 packages/agnetd-linux-arm64 packages/agnetd-darwin-arm64; do
             echo "Publishing $pkg..."
             cd "$GITHUB_WORKSPACE/$pkg"
-            npm publish --access public
+            npm publish --access public --tag "$NPM_DIST_TAG"
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish main package
+      - name: Publish daemon, SDK and MCP packages
         run: |
-          cd packages/agnetd
-          npm publish --access public
+          NPM_DIST_TAG=latest
+          [[ "$GITHUB_REF_NAME" == *-* ]] && NPM_DIST_TAG=beta
+          for pkg in packages/agnetd sdk packages/mcp-server; do
+            (cd "$GITHUB_WORKSPACE/$pkg" && npm publish --access public --tag "$NPM_DIST_TAG")
+          done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

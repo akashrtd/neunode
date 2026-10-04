@@ -39,7 +39,7 @@ fn default_output() -> u32 {
     0
 }
 
-#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct InferenceRequest {
     pub model: String,
     pub prompt: String,
@@ -47,6 +47,8 @@ pub struct InferenceRequest {
     pub max_tokens: u32,
     #[serde(default = "default_temp")]
     pub temperature: f64,
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
@@ -86,7 +88,7 @@ pub struct PricingQuery {
 // Response types
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[derive(Debug, Serialize, utoipa::ToSchema, Clone, Deserialize)]
 pub struct InferenceResponse {
     pub model: String,
     pub prompt: String,
@@ -94,22 +96,26 @@ pub struct InferenceResponse {
     pub temperature: f64,
     pub estimated_input_tokens: u32,
     pub status: String,
+    pub request_id: String,
+    #[schema(value_type = Option<Object>)]
+    pub completion: Option<neunode_inference::openai::ChatCompletionResponse>,
+    pub settlement: Option<crate::inference_service::Receipt>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pricing: Option<PricingEstimate>,
 }
 
-#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[derive(Debug, Serialize, utoipa::ToSchema, Clone, Deserialize)]
 pub struct PricingEstimate {
-    pub input_price_per_mtok: u64,
-    pub output_price_per_mtok: u64,
-    pub estimated_cost: u64,
+    pub input_price_per_mtok: String,
+    pub output_price_per_mtok: String,
+    pub estimated_cost: String,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ModelEntry {
     pub id: String,
-    pub input_price_per_million: u64,
-    pub output_price_per_million: u64,
+    pub input_price_per_million: String,
+    pub output_price_per_million: String,
     pub context_length: u32,
 }
 
@@ -147,11 +153,11 @@ pub struct PricingResponse {
     pub model: String,
     pub input_tokens: u32,
     pub output_tokens: u32,
-    pub input_cost: u64,
-    pub output_cost: u64,
-    pub total_cost: u64,
-    pub protocol_fee: u64,
-    pub net_payout: u64,
+    pub input_cost: String,
+    pub output_cost: String,
+    pub total_cost: String,
+    pub protocol_fee: String,
+    pub net_payout: String,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -167,7 +173,7 @@ pub struct RegisterProviderResponse {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn load_all_providers(db: &NeunodeDb) -> Vec<InferenceProvider> {
+pub(crate) fn load_all_providers(db: &NeunodeDb) -> Vec<InferenceProvider> {
     let entries = match db.prefix_scan(neunode_storage::cf::CF_MODELS, &[]) {
         Ok(e) => e,
         Err(_) => return Vec::new(),
@@ -290,7 +296,7 @@ pub async fn request_inference(
     State(state): State<Arc<ApiState>>,
     Json(body): Json<InferenceRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    Ok(types::ok(submit_inference(&state.db, body)?))
+    Ok(types::ok(execute_inference(&state, body).await?))
 }
 
 pub(crate) fn submit_inference(
@@ -334,15 +340,22 @@ pub(crate) fn submit_inference(
     let estimated_tokens = request.estimate_tokens();
 
     let providers = load_all_providers(db);
-    let pricing_info = providers.iter().find_map(|p| p.find_model(&body.model)).map(|m| {
-        let cost =
-            ((estimated_tokens as u128 * m.input_price_per_million.0 / 1_000_000).max(1)) as u64;
-        PricingEstimate {
-            input_price_per_mtok: m.input_price_per_million.0 as u64,
-            output_price_per_mtok: m.output_price_per_million.0 as u64,
-            estimated_cost: cost,
-        }
-    });
+    let pricing_info = providers
+        .iter()
+        .find_map(|p| p.find_model(&body.model))
+        .map(|m| {
+            Ok::<_, ApiError>(PricingEstimate {
+                input_price_per_mtok: m.input_price_per_million.0.to_string(),
+                output_price_per_mtok: m.output_price_per_million.0.to_string(),
+                estimated_cost: crate::inference_service::price(
+                    estimated_tokens,
+                    body.max_tokens,
+                    m,
+                )?
+                .to_string(),
+            })
+        })
+        .transpose()?;
 
     Ok(InferenceResponse {
         model: body.model,
@@ -350,9 +363,35 @@ pub(crate) fn submit_inference(
         max_tokens: body.max_tokens,
         temperature: body.temperature,
         estimated_input_tokens: estimated_tokens,
-        status: "submitted".to_string(),
+        status: "validated".to_string(),
+        request_id: String::new(),
+        completion: None,
+        settlement: None,
         pricing: pricing_info,
     })
+}
+
+pub(crate) async fn execute_inference(
+    state: &Arc<ApiState>,
+    body: InferenceRequest,
+) -> Result<InferenceResponse, ApiError> {
+    let validated = submit_inference(&state.db, body.clone())?;
+    let provider = load_all_providers(&state.db)
+        .into_iter()
+        .find(|provider| {
+            provider.status == ProviderStatus::Online && provider.find_model(&body.model).is_some()
+        })
+        .ok_or_else(|| {
+            ApiError::NotFound(format!("no online provider for model {}", body.model))
+        })?;
+    let requester = state.require_did()?.0;
+    let db = Arc::clone(&state.db);
+    // A disconnected HTTP caller must not cancel accounting after funds are reserved.
+    tokio::spawn(async move {
+        crate::inference_service::execute(db, requester, provider, body, validated).await
+    })
+    .await
+    .map_err(|error| ApiError::Internal(format!("inference task failed: {error}")))?
 }
 
 #[utoipa::path(
@@ -389,8 +428,8 @@ pub async fn list_models(
         .into_iter()
         .map(|m| ModelEntry {
             id: m.id.clone(),
-            input_price_per_million: m.input_price_per_million.0 as u64,
-            output_price_per_million: m.output_price_per_million.0 as u64,
+            input_price_per_million: m.input_price_per_million.0.to_string(),
+            output_price_per_million: m.output_price_per_million.0.to_string(),
             context_length: m.context_length,
         })
         .collect();
@@ -510,6 +549,13 @@ pub async fn show_pricing(
     State(state): State<Arc<ApiState>>,
     Query(query): Query<PricingQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
+    Ok(types::ok(pricing_response(&state.db, query)?))
+}
+
+pub(crate) fn pricing_response(
+    db: &NeunodeDb,
+    query: PricingQuery,
+) -> Result<PricingResponse, ApiError> {
     if query.model.is_empty() {
         return Err(ApiError::BadRequest("model cannot be empty".to_string()));
     }
@@ -519,41 +565,38 @@ pub async fn show_pricing(
         ));
     }
 
-    let providers = load_all_providers(&state.db);
-    let model_info =
-        providers.iter().find_map(|p| p.find_model(&query.model)).cloned().unwrap_or_else(|| {
-            ModelInfo {
-                id: query.model.clone(),
-                base_model: None,
-                context_length: 4096,
-                input_price_per_million: TokenAmount(100),
-                output_price_per_million: TokenAmount(200),
-                capabilities: vec!["chat".to_string()],
-            }
-        });
+    let providers = load_all_providers(db);
+    let model_info = providers
+        .iter()
+        .find_map(|p| p.find_model(&query.model))
+        .ok_or_else(|| ApiError::NotFound("no registered pricing for model".into()))?;
+    let input_rate = model_info.input_price_per_million.0;
+    let input_cost = (input_rate / 1_000_000)
+        .checked_mul(u128::from(query.input_tokens))
+        .and_then(|whole| {
+            whole.checked_add(input_rate % 1_000_000 * u128::from(query.input_tokens) / 1_000_000)
+        })
+        .ok_or_else(|| ApiError::BadRequest("input price exceeds amount bounds".into()))?;
+    let output_rate = model_info.output_price_per_million.0;
+    let output_cost = (output_rate / 1_000_000)
+        .checked_mul(u128::from(query.output_tokens))
+        .and_then(|whole| {
+            whole.checked_add(output_rate % 1_000_000 * u128::from(query.output_tokens) / 1_000_000)
+        })
+        .ok_or_else(|| ApiError::BadRequest("output price exceeds amount bounds".into()))?;
+    let total_cost =
+        crate::inference_service::price(query.input_tokens, query.output_tokens, model_info)?;
+    let protocol_fee = total_cost / 50 + u128::from(total_cost % 50 != 0);
+    let net_payout = total_cost - protocol_fee;
 
-    let input_cost =
-        ((query.input_tokens as u128) * model_info.input_price_per_million.0 / 1_000_000) as u64;
-    let output_cost =
-        ((query.output_tokens as u128) * model_info.output_price_per_million.0 / 1_000_000) as u64;
-    let total = input_cost.saturating_add(output_cost);
-    let total_cost = if total == 0 && (query.input_tokens > 0 || query.output_tokens > 0) {
-        1u64
-    } else {
-        total
-    };
-
-    let protocol_fee = ((total_cost as f64) * 2.0 / 100.0).ceil() as u64;
-    let net_payout = total_cost.saturating_sub(protocol_fee);
-
-    Ok(types::ok(PricingResponse {
+    Ok(PricingResponse {
         model: query.model,
         input_tokens: query.input_tokens,
         output_tokens: query.output_tokens,
-        input_cost,
-        output_cost,
-        total_cost,
-        protocol_fee,
-        net_payout,
-    }))
+        input_cost: input_cost.to_string(),
+        output_cost: output_cost.to_string(),
+        total_cost: total_cost.to_string(),
+        protocol_fee: protocol_fee.to_string(),
+        net_payout: net_payout.to_string(),
+    })
 }

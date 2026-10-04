@@ -131,8 +131,10 @@ describe("Kind enum", () => {
 		"ParameterChange",
 	] as const;
 
-	it("should have all 31 variants", () => {
-		expect(Object.keys(Kind)).toHaveLength(31);
+	it("should have canonical variants and social post/reply", () => {
+		expect(Object.keys(Kind)).toHaveLength(33);
+		expect(Kind.Post).toBe("Post");
+		expect(Kind.Reply).toBe("Reply");
 	});
 
 	it.each(kindKeys)("should have Kind.%s", (key) => {

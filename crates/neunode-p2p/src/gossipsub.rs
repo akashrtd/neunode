@@ -10,7 +10,8 @@ use crate::error::Result;
 use ts_rs::TS;
 
 const MAX_MESSAGE_SIZE: usize = 1024 * 1024;
-const HEARTBEAT_INTERVAL_SECS: u64 = 300;
+// Peer mesh formation and recovery must happen promptly after a connection.
+const HEARTBEAT_INTERVAL_SECS: u64 = 1;
 const FANOUT_TTL_SECS: u64 = 60;
 const HISTORY_LENGTH: usize = 10;
 const HISTORY_GOSSIP_LENGTH: usize = 10;
@@ -134,6 +135,7 @@ pub fn all_category_topics() -> Vec<IdentTopic> {
         IdentTopic::new("neunode/attestation"),
         IdentTopic::new("neunode/inference"),
         IdentTopic::new("neunode/governance"),
+        IdentTopic::new("neunode/custom"),
     ]
 }
 
@@ -149,7 +151,7 @@ mod tests {
         assert_eq!(cfg.mesh_degree_low, 4);
         assert_eq!(cfg.mesh_degree_high, 12);
         assert_eq!(cfg.gossip_factor, 0.25);
-        assert_eq!(cfg.heartbeat_interval_secs, 300);
+        assert_eq!(cfg.heartbeat_interval_secs, 1);
         assert_eq!(cfg.fanout_ttl_secs, 60);
         assert_eq!(cfg.history_length, 10);
         assert_eq!(cfg.history_gossip_length, 10);
@@ -215,9 +217,9 @@ mod tests {
     }
 
     #[test]
-    fn all_category_topics_returns_six() {
+    fn all_category_topics_covers_every_protocol_kind() {
         let topics = all_category_topics();
-        assert_eq!(topics.len(), 6);
+        assert_eq!(topics.len(), 7);
         let names: Vec<String> = topics.iter().map(|t| t.to_string()).collect();
         assert!(names.contains(&"neunode/system".to_string()));
         assert!(names.contains(&"neunode/bounty".to_string()));
@@ -225,6 +227,9 @@ mod tests {
         assert!(names.contains(&"neunode/attestation".to_string()));
         assert!(names.contains(&"neunode/inference".to_string()));
         assert!(names.contains(&"neunode/governance".to_string()));
+        for kind in Kind::ALL {
+            assert!(names.contains(&kind.gossipsub_topic().to_string()));
+        }
     }
 
     #[test]

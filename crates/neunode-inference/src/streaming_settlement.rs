@@ -86,12 +86,12 @@ impl StreamingAccumulator {
         model_info: &ModelInfo,
         _config: &PricingConfig,
     ) -> Result<TokenAmount> {
-        Ok(SettlementEngine::calculate_cost(
+        SettlementEngine::calculate_cost(
             self.input_tokens,
             self.output_tokens,
             model_info.input_price_per_million,
             model_info.output_price_per_million,
-        ))
+        )
     }
 
     /// Finalize settlement once all chunks are received.
@@ -110,10 +110,9 @@ impl StreamingAccumulator {
             self.output_tokens,
             model_info.input_price_per_million,
             model_info.output_price_per_million,
-        );
+        )?;
 
-        let fee_amount = (gross_cost.0 * config.protocol_fee_bps as u128).div_ceil(10_000);
-        let protocol_fee = TokenAmount(fee_amount);
+        let protocol_fee = SettlementEngine::calculate_fee(gross_cost, config.protocol_fee_bps)?;
         let net_payout = gross_cost
             .checked_sub(protocol_fee)
             .ok_or(InferenceError::FeeExceedsGross { fee: protocol_fee, gross: gross_cost })?;

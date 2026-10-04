@@ -166,9 +166,7 @@ fn train_start(
         .unwrap_or_default()
         .as_secs();
 
-    let hash_input = format!("{model}{dataset}{now}");
-    let hash = neunode_crypto::hash::sha256(hash_input.as_bytes());
-    let job_id = format!("train_{}", bytes_to_hex(&hash[..8]));
+    let job_id = format!("train_{}", crate::keystore::random_id());
 
     // Parse and validate config via neunode-training types.
     let training_config: TrainingConfig = match config {

@@ -267,9 +267,7 @@ pub async fn start_training(
         .unwrap_or_default()
         .as_secs();
 
-    let hash_input = format!("{}{}{}", body.model, body.dataset, now);
-    let hash = neunode_crypto::hash::sha256(hash_input.as_bytes());
-    let job_id = format!("train_{}", bytes_to_hex(&hash[..8]));
+    let job_id = format!("train_{}", crate::keystore::random_id());
 
     let training_config: TrainingConfig = match body.config.as_deref() {
         Some(json_str) => {
@@ -403,7 +401,7 @@ pub async fn register_worker(
         supports_bf16: body.bf16,
         max_model_params: body.max_params,
     };
-    let active_did = state.active_did.as_ref().map(|d| d.0.clone()).unwrap_or_default();
+    let active_did = state.require_did()?.0;
     let entry = ProviderEntry {
         worker_id: WorkerId(worker_id.clone()),
         did: active_did,

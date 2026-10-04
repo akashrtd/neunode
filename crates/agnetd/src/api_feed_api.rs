@@ -27,6 +27,12 @@ pub struct FeedListQuery {
     pub author: Option<String>,
     #[serde(default = "default_limit")]
     pub limit: usize,
+    #[serde(default = "first_sequence")]
+    pub from_sequence: u64,
+}
+
+fn first_sequence() -> u64 {
+    1
 }
 
 fn default_limit() -> usize {
@@ -41,6 +47,8 @@ pub struct FeedEventResponse {
     pub author_did: String,
     pub content: String,
     pub signature: String,
+    /// Full signed body, including tags and references, for independent verification.
+    pub event: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -78,8 +86,13 @@ pub async fn list_feed(
         None => state.require_did()?.0.clone(),
     };
 
+    if query.kind.is_some_and(|kind| u16::try_from(kind).is_err()) || query.limit > 1000 {
+        return Err(ApiError::BadRequest("invalid kind or limit exceeds 1000".into()));
+    }
     let store = neunode_storage::feed_store::FeedStore::new(&state.db);
-    let events = store.get_all(&did).map_err(|e| ApiError::Internal(e.to_string()))?;
+    let events = store
+        .get_range(&did, query.from_sequence, query.limit)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let filtered: Vec<FeedEventResponse> = events
         .into_iter()
@@ -89,9 +102,14 @@ pub async fn list_feed(
             sequence: e.sequence,
             kind: e.kind,
             timestamp: e.timestamp,
-            author_did: e.agent_did,
-            content: String::from_utf8(e.payload).unwrap_or_else(|_| "(binary)".to_string()),
-            signature: hex::encode(&e.signature),
+            author_did: e.agent_did.clone(),
+            content: crate::feed_wire::stored_to_event(&e)
+                .map(|event| event.content)
+                .unwrap_or_else(|_| String::from_utf8_lossy(&e.payload).into_owned()),
+            signature: String::from_utf8_lossy(&e.signature).into_owned(),
+            event: crate::feed_wire::stored_to_event(&e)
+                .ok()
+                .and_then(|event| serde_json::to_value(event).ok()),
         })
         .collect();
 
@@ -117,31 +135,27 @@ pub async fn post_feed(
         return Err(ApiError::BadRequest("content cannot be empty".to_string()));
     }
 
-    let did = state.require_did()?;
-    let _keyring = state.require_keyring()?;
-
-    let store = neunode_storage::feed_store::FeedStore::new(&state.db);
-    let latest_seq =
-        store.latest_sequence(&did.0).map_err(|e| ApiError::Internal(e.to_string()))?;
-    let next_seq = if latest_seq == 0 { 1 } else { latest_seq + 1 };
-
-    let now_ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    let stored = neunode_storage::feed_store::StoredEvent {
-        kind: body.kind as u16,
-        timestamp: now_ts,
-        agent_did: did.0.clone(),
-        sequence: next_seq,
-        prev_hash: vec![0u8; 32],
-        payload: body.content.as_bytes().to_vec(),
-        signature: vec![],
+    let event = {
+        let keyring = state.require_keyring()?;
+        crate::feed_wire::create_event(
+            &state.db,
+            &keyring,
+            body.kind,
+            body.content.clone(),
+            &body.tags.unwrap_or_default(),
+        )
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?
     };
-    store.append(&stored).map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let event_id = event_id(&did.0, next_seq);
+    let did = &event.author;
+    let next_seq = event.sequence;
+    let event_id = event.id.0.clone();
+    let wire = {
+        let keyring = state.require_keyring()?;
+        crate::feed_wire::serialize_authenticated_event(&event, &keyring)?
+    };
+    if let Some(mesh) = state.mesh_handle.read().await.as_ref() {
+        mesh.publish(event.kind.gossipsub_topic(), &wire)?;
+    }
 
     let _ = state.feed_tx.send(crate::api::state::FeedEventUpdate {
         kind: body.kind as u16,
@@ -179,35 +193,37 @@ pub async fn show_feed_event(
     State(state): State<Arc<ApiState>>,
     Path(event_id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let did = state.require_did()?;
     let store = neunode_storage::feed_store::FeedStore::new(&state.db);
-
-    let events = store.get_all(&did.0).map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let found = events.iter().find(|event| {
-        event_id == self::event_id(&event.agent_did, event.sequence)
-            || event_id == format!("seq:{}", event.sequence)
-    });
-
-    match found {
-        Some(event) => {
-            let resp = FeedEventResponse {
-                sequence: event.sequence,
-                kind: event.kind,
-                timestamp: event.timestamp,
-                author_did: event.agent_did.clone(),
-                content: String::from_utf8(event.payload.clone())
-                    .unwrap_or_else(|_| "(binary)".to_string()),
-                signature: hex::encode(&event.signature),
-            };
-            Ok(types::ok(resp))
-        }
-        None => Err(ApiError::NotFound(format!("event '{event_id}' not found"))),
+    let stored = if let Some(sequence) = event_id.strip_prefix("seq:") {
+        let did = state.require_did()?;
+        let sequence =
+            sequence.parse().map_err(|_| ApiError::BadRequest("invalid sequence".into()))?;
+        store.get(&did.0, sequence)?
+    } else if let Some(wire) =
+        state.db.get_raw(neunode_storage::cf::CF_FEED_INDEX, event_id.as_bytes())?
+    {
+        let (did, sequence) = crate::feed_wire::authenticated_position(&wire)?;
+        store.get(&did, sequence)?
+    } else {
+        None
     }
-}
-
-fn event_id(did: &str, sequence: u64) -> String {
-    format!("evt_{}_{}", hex::encode(&did.as_bytes()[..8.min(did.len())]), sequence)
+    .ok_or_else(|| ApiError::NotFound(format!("event '{event_id}' not found")))?;
+    let event = crate::feed_wire::stored_to_event(&stored)?;
+    Ok(types::ok(FeedEventResponse {
+        sequence: stored.sequence,
+        kind: stored.kind,
+        timestamp: stored.timestamp,
+        author_did: stored.agent_did,
+        content: event.content.clone(),
+        signature: event
+            .signature
+            .as_ref()
+            .map(|signature| signature.0.clone())
+            .unwrap_or_default(),
+        event: Some(
+            serde_json::to_value(event).map_err(|error| ApiError::Internal(error.to_string()))?,
+        ),
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -263,6 +279,7 @@ mod tests {
             author_did: "did:neunode:0xABC".to_string(),
             content: "hello".to_string(),
             signature: "deadbeef".to_string(),
+            event: None,
         };
         let json = serde_json::to_string(&resp).unwrap();
         let back: FeedEventResponse = serde_json::from_str(&json).unwrap();

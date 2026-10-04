@@ -180,16 +180,19 @@ export interface InferenceRequestResponse {
   readonly estimated_input_tokens: number;
   readonly status: string;
   readonly pricing?: {
-    readonly input_price_per_mtok: number;
-    readonly output_price_per_mtok: number;
-    readonly estimated_cost: number;
+    readonly input_price_per_mtok: string;
+    readonly output_price_per_mtok: string;
+    readonly estimated_cost: string;
   };
+  readonly request_id: string;
+  readonly completion: Readonly<Record<string, unknown>> | null;
+  readonly settlement: { readonly requester: string; readonly provider: string; readonly gross_cost: string; readonly protocol_fee: string; readonly net_payout: string; readonly response_hash: string; readonly ledger: string } | null;
 }
 
 export interface ModelEntry {
   readonly id: string;
-  readonly input_price_per_million: number;
-  readonly output_price_per_million: number;
+  readonly input_price_per_million: string;
+  readonly output_price_per_million: string;
   readonly context_length: number;
 }
 

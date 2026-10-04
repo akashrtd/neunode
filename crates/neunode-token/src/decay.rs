@@ -43,22 +43,24 @@ impl DecayCalculator {
             return balance;
         }
 
-        let rate = Self::effective_decay_rate(activity_level);
-        if rate == 0.0 {
-            return balance;
-        }
-
-        let mut current = balance.0 as f64;
-        let multiplier = 1.0 - (rate / 100.0);
+        let retained = match activity_level {
+            ActivityLevel::Active => return balance,
+            ActivityLevel::Moderate => 98u128,
+            ActivityLevel::Low => 95,
+            ActivityLevel::Inactive => 85,
+            ActivityLevel::Dead => 50,
+        };
+        let mut current = balance.0;
         for _ in 0..periods {
-            current *= multiplier;
-            if current < 1.0 {
-                current = 0.0;
+            // Quotient/remainder multiplication cannot overflow at u128::MAX.
+            // Floor each epoch's retained amount, preserving a positive dust unit.
+            let next = (current / 100 * retained + current % 100 * retained / 100).max(1);
+            if next == current {
                 break;
             }
+            current = next;
         }
-
-        TokenAmount(current as u128)
+        TokenAmount(current)
     }
 
     pub fn apply_decay(
@@ -94,13 +96,37 @@ impl DecayCalculator {
     }
 
     fn distribute_share(total: u128, percentage: f64) -> TokenAmount {
-        TokenAmount((total as f64 * percentage / 100.0) as u128)
+        let percentage = percentage as u128;
+        TokenAmount(total / 100 * percentage + total % 100 * percentage / 100)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn full_width_decay_conserves_value_and_positive_dust() {
+        for balance in [1, 2, 99, 100, 101, u64::MAX as u128, u128::MAX] {
+            for level in [
+                ActivityLevel::Active,
+                ActivityLevel::Moderate,
+                ActivityLevel::Low,
+                ActivityLevel::Inactive,
+                ActivityLevel::Dead,
+            ] {
+                let (remaining, distribution) =
+                    DecayCalculator::apply_decay(TokenAmount(balance), level);
+                assert!(remaining.0 > 0 && remaining.0 <= balance);
+                assert_eq!(remaining.0.checked_add(distribution.total().0), Some(balance));
+            }
+        }
+        assert_eq!(
+            DecayCalculator::calculate_decay(TokenAmount(u128::MAX), ActivityLevel::Dead, u32::MAX)
+                .0,
+            1
+        );
+    }
 
     #[test]
     fn zero_decay_for_active() {
@@ -147,10 +173,10 @@ mod tests {
 
     #[test]
     fn decay_multiple_periods() {
-        // 2% for 3 periods: 1000 * 0.98^3 = 941.192 → 941
+        // Match three integer ledger updates: 1000 → 980 → 960 → 940.
         let result =
             DecayCalculator::calculate_decay(TokenAmount(1000), ActivityLevel::Moderate, 3);
-        assert_eq!(result, TokenAmount(941));
+        assert_eq!(result, TokenAmount(940));
     }
 
     #[test]
@@ -237,7 +263,7 @@ mod tests {
     #[test]
     fn decay_approaches_zero_over_many_periods() {
         let result = DecayCalculator::calculate_decay(TokenAmount(1000), ActivityLevel::Dead, 100);
-        assert!(result.0 < 1);
+        assert_eq!(result.0, 1);
     }
 
     #[test]

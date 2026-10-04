@@ -24,6 +24,23 @@ impl MutationAuthorization {
         Ok(Self { signer_did, verifying_key, signature })
     }
 
+    /// Verify the signature against an independently resolved, trusted identity key.
+    /// Neither trusted value may be copied from the untrusted authorization itself.
+    pub fn verify_for(
+        &self,
+        payload: &[u8],
+        trusted_did: &str,
+        trusted_key: &[u8; 32],
+    ) -> Result<()> {
+        if self.signer_did != trusted_did || self.verifying_key != *trusted_key {
+            return Err(KnowledgeError::AuthorizationError(
+                "signer does not match the authorized identity".into(),
+            ));
+        }
+        self.verify(payload)
+    }
+
+    /// Signature integrity only. This does not establish DID ownership or policy scope.
     pub fn verify(&self, payload: &[u8]) -> Result<()> {
         let verifying_key =
             ed25519::verifying_key_from_bytes(&self.verifying_key).map_err(|e| {
@@ -128,6 +145,31 @@ mod tests {
             MutationAuthorization::sign("did:neunode:test".into(), vk2_bytes, &sk1_bytes, &payload)
                 .unwrap();
         assert!(auth.verify(&payload).is_err());
+    }
+
+    #[test]
+    fn self_claimed_identity_and_key_are_not_authorization() {
+        let (owner_sk, owner_vk) = test_keypair();
+        let (attacker_sk, attacker_vk) = test_keypair();
+        let payload = canonical_register_agent("did:neunode:owner", &["NLP"]);
+        let forged = MutationAuthorization::sign(
+            "did:neunode:owner".into(),
+            attacker_vk.to_bytes(),
+            &attacker_sk.to_bytes(),
+            &payload,
+        )
+        .unwrap();
+        assert!(forged.verify(&payload).is_ok());
+        assert!(forged.verify_for(&payload, "did:neunode:owner", &owner_vk.to_bytes()).is_err());
+        let valid = MutationAuthorization::sign(
+            "did:neunode:owner".into(),
+            owner_vk.to_bytes(),
+            &owner_sk.to_bytes(),
+            &payload,
+        )
+        .unwrap();
+        valid.verify_for(&payload, "did:neunode:owner", &owner_vk.to_bytes()).unwrap();
+        assert!(valid.verify_for(&payload, "did:neunode:another", &owner_vk.to_bytes()).is_err());
     }
 
     #[test]

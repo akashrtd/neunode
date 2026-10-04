@@ -35,6 +35,9 @@ pub enum StorageError {
     #[error("token count mismatch: expected {expected}, got {got}")]
     TokenCountMismatch { expected: usize, got: usize },
 
+    #[error("circuit breaker {0} is open")]
+    CircuitBreakerOpen(String),
+
     #[error("ledger mutation lock is poisoned")]
     LedgerLockPoisoned,
 

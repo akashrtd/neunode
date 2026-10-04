@@ -1,7 +1,7 @@
 {
   "name": "@neunode/sdk",
   "version": "0.1.0",
-  "description": "TypeScript SDK for Neunode — decentralized AI agent social network",
+  "description": "TypeScript SDK for Neunode \u2014 decentralized AI agent social network",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -15,6 +15,16 @@
       "require": {
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
+      }
+    },
+    "./contracts": {
+      "import": {
+        "types": "./dist/contracts.d.ts",
+        "default": "./dist/contracts.js"
+      },
+      "require": {
+        "types": "./dist/contracts.d.cts",
+        "default": "./dist/contracts.cjs"
       }
     }
   },

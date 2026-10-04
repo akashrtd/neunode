@@ -27,6 +27,7 @@ interface Envelope {
 const fixtures: Fixture[] = [];
 let provider: Server | undefined;
 let providerCalls = 0;
+let providerFailure = false;
 
 async function availablePort(): Promise<number> {
 	const server = createServer();
@@ -46,7 +47,11 @@ async function startFixture(bootstrap: boolean): Promise<Fixture> {
 	const directory = await mkdtemp(join(tmpdir(), "neunode-beta-"));
 	// A child-only home isolates the daemon's hardcoded identity/config paths.
 	// The parent environment and the user's actual identities are untouched.
-	const env = { ...process.env, HOME: directory };
+	const env = {
+		...process.env,
+		HOME: directory,
+		NEUNODE_API_KEY: "beta-fixture-authority-token-32-characters",
+	};
 	await execute(
 		BINARY_PATH,
 		["config", "set", "network.listen_addr", "/ip4/127.0.0.1/tcp/0"],
@@ -57,6 +62,15 @@ async function startFixture(bootstrap: boolean): Promise<Fixture> {
 			env,
 		});
 		await execute(BINARY_PATH, ["token", "seed"], { env });
+		await execute(
+			BINARY_PATH,
+			["config", "set", "tokens.unbonding_period_secs", "0"],
+			{ env },
+		);
+		await execute(BINARY_PATH, ["token", "unstake", "--amount", "100"], {
+			env,
+		});
+		await execute(BINARY_PATH, ["token", "claim-unbonded"], { env });
 	}
 	const port = await availablePort();
 	const daemon = execFile(BINARY_PATH, ["serve", "--port", String(port)], {
@@ -83,10 +97,20 @@ async function startFixture(bootstrap: boolean): Promise<Fixture> {
 	throw new Error("Test daemon did not become healthy");
 }
 
-async function request(fixture: Fixture, path: string, body?: unknown) {
+async function request(
+	fixture: Fixture,
+	path: string,
+	body?: unknown,
+	authorized = true,
+) {
 	const response = await fetch(`${fixture.url}${path}`, {
 		method: body === undefined ? "GET" : "POST",
-		headers: { "content-type": "application/json" },
+		headers: {
+			"content-type": "application/json",
+			...(authorized
+				? { authorization: `Bearer ${fixture.env.NEUNODE_API_KEY}` }
+				: {}),
+		},
 		...(body === undefined ? {} : { body: JSON.stringify(body) }),
 		signal: AbortSignal.timeout(5_000),
 	});
@@ -217,6 +241,11 @@ describe("Beta: public agent promises", () => {
 				/* Consume the request body. */
 			}
 			providerCalls++;
+			if (providerFailure) {
+				response.writeHead(503);
+				response.end("unavailable");
+				return;
+			}
 			response.writeHead(200, { "content-type": "application/json" });
 			response.end(
 				JSON.stringify({
@@ -267,6 +296,97 @@ describe("Beta: public agent promises", () => {
 		expect(providerCalls, JSON.stringify(result.body)).toBeGreaterThan(0);
 	});
 
+	it("returns a real completion and retries it without a second provider call or charge", async () => {
+		const body = {
+			model: "beta-model",
+			prompt: "Return a real answer",
+			max_tokens: 16,
+			idempotency_key: "retry-evidence",
+		};
+		const first = await request(agent, "/api/v1/inference/request", body);
+		expect(first.status, JSON.stringify(first.body)).toBe(200);
+		expect(first.body.data?.status).toBe("completed");
+		const completion = first.body.data?.completion as Record<string, unknown>;
+		expect(completion.model).toBe("beta-model");
+		const receipt = first.body.data?.settlement as Record<string, unknown>;
+		expect(
+			BigInt(String(receipt.net_payout)) + BigInt(String(receipt.protocol_fee)),
+		).toBe(BigInt(String(receipt.gross_cost)));
+		const calls = providerCalls;
+		const balance = await request(
+			agent,
+			"/api/v1/tokens/balance?token=compute",
+		);
+		const replay = await request(agent, "/api/v1/inference/request", body);
+		expect(replay.body).toEqual(first.body);
+		expect(providerCalls).toBe(calls);
+		expect(
+			(await request(agent, "/api/v1/tokens/balance?token=compute")).body,
+		).toEqual(balance.body);
+		expect(
+			(
+				await request(agent, "/api/v1/inference/request", {
+					...body,
+					prompt: "changed",
+				})
+			).status,
+		).toBe(400);
+	});
+
+	it("refunds failed provider requests and does not repeat a terminal failure", async () => {
+		const before = await request(agent, "/api/v1/tokens/balance?token=compute");
+		providerFailure = true;
+		const body = {
+			model: "beta-model",
+			prompt: "Return a real answer",
+			max_tokens: 16,
+			idempotency_key: "failure-evidence",
+		};
+		try {
+			expect(
+				(await request(agent, "/api/v1/inference/request", body)).status,
+			).toBe(503);
+			const calls = providerCalls;
+			expect(
+				(await request(agent, "/api/v1/tokens/balance?token=compute")).body,
+			).toEqual(before.body);
+			expect(
+				(await request(agent, "/api/v1/inference/request", body)).status,
+			).toBe(503);
+			expect(providerCalls).toBe(calls);
+		} finally {
+			providerFailure = false;
+		}
+	});
+
+	it("enforces and resets an authenticated safety stop while the daemon runs", async () => {
+		const path = "/api/v1/security/breakers/token_volume";
+		expect((await request(agent, path, { open: true }, false)).status).toBe(
+			401,
+		);
+		expect((await request(agent, path, { open: true })).status).toBe(200);
+		const calls = providerCalls;
+		expect(
+			(
+				await request(agent, "/api/v1/inference/request", {
+					model: "beta-model",
+					prompt: "stopped",
+				})
+			).status,
+		).toBe(503);
+		expect(providerCalls).toBe(calls);
+		expect((await request(agent, path, { open: false })).status).toBe(200);
+		expect(
+			(
+				await request(agent, "/api/v1/inference/request", {
+					model: "beta-model",
+					prompt: "Return a real answer",
+					max_tokens: 16,
+				})
+			).status,
+		).toBe(200);
+	});
+
 	it("assigns distinct IDs to concurrently submitted training jobs", async () => {
 		const results = await Promise.all(
 			Array.from({ length: 10 }, () =>
@@ -306,10 +426,10 @@ describe("Beta: public agent promises", () => {
 
 	it("does not invent stake and quality measurements for discovered agents", async () => {
 		const registered = await request(
-			agent,
+			fresh,
 			"/api/v1/knowledge/register-agent",
 			{
-				did: "did:neunode:beta-unmeasured",
+				did: (await request(fresh, "/api/v1/identity")).body.data?.did,
 				capabilities: "beta-unmeasured-capability",
 			},
 		);
@@ -318,7 +438,7 @@ describe("Beta: public agent promises", () => {
 			"https://neunode.io/ontology/beta-unmeasured-capability",
 		);
 		const result = await request(
-			agent,
+			fresh,
 			`/api/v1/discovery/search?capabilities=${capability}`,
 		);
 		expect(result.status, JSON.stringify(result.body)).toBe(200);
@@ -333,7 +453,7 @@ describe("Beta: public agent promises", () => {
 		expect(
 			(
 				await request(agent, "/api/v1/knowledge/register-agent", {
-					did: "did:neunode:beta-searchable",
+					did: (await request(agent, "/api/v1/identity")).body.data?.did,
 					capabilities: "beta-searchable-capability",
 				})
 			).status,
@@ -351,7 +471,7 @@ describe("Beta: public agent promises", () => {
 		const result = await request(other, "/api/v1/bounties", {
 			title: "unfunded",
 			description: "must fail",
-			reward: 50,
+			reward: 100_000,
 			token: "compute",
 		});
 		expect(result.status).toBeGreaterThanOrEqual(400);
@@ -359,12 +479,77 @@ describe("Beta: public agent promises", () => {
 	});
 
 	it("requires authorization for a caller to mutate daemon state", async () => {
-		const result = await request(agent, "/api/v1/train/start", {
-			model: "unauthorized",
-			dataset: "untrusted-caller",
-		});
+		const result = await request(
+			agent,
+			"/api/v1/train/start",
+			{
+				model: "unauthorized",
+				dataset: "untrusted-caller",
+			},
+			false,
+		);
 		expect([401, 403]).toContain(result.status);
 	});
+
+	it("exchanges authenticated events between independent daemons and catches up bounded batches", async () => {
+		const offline: string[] = [];
+		for (let index = 0; index < 40; index++) {
+			const posted = await request(agent, "/api/v1/feed", {
+				kind: 9001,
+				content: `offline evidence ${index}`,
+				tags: ["evidence=catchup"],
+			});
+			expect(posted.status).toBe(201);
+			offline.push(String(posted.body.data?.event_id));
+		}
+		const status = await request(agent, "/api/v1/mesh/status");
+		const listeners = status.body.data?.listeners as string[];
+		const peer = String(status.body.data?.local_peer_id);
+		expect(
+			(
+				await request(other, "/api/v1/mesh/connect", {
+					addr: `${listeners[0]}/p2p/${peer}`,
+				})
+			).status,
+		).toBe(200);
+		const lastId = offline[offline.length - 1];
+		const deadline = Date.now() + 35_000;
+		let synced = false;
+		while (Date.now() < deadline) {
+			if ((await request(other, `/api/v1/feed/${lastId}`)).status === 200) {
+				synced = true;
+				break;
+			}
+			await delay(200);
+		}
+		expect(
+			synced,
+			"independent daemon did not receive the authenticated history",
+		).toBe(true);
+		for (const id of offline) {
+			const local = await request(agent, `/api/v1/feed/${id}`);
+			const remote = await request(other, `/api/v1/feed/${id}`);
+			expect(remote.body).toEqual(local.body);
+			expect(remote.body.data?.signature).toBeTruthy();
+			const canonical = remote.body.data?.event as Record<string, unknown>;
+			expect(canonical.id).toBe(id);
+			expect(canonical.tags).toBeTruthy();
+		}
+		const live = await request(other, "/api/v1/feed", {
+			kind: 9002,
+			content: "reverse live evidence",
+		});
+		const liveId = String(live.body.data?.event_id);
+		const liveDeadline = Date.now() + 10_000;
+		while (
+			Date.now() < liveDeadline &&
+			(await request(agent, `/api/v1/feed/${liveId}`)).status !== 200
+		)
+			await delay(100);
+		expect(
+			(await request(agent, `/api/v1/feed/${liveId}`)).body.data?.content,
+		).toBe("reverse live evidence");
+	}, 50_000);
 
 	it("preserves stored events when the daemon restarts", async () => {
 		const posted = await request(agent, "/api/v1/feed", {

@@ -13,7 +13,7 @@
  *   neunode-mcp --transport http --port 3200
  *
  * Environment variables:
- *   AGNETD_URL   — URL of agnetd daemon (default: http://127.0.0.1:41000)
+ *   AGNETD_URL   — URL of agnetd daemon (default: http://127.0.0.1:8080)
  *   MCP_TRANSPORT — "stdio" or "http" (default: stdio)
  *   MCP_PORT     — Port for HTTP mode (default: 3100)
  */
@@ -71,9 +71,9 @@ async function main(): Promise<void> {
   const { transport, port } = parseArgs(process.argv.slice(2));
 
   const agnetdUrl =
-    process.env["AGNETD_URL"] ?? "http://127.0.0.1:41000";
+    process.env["NEUNODE_URL"] ?? process.env["AGNETD_URL"] ?? "http://127.0.0.1:8080";
 
-  const client = new AgnetdClient(agnetdUrl);
+  const client = new AgnetdClient(agnetdUrl, 30_000, process.env["AGNETD_API_KEY"] ?? process.env["NEUNODE_API_KEY"]);
 
   if (transport === "http") {
     await startHttp(client, port);

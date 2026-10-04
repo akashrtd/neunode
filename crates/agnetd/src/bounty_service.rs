@@ -67,6 +67,7 @@ fn claim_locked(
     stake: u64,
     now: Timestamp,
 ) -> Result<BountyData> {
+    neunode_storage::breaker_store::ensure_closed(db, "bounty_drain")?;
     if bounty_id.is_empty() {
         return Err(BountyServiceError::Invalid("bounty id cannot be empty".to_string()));
     }
@@ -74,6 +75,7 @@ fn claim_locked(
         return Err(BountyServiceError::Invalid("stake must be greater than 0".to_string()));
     }
 
+    neunode_storage::breaker_store::ensure_closed(db, "bounty_drain")?;
     let store = BountyStore::new(db);
     let bounty = load(&store, bounty_id)?;
     let mut sm = BountyStateMachine::new(storage_to_lib(&bounty)?);
@@ -112,6 +114,7 @@ fn submit_locked(
     artifact: &str,
     now: Timestamp,
 ) -> Result<BountyData> {
+    neunode_storage::breaker_store::ensure_closed(db, "bounty_drain")?;
     if bounty_id.is_empty() {
         return Err(BountyServiceError::Invalid("bounty id cannot be empty".to_string()));
     }
@@ -119,6 +122,7 @@ fn submit_locked(
         return Err(BountyServiceError::Invalid("artifact CID cannot be empty".to_string()));
     }
 
+    neunode_storage::breaker_store::ensure_closed(db, "bounty_drain")?;
     let store = BountyStore::new(db);
     let bounty = load(&store, bounty_id)?;
     let mut sm = BountyStateMachine::new(storage_to_lib(&bounty)?);
@@ -149,6 +153,7 @@ fn review_locked(
     feedback: &str,
     now: Timestamp,
 ) -> Result<BountyData> {
+    neunode_storage::breaker_store::ensure_closed(db, "bounty_drain")?;
     if bounty_id.is_empty() {
         return Err(BountyServiceError::Invalid("bounty id cannot be empty".to_string()));
     }
@@ -156,6 +161,7 @@ fn review_locked(
         return Err(BountyServiceError::Invalid(format!("invalid score: {score} (must be 0-100)")));
     }
 
+    neunode_storage::breaker_store::ensure_closed(db, "bounty_drain")?;
     let store = BountyStore::new(db);
     let bounty = load(&store, bounty_id)?;
     require_creator(&bounty, reviewer)?;
@@ -196,10 +202,12 @@ fn cancel_locked(
     actor: &Did,
     now: Timestamp,
 ) -> Result<BountyData> {
+    neunode_storage::breaker_store::ensure_closed(db, "bounty_drain")?;
     if bounty_id.is_empty() {
         return Err(BountyServiceError::Invalid("bounty id cannot be empty".to_string()));
     }
 
+    neunode_storage::breaker_store::ensure_closed(db, "bounty_drain")?;
     let store = BountyStore::new(db);
     let bounty = load(&store, bounty_id)?;
     require_creator(&bounty, actor)?;
@@ -237,10 +245,12 @@ fn pay_locked(
     actor: &Did,
     now: Timestamp,
 ) -> Result<PaymentResult> {
+    neunode_storage::breaker_store::ensure_closed(db, "bounty_drain")?;
     if bounty_id.is_empty() {
         return Err(BountyServiceError::Invalid("bounty id cannot be empty".to_string()));
     }
 
+    neunode_storage::breaker_store::ensure_closed(db, "bounty_drain")?;
     let store = BountyStore::new(db);
     let bounty = load(&store, bounty_id)?;
     require_creator(&bounty, actor)?;

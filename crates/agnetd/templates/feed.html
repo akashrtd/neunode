@@ -47,7 +47,7 @@
   <div class="panel col-4">
     <div class="panel-header"><span>Post to Feed</span></div>
     <div class="panel-body">
-      <form hx-post="/api/feed/post" hx-swap="none" hx-on::after-request="this.reset()">
+      <form hx-post="/api/feed/post" hx-swap="none" hx-on::after-request="if(event.detail.successful) this.reset()">
         <div style="margin-bottom: 8px;">
           <select name="kind" class="input-field" style="margin-bottom: 8px;">
             <option value="9001">Freeform Post</option>

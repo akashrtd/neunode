@@ -1,10 +1,12 @@
 import type { NeunodeClient } from "../client/client.js";
+import type { ChatCompletionResponse } from "../types/inference.js";
 
 export interface InferenceRequestParams {
 	model: string;
 	prompt: string;
 	maxTokens: number;
 	temperature?: number;
+	idempotencyKey?: string;
 }
 
 export interface InferenceRequestResult {
@@ -14,18 +16,29 @@ export interface InferenceRequestResult {
 	temperature: number;
 	estimated_input_tokens: number;
 	status: string;
+	request_id: string;
+	completion: ChatCompletionResponse | null;
+	settlement: {
+		requester: string;
+		provider: string;
+		gross_cost: string;
+		protocol_fee: string;
+		net_payout: string;
+		response_hash: string;
+		ledger: string;
+	} | null;
 	pricing?: {
-		input_price_per_mtok: number;
-		output_price_per_mtok: number;
-		estimated_cost: number;
+		input_price_per_mtok: string;
+		output_price_per_mtok: string;
+		estimated_cost: string;
 	};
 }
 
 export interface InferenceListModelsResult {
 	models: Array<{
 		id: string;
-		input_price_per_million: number;
-		output_price_per_million: number;
+		input_price_per_million: string;
+		output_price_per_million: string;
 		context_length: number;
 	}>;
 }
@@ -53,11 +66,11 @@ export interface InferencePricingResult {
 	model: string;
 	input_tokens: number;
 	output_tokens: number;
-	input_cost: number;
-	output_cost: number;
-	total_cost: number;
-	protocol_fee: number;
-	net_payout: number;
+	input_cost: string;
+	output_cost: string;
+	total_cost: string;
+	protocol_fee: string;
+	net_payout: string;
 }
 
 export interface InferenceRegisterProviderParams {
@@ -86,6 +99,7 @@ export interface InferenceResource {
 	stream(
 		params: InferenceRequestParams,
 		callback: (result: InferenceRequestResult) => void,
+		onError?: (error: Error) => void,
 	): () => void;
 	/** List available models, optionally filtered by provider. */
 	listModels(provider?: string): Promise<InferenceListModelsResult>;
@@ -122,13 +136,24 @@ export function createInferenceResource(
 					prompt: params.prompt,
 					max_tokens: params.maxTokens,
 					temperature: params.temperature,
+					idempotency_key: params.idempotencyKey,
 				},
 			);
 		},
 
-		stream(params, callback): () => void {
+		stream(params, callback, onError): () => void {
 			const url = `${client.http.getBaseUrl().replace(/^http/, "ws")}/ws/inference`;
-			const socket = new WebSocket(url);
+			const token = client.http.getApiKey?.();
+			const protocol = token
+				? `neunode-auth.${Array.from(new TextEncoder().encode(token), (byte) => byte.toString(16).padStart(2, "0")).join("")}`
+				: undefined;
+			const socket = protocol
+				? new WebSocket(url, protocol)
+				: new WebSocket(url);
+			socket.onerror = () =>
+				onError?.(
+					new Error("Inference WebSocket failed to connect or authenticate"),
+				);
 			socket.onopen = () =>
 				socket.send(
 					JSON.stringify({
@@ -136,13 +161,19 @@ export function createInferenceResource(
 						prompt: params.prompt,
 						max_tokens: params.maxTokens,
 						temperature: params.temperature,
+						idempotency_key: params.idempotencyKey,
 					}),
 				);
 			socket.onmessage = (event: MessageEvent) => {
-				const result = JSON.parse(
-					event.data as string,
-				) as InferenceRequestResult;
-				callback(result);
+				try {
+					const result = JSON.parse(
+						event.data as string,
+					) as InferenceRequestResult;
+					if ("error" in result) onError?.(new Error(String(result.error)));
+					else callback(result);
+				} catch (error) {
+					onError?.(error instanceof Error ? error : new Error(String(error)));
+				}
 			};
 			return () => socket.close();
 		},

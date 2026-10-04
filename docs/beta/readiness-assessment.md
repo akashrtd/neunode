@@ -3,6 +3,8 @@
 Assessment date: 2026-10-04. Starting revision: `cbfa58d`.
 Tracking: Beads epic `neunode-zva`; remediation and remaining review are tracked there.
 
+This is the pre-remediation assessment. See [implementation and current validation](implementation-validation.md) for the implemented fixes and remaining release gates.
+
 ## Release judgment and review scope
 
 Neunode has substantial protocol code and a healthy component-test baseline. It is not yet ready

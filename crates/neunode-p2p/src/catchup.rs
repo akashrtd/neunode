@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// Catchup request broadcast when a node reconnects or detects sequence gaps.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct CatchupRequest {
     /// The DID of the agent whose events we need.
     pub author_did: String,
@@ -13,6 +14,7 @@ pub struct CatchupRequest {
 
 /// Catchup response sent by a peer that has the requested events.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct CatchupResponse {
     /// The DID of the agent whose events are included.
     pub author_did: String,
@@ -62,6 +64,13 @@ impl CatchupResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn responses_cannot_be_misclassified_as_requests() {
+        let response = CatchupResponse::new("did:neunode:abc".into(), vec![vec![1]], 1, 1);
+        assert!(CatchupRequest::deserialize(&response.serialize()).is_none());
+        assert!(CatchupResponse::deserialize(&response.serialize()).is_some());
+    }
 
     #[test]
     fn catchup_request_roundtrip() {

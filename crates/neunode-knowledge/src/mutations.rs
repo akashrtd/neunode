@@ -156,8 +156,10 @@ pub fn apply_authorized(
     db: &NeunodeDb,
     auth: &MutationAuthorization,
     payload: &[u8],
+    trusted_did: &str,
+    trusted_key: &[u8; 32],
 ) -> Result<()> {
-    auth.verify(payload)?;
+    auth.verify_for(payload, trusted_did, trusted_key)?;
     batch.apply(db)
 }
 

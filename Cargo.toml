@@ -32,6 +32,8 @@ license = "AGPL-3.0-or-later"
 repository = "https://github.com/akashrtd/neunode"
 
 [workspace.dependencies]
+tempfile = "3"
+zeroize = { version = "1.8", features = ["derive"] }
 # Async
 tokio = { version = "1.44", features = ["rt-multi-thread", "macros", "io-util", "net", "time", "sync", "signal"] }
 
@@ -80,6 +82,8 @@ tokio-test = "0.4"
 
 # Encryption
 aes-gcm = "0.10"
+
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 
 # Async trait
 async-trait = "0.1"

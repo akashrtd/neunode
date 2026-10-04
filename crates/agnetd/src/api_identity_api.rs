@@ -181,7 +181,7 @@ pub async fn create_identity(
         )));
     }
 
-    let keyring = state.require_keyring()?;
+    let keyring = neunode_identity::keyring::Keyring::generate();
     let did = keyring.to_did();
     let did_key = keyring.to_did_key();
     let peer_id = neunode_identity::did::did_to_peer_id(&did_key)
@@ -219,6 +219,40 @@ pub async fn create_identity(
     )
     .map_err(|e| ApiError::Internal(format!("failed to index agent capabilities: {e}")))?;
 
+    #[cfg(not(test))]
+    let dir = crate::keystore::identity_dir(&did.0)?;
+    #[cfg(test)]
+    let dir = state
+        .config_snapshot()?
+        .config_path
+        .with_file_name("identities")
+        .join(did.0.replace(':', "_"));
+    #[cfg(not(test))]
+    crate::keystore::save_at(&dir, &keyring)?;
+    #[cfg(test)]
+    let _ = dir;
+    {
+        let mut active = state
+            .active_keyring
+            .lock()
+            .map_err(|_| ApiError::Internal("identity lock poisoned".into()))?;
+        if active.is_none() {
+            let mut config = state
+                .config
+                .write()
+                .map_err(|_| ApiError::Internal("config lock poisoned".into()))?;
+            config.set("active_identity", &did.0)?;
+            config.save()?;
+            *state
+                .active_did
+                .write()
+                .map_err(|_| ApiError::Internal("identity lock poisoned".into()))? =
+                Some(did.clone());
+            *active = Some(keyring);
+        }
+    }
+    #[cfg(not(test))]
+    state.start_mesh().await?;
     let card_cid = card.to_cid();
 
     let resp = IdentityResponse {
@@ -341,7 +375,7 @@ mod tests {
         let (feed_tx, _) = tokio::sync::broadcast::channel(4);
         Arc::new(ApiState {
             db: Arc::clone(&app.db),
-            active_did: app.active_did,
+            active_did: Arc::new(std::sync::RwLock::new(app.active_did)),
             active_keyring: Arc::new(std::sync::Mutex::new(app.active_keyring)),
             mesh_handle: Arc::new(tokio::sync::RwLock::new(None)),
             config: Arc::new(std::sync::RwLock::new(app.config)),
@@ -404,7 +438,7 @@ mod tests {
     #[tokio::test]
     async fn create_neunode_identity_indexes_capabilities_for_discovery() {
         let state = test_api_state();
-        let did = state.require_keyring().unwrap().to_did().to_string();
+        let before = state.require_keyring().unwrap().to_did().to_string();
 
         create_identity(
             State(Arc::clone(&state)),
@@ -418,6 +452,14 @@ mod tests {
         let predicate = neunode_knowledge::StringDictionary::hash(&neunode_knowledge::nn(
             neunode_knowledge::PRED_HAS_CAPABILITY,
         ));
+        let entries = state.db.prefix_scan(neunode_storage::cf::CF_IDENTITY, &[]).unwrap();
+        let did = entries
+            .iter()
+            .filter_map(|(_, bytes)| neunode_storage::codec::deserialize::<String>(bytes).ok())
+            .filter_map(|json| neunode_identity::document::DidDocument::from_json(&json).ok())
+            .find(|doc| doc.id != before)
+            .unwrap()
+            .id;
         let results = engine
             .query(&neunode_knowledge::QueryPattern {
                 subject: Some(neunode_knowledge::StringDictionary::hash(&did)),

@@ -1,7 +1,5 @@
 use anyhow::Result;
 use neunode_core::kind::Kind;
-use neunode_core::types::Hash256;
-use neunode_feed::event::FeedEvent;
 use neunode_identity::did::did_to_peer_id;
 
 use crate::cli::{GlobalArgs, MeshCommands};
@@ -196,7 +194,7 @@ fn handle_stdin_post(args: &[&str], writer: &OutputWriter, state: &AppState) {
             return;
         }
     };
-    let did = match state.require_did() {
+    let _did = match state.require_did() {
         Ok(d) => d,
         Err(e) => {
             writer.write_error(&e.to_string());
@@ -204,80 +202,22 @@ fn handle_stdin_post(args: &[&str], writer: &OutputWriter, state: &AppState) {
         }
     };
 
-    // Get latest sequence from feed store
-    let store = state.feed_store();
-    let latest_seq = match store.latest_sequence(&did.0) {
-        Ok(seq) => seq,
-        Err(e) => {
-            writer.write_error(&format!("failed to query latest sequence: {e}"));
+    let event = match crate::feed_wire::create_event(
+        state.db(),
+        keyring,
+        kind_val.as_u16() as u32,
+        content,
+        &[],
+    ) {
+        Ok(event) => event,
+        Err(error) => {
+            writer.write_error(&error.to_string());
             return;
         }
     };
-    let next_seq = if latest_seq == 0 { 1 } else { latest_seq + 1 };
-
-    let prev_hash = if latest_seq == 0 {
-        Hash256("0".to_string())
-    } else {
-        match store.get(&did.0, latest_seq) {
-            Ok(Some(prev)) => {
-                // Reconstruct a minimal event to compute hash
-                let prev_content = std::str::from_utf8(&prev.payload).unwrap_or("").to_string();
-                let prev_prev_hash_str =
-                    std::str::from_utf8(&prev.prev_hash).unwrap_or("0").to_string();
-                match FeedEvent::new(
-                    Kind::AgentMetadata, // kind doesn't matter for hash — only prev event's full serialization matters
-                    did.clone(),
-                    prev.sequence,
-                    Hash256(prev_prev_hash_str),
-                    prev_content,
-                ) {
-                    Ok(prev_event) => {
-                        prev_event.compute_hash().unwrap_or_else(|_| Hash256("0".to_string()))
-                    }
-                    Err(_) => Hash256("0".to_string()),
-                }
-            }
-            _ => Hash256("0".to_string()),
-        }
-    };
-
-    // Create and sign event
-    let mut event = match FeedEvent::new(kind_val, did.clone(), next_seq, prev_hash, content) {
-        Ok(e) => e,
-        Err(e) => {
-            writer.write_error(&format!("event creation failed: {e}"));
-            return;
-        }
-    };
-
-    if let Err(e) = event.validate() {
-        writer.write_error(&format!("validation failed: {e}"));
-        return;
-    }
-
-    let (ed_bytes, _) = keyring.to_bytes();
-    let ed_bytes_fixed: [u8; 32] = match ed_bytes.as_slice().try_into() {
-        Ok(arr) => arr,
-        Err(_) => {
-            writer.write_error("invalid ed25519 key length");
-            return;
-        }
-    };
-    if let Err(e) = event.sign(&ed_bytes_fixed) {
-        writer.write_error(&format!("signing failed: {e}"));
-        return;
-    }
-
-    // Store locally
-    let stored = crate::feed_wire::feed_event_to_stored(&event);
-    if let Err(e) = state.feed_store().append(&stored) {
-        writer.write_error(&format!("store failed: {e}"));
-        return;
-    }
-
     // Publish to mesh
     if let Some(handle) = state.mesh_handle() {
-        match crate::feed_wire::serialize_feed_event(&event) {
+        match crate::feed_wire::serialize_authenticated_event(&event, keyring) {
             Ok(bytes) => {
                 let topic = kind_val.gossipsub_topic();
                 if let Err(e) = handle.publish(topic, &bytes) {

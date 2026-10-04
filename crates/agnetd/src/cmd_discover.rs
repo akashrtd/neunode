@@ -37,6 +37,19 @@ fn parse_comma_list(s: &str) -> Vec<String> {
     s.split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect()
 }
 
+fn canonical_capabilities(value: &str) -> Vec<String> {
+    parse_comma_list(value)
+        .into_iter()
+        .map(|capability| {
+            if capability.starts_with("https://neunode.io/ontology/") {
+                capability
+            } else {
+                neunode_knowledge::nn(&capability)
+            }
+        })
+        .collect()
+}
+
 fn gather_candidates_from_kg(state: &AppState) -> Result<Vec<(String, Vec<String>)>> {
     let db = state.db();
     let dict = neunode_knowledge::StringDictionary::new(db);
@@ -60,19 +73,19 @@ fn gather_candidates_from_kg(state: &AppState) -> Result<Vec<(String, Vec<String
     Ok(agent_caps)
 }
 
+#[cfg(test)]
 fn build_candidates(agent_caps: &[(String, Vec<String>)]) -> Vec<AgentCandidate> {
     agent_caps
         .iter()
-        .enumerate()
-        .map(|(i, (did, caps))| AgentCandidate {
+        .map(|(did, caps)| AgentCandidate {
             did: did.clone(),
             capabilities: caps.clone(),
-            reputation_score: 3.0 + (i as f64 * 0.2).min(2.0),
-            stake_amount: 500 + (i as u64) * 100,
-            availability_score: 0.8 + (i as f64 * 0.02).min(0.2),
-            latency_ms: 30 + (i as u32) * 10,
-            cost_per_unit: 5.0 + (i as f64) * 2.0,
-            is_online: i % 3 != 2,
+            reputation_score: 0.0,
+            stake_amount: 0,
+            availability_score: 0.0,
+            latency_ms: u32::MAX,
+            cost_per_unit: f64::MAX,
+            is_online: false,
         })
         .collect()
 }
@@ -86,7 +99,7 @@ fn handle_search(
     writer: &OutputWriter,
     state: &AppState,
 ) -> Result<()> {
-    let required = parse_comma_list(capabilities);
+    let required = canonical_capabilities(capabilities);
     if required.is_empty() {
         anyhow::bail!("capabilities cannot be empty");
     }
@@ -95,7 +108,10 @@ fn handle_search(
     }
 
     let agent_caps = gather_candidates_from_kg(state)?;
-    let candidates = build_candidates(&agent_caps);
+    let candidates = agent_caps
+        .into_iter()
+        .map(|(did, caps)| crate::reputation_service::candidate(state.db(), did, caps))
+        .collect::<Result<Vec<_>>>()?;
     let request = DiscoveryRequest {
         required_capabilities: required,
         min_reputation: if min_reputation > 0.0 { Some(min_reputation) } else { None },
@@ -132,13 +148,16 @@ fn handle_complement(
     writer: &OutputWriter,
     state: &AppState,
 ) -> Result<()> {
-    let requester_caps = parse_comma_list(capabilities);
+    let requester_caps = canonical_capabilities(capabilities);
     if requester_caps.is_empty() {
         anyhow::bail!("capabilities cannot be empty");
     }
 
     let agent_caps = gather_candidates_from_kg(state)?;
-    let candidates = build_candidates(&agent_caps);
+    let candidates = agent_caps
+        .into_iter()
+        .map(|(did, caps)| crate::reputation_service::candidate(state.db(), did, caps))
+        .collect::<Result<Vec<_>>>()?;
     let results = find_complementary(&requester_caps, &candidates, limit);
 
     if results.is_empty() {
@@ -231,13 +250,16 @@ fn handle_score(
     if agent.is_empty() {
         anyhow::bail!("agent DID cannot be empty");
     }
-    let required = parse_comma_list(capabilities);
+    let required = canonical_capabilities(capabilities);
     if required.is_empty() {
         anyhow::bail!("capabilities cannot be empty");
     }
 
     let agent_caps = gather_candidates_from_kg(state)?;
-    let candidates = build_candidates(&agent_caps);
+    let candidates = agent_caps
+        .into_iter()
+        .map(|(did, caps)| crate::reputation_service::candidate(state.db(), did, caps))
+        .collect::<Result<Vec<_>>>()?;
     let target =
         candidates.iter().find(|c| c.did == agent).cloned().unwrap_or_else(|| AgentCandidate {
             did: agent.to_string(),
@@ -634,8 +656,8 @@ mod tests {
         let candidates = build_candidates(&agent_caps);
         assert_eq!(candidates.len(), 2);
         assert_eq!(candidates[0].did, "did:1");
-        assert!(candidates[0].reputation_score > 0.0);
-        assert!(candidates[0].is_online);
+        assert_eq!(candidates[0].reputation_score, 0.0);
+        assert!(!candidates[0].is_online);
     }
 
     #[test]
