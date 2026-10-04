@@ -1,0 +1,164 @@
+{
+  "assessment_date": "2026-10-04",
+  "starting_revision": "cbfa58dbb427aa750f63484937f6f2c9a9af50bb",
+  "environment": {
+    "os": "macOS",
+    "rust": "1.93.1",
+    "node": "26.7.0",
+    "foundry": "1.5.1",
+    "scope": "local isolated processes; not Linux/Node22 or production"
+  },
+  "rust_workspace": {
+    "command": "cargo test --workspace",
+    "exit_code": 0,
+    "passed": 2928,
+    "failed": 0,
+    "ignored": 1,
+    "notes": "Initial stale error-message assertion corrected; ignored chain-spec documentation example."
+  },
+  "sdk_unit": {
+    "command": "npm test",
+    "exit_code": 0,
+    "passed": 141
+  },
+  "sdk_integration": {
+    "command": "npm run test:integration",
+    "exit_code": 0,
+    "passed": 16
+  },
+  "sdk_anvil_e2e": {
+    "command": "npm run test:e2e",
+    "exit_code": 0,
+    "passed": 68
+  },
+  "mcp": {
+    "command": "npm test",
+    "exit_code": 0,
+    "passed": 57,
+    "notes": "Sandbox localhost restriction initially caused 3 failures; authorized rerun passed."
+  },
+  "solidity": {
+    "command": "forge test",
+    "exit_code": 0,
+    "passed": 397
+  },
+  "static_gates": {
+    "passed": [
+      "cargo build -p agnetd",
+      "cargo fmt --check",
+      "cargo clippy --workspace -- -D warnings",
+      "cargo check --workspace --all-features",
+      "SDK build/typecheck/lint",
+      "examples typecheck/lint",
+      "protocol drift",
+      "ABI drift",
+      "MCP typecheck/build",
+      "forge fmt --check",
+      "forge build --sizes",
+      "forge snapshot --check",
+      "beta suite typecheck/lint"
+    ]
+  },
+  "security": {
+    "command": "./scripts/security_audit.sh",
+    "exit_code": 1,
+    "new_advisory": "RUSTSEC-2026-0285",
+    "package": "rustls 0.23.37",
+    "patched": ">=0.23.45",
+    "reachable": true,
+    "source": "https://rustsec.org/advisories/RUSTSEC-2026-0285.html"
+  },
+  "beta_acceptance": {
+    "command": "cd sdk && npm run test:beta",
+    "exit_code": 1,
+    "passed": 3,
+    "failed": 14,
+    "total": 17,
+    "evidence": "acceptance-results.txt",
+    "notes": "Open product contracts intentionally tested separately from current implementation tests; mesh and caller-authorization policy documented in assessment."
+  },
+  "scope_limitations": [
+    "No complete line-by-line semantic audit",
+    "No real Reth/Malachite validator cluster",
+    "No hardware TEE execution",
+    "No real ML distributed training",
+    "No published-package clean machine install",
+    "No load/soak/crash-corruption qualification",
+    "No independent contract security review"
+  ],
+  "tracking": {
+    "epic": "neunode-zva",
+    "follow_up_issues": [
+      {
+        "id": "neunode-zva.5",
+        "title": "Restore signed canonical feeds and enforce authenticated peer ingestion",
+        "priority": 0
+      },
+      {
+        "id": "neunode-zva.6",
+        "title": "Make first identity creation and agent selection work through HTTP and MCP",
+        "priority": 1
+      },
+      {
+        "id": "neunode-zva.7",
+        "title": "Start and share the P2P runtime inside agnetd serve",
+        "priority": 0
+      },
+      {
+        "id": "neunode-zva.8",
+        "title": "Enforce caller authorization and knowledge ownership at daemon boundaries",
+        "priority": 0
+      },
+      {
+        "id": "neunode-zva.9",
+        "title": "Replace metadata-only inference with executable provider dispatch and settlement",
+        "priority": 0
+      },
+      {
+        "id": "neunode-zva.10",
+        "title": "Make training IDs safe and connect jobs to real workers",
+        "priority": 1
+      },
+      {
+        "id": "neunode-zva.11",
+        "title": "Use measured discovery and reputation inputs with normalized capabilities",
+        "priority": 0
+      },
+      {
+        "id": "neunode-zva.12",
+        "title": "Replace machine-derived identity encryption with a secure unattended keystore",
+        "priority": 0
+      },
+      {
+        "id": "neunode-zva.13",
+        "title": "Define beta ledger authority and validate full sovereign chain operation",
+        "priority": 0
+      },
+      {
+        "id": "neunode-zva.14",
+        "title": "Validate lifecycle, decay, recovery and resource limits in a long-lived daemon",
+        "priority": 1
+      },
+      {
+        "id": "neunode-zva.15",
+        "title": "Gate published beta artifacts with clean-machine agent smoke tests",
+        "priority": 1
+      },
+      {
+        "id": "neunode-zva.16",
+        "title": "Complete per-file semantic audit with adversarial and economic coverage",
+        "priority": 1
+      },
+      {
+        "id": "neunode-zva.17",
+        "title": "Make security circuit breakers enforce operations and bound economic arithmetic",
+        "priority": 0
+      },
+      {
+        "id": "neunode-zva.18",
+        "title": "Upgrade reachable rustls for RUSTSEC-2026-0285",
+        "priority": 1
+      }
+    ]
+  }
+}

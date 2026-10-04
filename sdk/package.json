@@ -29,6 +29,7 @@
     "test:watch": "vitest",
     "test:e2e": "vitest run --config tests/e2e/vitest.config.ts",
     "test:integration": "vitest run --config tests/integration/vitest.config.ts",
+    "test:beta": "vitest run --config tests/beta/vitest.config.ts",
     "generate:protocol": "node scripts/protocol-types.mjs --write",
     "check:protocol": "node scripts/protocol-types.mjs",
     "generate:abi": "node scripts/contract-abis.mjs --write",

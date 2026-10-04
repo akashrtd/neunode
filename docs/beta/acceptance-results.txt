@@ -1,0 +1,35 @@
+Beta acceptance against cbfa58d plus the TEE assertion correction and added acceptance tests.
+Command: cd sdk && npm run test:beta
+Result: exit 1; 3 passed, 14 failed, 17 total.
+
+✓ Beta: public agent promises > boots a real daemon and serves its public schema 4ms
+   × Beta: public agent promises > creates the first identity through the agent's HTTP interface 5ms
+     → {"error":{"code":"NO_IDENTITY","message":"no active identity — run `agnetd identity create`"},"success":false}: expected 401 to be 201 // Object.is equality
+   × Beta: public agent promises > creates distinct identities for distinct agents 4ms
+     → expected 'did:neunode:0xd54b9cc8ca3de9479546dba…' not to be 'did:neunode:0xd54b9cc8ca3de9479546dba…' // Object.is equality
+   × Beta: public agent promises > returns a signed public feed event 1ms
+     → expected '' to be truthy
+   × Beta: public agent promises > rejects feed kinds that overflow the protocol wire type 1ms
+     → expected 201 to be 400 // Object.is equality
+   × Beta: public agent promises > assigns globally distinct feed IDs to distinct authors 3ms
+     → expected 'evt_6469643a6e65756e_3' not to be 'evt_6469643a6e65756e_3' // Object.is equality
+   × Beta: public agent promises > rejects inference when the requested model has no provider 2ms
+     → expected [ 404, 503 ] to include 200
+   × Beta: public agent promises > dispatches inference to the registered provider 103ms
+     → {"data":{"model":"beta-model","prompt":"Return a real answer","max_tokens":16,"temperature":0.7,"estimated_input_tokens":5,"status":"submitted","pricing":{"input_price_per_mtok":100,"output_price_per_mtok":200,"estimated_cost":1}},"success":true}: expected 0 to be greater than 0
+   × Beta: public agent promises > assigns distinct IDs to concurrently submitted training jobs 3ms
+     → expected 1 to be 10 // Object.is equality
+   × Beta: public agent promises > connects the serving daemon to its P2P runtime 1ms
+     → expected false to be true // Object.is equality
+   × Beta: public agent promises > uses actual staked balances when calculating reputation 1ms
+     → expected 0 to be greater than 0
+   × Beta: public agent promises > rejects capability writes attributed to an identity the signer does not control 1ms
+     → expected [ 401, 403 ] to include 201
+   × Beta: public agent promises > does not invent stake and quality measurements for discovered agents 2ms
+     → expected 600 to be +0 // Object.is equality
+   × Beta: public agent promises > finds an agent using the capability name supplied during registration 2ms
+     → {"error":{"code":"BAD_REQUEST","message":"no candidates match the required criteria"},"success":false}: expected 400 to be 200 // Object.is equality
+   ✓ Beta: public agent promises > rejects an unfunded bounty without creating a payable promise 1ms
+   × Beta: public agent promises > requires authorization for a caller to mutate daemon state 1ms
+     → expected [ 401, 403 ] to include 201
+   ✓ Beta: public agent promises > preserves stored events when the daemon restarts 109ms

@@ -259,7 +259,8 @@ mod tests {
         let verifier = TeeVerifier::new();
         let quote = sample_quote(now_ms());
         let error = verifier.verify_quote(&quote, "abc123", &[0xAA, 0xBB]).unwrap_err();
-        assert!(error.to_string().contains("production TEE verification not yet implemented"));
+        assert!(matches!(error, VerificationError::TeeAttestationFailed(_)));
+        assert!(error.to_string().contains("select Intel TDX or AMD SEV-SNP verification"));
     }
 
     #[test]
