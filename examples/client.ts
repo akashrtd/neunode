@@ -1,7 +1,10 @@
 import { createNeunodeClient } from "@neunode/sdk";
 
 export const httpClient = createNeunodeClient({
-	http: { baseUrl: process.env.NEUNODE_URL ?? "http://127.0.0.1:41000" },
+	http: {
+		baseUrl: process.env.NEUNODE_URL ?? "http://127.0.0.1:8080",
+		apiKey: process.env.NEUNODE_API_KEY,
+	},
 });
 
 export function required(name: string): string {

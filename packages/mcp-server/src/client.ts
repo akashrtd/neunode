@@ -51,9 +51,19 @@ export class AgnetdClient {
   private readonly baseUrl: string;
   private readonly timeout: number;
 
-  constructor(baseUrl: string, timeout = 30_000) {
+  constructor(baseUrl: string, timeout = 30_000, private readonly apiKey?: string) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.timeout = timeout;
+  }
+
+  getApiKey(): string | undefined { return this.apiKey; }
+
+  async getBreakers(): Promise<ReadonlyArray<{ name: string; open: boolean; mode: string; trip_count: number; tripped_at: number | null }>> {
+    return this.get("/api/v1/security/breakers");
+  }
+
+  async setBreaker(name: "token_volume" | "reputation" | "bounty_drain", open: boolean): Promise<unknown> {
+    return this.post(`/api/v1/security/breakers/${name}`, { open });
   }
 
   // -----------------------------------------------------------------------
@@ -137,12 +147,14 @@ export class AgnetdClient {
     prompt: string;
     max_tokens?: number;
     temperature?: number;
+    idempotency_key?: string;
   }): Promise<InferenceRequestResponse> {
     return this.post<InferenceRequestResponse>("/api/v1/inference/request", {
       model: params.model,
       prompt: params.prompt,
       max_tokens: params.max_tokens ?? 256,
       temperature: params.temperature ?? 0.7,
+      idempotency_key: params.idempotency_key,
     });
   }
 
@@ -370,6 +382,8 @@ export class AgnetdClient {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
+
+    if (this.apiKey) headers["Authorization"] = `Bearer ${this.apiKey}`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);

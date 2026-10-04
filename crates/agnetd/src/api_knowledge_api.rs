@@ -176,6 +176,11 @@ pub async fn register_agent(
     }
 
     let keyring = state.require_keyring()?;
+    if body.did != keyring.to_did().0 {
+        return Err(ApiError::Forbidden(
+            "cannot register capabilities for an identity this daemon does not control".into(),
+        ));
+    }
     let caps = parse_capabilities(&body.capabilities);
     let cap_refs: Vec<&str> = caps.iter().map(|s| s.as_str()).collect();
 
@@ -185,7 +190,14 @@ pub async fn register_agent(
     let db = &state.db;
     let dict = neunode_knowledge::StringDictionary::new(db);
     let batch = neunode_knowledge::register_agent(&dict, &body.did, &cap_refs)?;
-    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
+    neunode_knowledge::apply_authorized(
+        &batch,
+        db,
+        &auth,
+        &payload,
+        keyring.to_did().as_str(),
+        &keyring.ed25519_public_key().to_bytes(),
+    )?;
 
     Ok(types::created(AgentRegistrationResponse {
         did: body.did,
@@ -222,13 +234,25 @@ pub async fn register_model(
         &body.cid,
         body.parent.as_deref(),
     );
+    if body.did != keyring.to_did().0 {
+        return Err(ApiError::Forbidden(
+            "mutation signer does not control the supplied identity".into(),
+        ));
+    }
     let auth = sign_mutation(&keyring, &body.did, &payload)?;
 
     let db = &state.db;
     let dict = neunode_knowledge::StringDictionary::new(db);
     let batch =
         neunode_knowledge::register_model(&dict, &body.did, &body.cid, body.parent.as_deref())?;
-    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
+    neunode_knowledge::apply_authorized(
+        &batch,
+        db,
+        &auth,
+        &payload,
+        keyring.to_did().as_str(),
+        &keyring.ed25519_public_key().to_bytes(),
+    )?;
 
     Ok(types::created(ModelRegistrationResponse {
         owner: body.did,
@@ -268,7 +292,14 @@ pub async fn register_bounty(
     let db = &state.db;
     let dict = neunode_knowledge::StringDictionary::new(db);
     let batch = neunode_knowledge::register_bounty(&dict, &body.id, &cap_refs)?;
-    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
+    neunode_knowledge::apply_authorized(
+        &batch,
+        db,
+        &auth,
+        &payload,
+        keyring.to_did().as_str(),
+        &keyring.ed25519_public_key().to_bytes(),
+    )?;
 
     Ok(types::created(BountyRegistrationResponse {
         id: body.id,
@@ -302,12 +333,24 @@ pub async fn join_job(
     let keyring = state.require_keyring()?;
     let payload =
         neunode_knowledge::authorization::canonical_join_training_job(&body.did, &body.job_id);
+    if body.did != keyring.to_did().0 {
+        return Err(ApiError::Forbidden(
+            "mutation signer does not control the supplied identity".into(),
+        ));
+    }
     let auth = sign_mutation(&keyring, &body.did, &payload)?;
 
     let db = &state.db;
     let dict = neunode_knowledge::StringDictionary::new(db);
     let batch = neunode_knowledge::join_training_job(&dict, &body.did, &body.job_id)?;
-    neunode_knowledge::apply_authorized(&batch, db, &auth, &payload)?;
+    neunode_knowledge::apply_authorized(
+        &batch,
+        db,
+        &auth,
+        &payload,
+        keyring.to_did().as_str(),
+        &keyring.ed25519_public_key().to_bytes(),
+    )?;
 
     Ok(types::created(JoinJobResponse {
         agent: body.did,
@@ -426,6 +469,11 @@ fn sign_mutation(
     signer_did: &str,
     payload: &[u8],
 ) -> Result<neunode_knowledge::MutationAuthorization, ApiError> {
+    if signer_did != keyring.to_did().as_str() {
+        return Err(ApiError::Forbidden(
+            "mutation signer does not control the supplied identity".into(),
+        ));
+    }
     let (ed_bytes, _) = keyring.to_bytes();
     let mut ed_signing = [0u8; 32];
     ed_signing.copy_from_slice(&ed_bytes[..32]);

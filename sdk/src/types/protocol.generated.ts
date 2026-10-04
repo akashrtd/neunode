@@ -33,6 +33,8 @@ export const Kind = {
 	Vote: "Vote",
 	Delegate: "Delegate",
 	ParameterChange: "ParameterChange",
+	Post: "Post",
+	Reply: "Reply",
 } as const;
 
 export type Kind = (typeof Kind)[keyof typeof Kind];

@@ -25,8 +25,8 @@ use crate::state::AppState;
 
 pub struct ServerState {
     pub db: Arc<neunode_storage::db::NeunodeDb>,
-    pub active_did: Option<String>,
-    pub mesh_handle: Option<crate::mesh_handle::MeshHandle>,
+    pub api: Arc<crate::api::state::ApiState>,
+    pub mesh_handle: Arc<tokio::sync::RwLock<Option<crate::mesh_handle::MeshHandle>>>,
     pub feed_tx: tokio::sync::broadcast::Sender<crate::api::state::FeedEventUpdate>,
 }
 
@@ -253,7 +253,7 @@ pub struct FeedPostForm {
     pub kind: String,
     pub content: String,
     #[serde(default)]
-    pub tags: String,
+    pub tags: Option<String>,
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -351,7 +351,10 @@ fn format_u128(val: u128) -> String {
 }
 
 fn stored_to_view(e: &neunode_storage::feed_store::StoredEvent) -> FeedEventView {
-    let preview = String::from_utf8_lossy(&e.payload).chars().take(80).collect();
+    let content = crate::feed_wire::stored_to_event(e)
+        .map(|event| event.content)
+        .unwrap_or_else(|_| String::from_utf8_lossy(&e.payload).into_owned());
+    let preview = content.chars().take(80).collect();
     FeedEventView {
         author_short: truncate_did(&e.agent_did),
         kind_label: kind_label(e.kind),
@@ -362,7 +365,7 @@ fn stored_to_view(e: &neunode_storage::feed_store::StoredEvent) -> FeedEventView
 
 /// Build common status bar fields from mesh state.
 async fn status_bar(state: &ServerState) -> (bool, String, usize) {
-    if let Some(ref mesh) = state.mesh_handle {
+    if let Some(mesh) = state.mesh_handle.read().await.as_ref() {
         match mesh.status().await {
             Ok(s) => (true, truncate_did(&s.local_peer_id), s.connected_peers.len()),
             Err(_) => (false, "offline".to_string(), 0),
@@ -381,14 +384,14 @@ async fn dashboard_handler(State(state): State<Arc<ServerState>>) -> Html<String
     let bounty_store = neunode_storage::bounty_store::BountyStore::new(&state.db);
     let token_store = neunode_storage::token_store::TokenStore::new(&state.db);
 
-    let all_events = feed_store.get_all("").unwrap_or_default();
+    let all_events = feed_store.list_all().unwrap_or_default();
     let recent_events: Vec<_> = all_events.iter().rev().take(20).map(stored_to_view).collect();
 
     let bounties = bounty_store.list_all().unwrap_or_default();
     let active_bounties =
         bounties.iter().filter(|b| b.state != "Paid" && b.state != "Cancelled").count();
 
-    let total_compute = if let Some(ref did) = state.active_did {
+    let total_compute = if let Some(ref did) = state.api.require_did().ok().map(|did| did.0) {
         token_store
             .get_balance(did, neunode_storage::token_store::TOKEN_COMPUTE)
             .map(|b| format_u128(b.balance))
@@ -399,7 +402,9 @@ async fn dashboard_handler(State(state): State<Arc<ServerState>>) -> Html<String
 
     let (online, node_id, peer_count) = status_bar(&state).await;
 
-    let (has_mesh_data, graph_data, connected_peers) = if let Some(ref mesh) = state.mesh_handle {
+    let (has_mesh_data, graph_data, connected_peers) = if let Some(mesh) =
+        state.mesh_handle.read().await.as_ref()
+    {
         match mesh.status().await {
             Ok(status) => {
                 let peers = status.connected_peers.len();
@@ -454,7 +459,7 @@ async fn dashboard_handler(State(state): State<Arc<ServerState>>) -> Html<String
 
 async fn feed_page_handler(State(state): State<Arc<ServerState>>) -> Html<String> {
     let feed_store = neunode_storage::feed_store::FeedStore::new(&state.db);
-    let all_events = feed_store.get_all("").unwrap_or_default();
+    let all_events = feed_store.list_all().unwrap_or_default();
 
     let (online, node_id, peer_count) = status_bar(&state).await;
 
@@ -480,10 +485,11 @@ async fn feed_events_partial(
     Query(filter): Query<FeedFilter>,
 ) -> Html<String> {
     let feed_store = neunode_storage::feed_store::FeedStore::new(&state.db);
-    let all_events = feed_store.get_all("").unwrap_or_default();
+    let all_events = feed_store.list_all().unwrap_or_default();
 
     let kind_filter: Option<u16> = filter.kind.as_deref().and_then(|k| k.parse().ok());
-    let mine_did = if filter.mine.is_some() { state.active_did.clone() } else { None };
+    let mine_did =
+        if filter.mine.is_some() { state.api.require_did().ok().map(|did| did.0) } else { None };
 
     let events: Vec<_> = all_events
         .iter()
@@ -491,7 +497,7 @@ async fn feed_events_partial(
         .filter(|e| kind_filter.is_none_or(|k| e.kind == k))
         .filter(|e| {
             filter.author.as_deref().is_none_or(|a| e.agent_did.contains(a))
-                || mine_did.as_deref().is_none_or(|d| e.agent_did == d)
+                && mine_did.as_deref().is_none_or(|d| e.agent_did == d)
         })
         .take(50)
         .map(stored_to_view)
@@ -524,7 +530,7 @@ async fn feed_post_handler(
         );
     }
 
-    let did = match &state.active_did {
+    let did = match &state.api.require_did().ok().map(|did| did.0) {
         Some(d) => d.clone(),
         None => {
             return Html(
@@ -534,24 +540,43 @@ async fn feed_post_handler(
         }
     };
 
-    let feed_store = neunode_storage::feed_store::FeedStore::new(&state.db);
-    let latest_seq = feed_store.latest_sequence(&did).unwrap_or(0);
-    let next_seq = if latest_seq == 0 { 1 } else { latest_seq + 1 };
-    let now_ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    let stored = neunode_storage::feed_store::StoredEvent {
-        kind,
-        timestamp: now_ts,
-        agent_did: did.clone(),
-        sequence: next_seq,
-        prev_hash: vec![0u8; 32],
-        payload: content.as_bytes().to_vec(),
-        signature: vec![],
+    let event = {
+        let tags: Vec<String> = form
+            .tags
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .map(str::trim)
+            .filter(|tag| !tag.is_empty())
+            .map(str::to_owned)
+            .collect();
+        let keys = match state.api.require_keyring() {
+            Ok(keys) => keys,
+            Err(error) => return Html(error.message()),
+        };
+        match crate::feed_wire::create_event(
+            &state.db,
+            &keys,
+            u32::from(kind),
+            content.to_string(),
+            &tags,
+        ) {
+            Ok(event) => event,
+            Err(error) => return Html(format!("Could not post: {error}")),
+        }
     };
-    feed_store.append(&stored).ok();
+    let wire = {
+        let keys = match state.api.require_keyring() {
+            Ok(keys) => keys,
+            Err(error) => return Html(error.message()),
+        };
+        crate::feed_wire::serialize_authenticated_event(&event, &keys)
+    };
+    if let Ok(wire) = wire {
+        if let Some(mesh) = state.mesh_handle.read().await.as_ref() {
+            let _ = mesh.publish(event.kind.gossipsub_topic(), &wire);
+        }
+    }
 
     // Broadcast to SSE subscribers
     let _ = state.feed_tx.send(crate::api::state::FeedEventUpdate {
@@ -599,7 +624,7 @@ async fn bounty_create_handler(
     State(state): State<Arc<ServerState>>,
     axum::Form(form): axum::Form<BountyCreateForm>,
 ) -> Html<String> {
-    let did = match &state.active_did {
+    let did = match &state.api.require_did().ok().map(|did| did.0) {
         Some(d) => d.clone(),
         None => {
             return Html(
@@ -658,33 +683,34 @@ async fn tokens_page_handler(State(state): State<Arc<ServerState>>) -> Html<Stri
         neunode_storage::token_store::TOKEN_STORAGE,
     ];
 
-    let balances: Vec<TokenCardView> = if let Some(ref did) = state.active_did {
-        types
-            .iter()
-            .zip(labels.iter())
-            .map(|(&tt, label)| {
-                let bal = token_store.get_balance(did, tt).unwrap_or_default();
-                TokenCardView {
+    let balances: Vec<TokenCardView> =
+        if let Some(ref did) = state.api.require_did().ok().map(|did| did.0) {
+            types
+                .iter()
+                .zip(labels.iter())
+                .map(|(&tt, label)| {
+                    let bal = token_store.get_balance(did, tt).unwrap_or_default();
+                    TokenCardView {
+                        label: label.to_string(),
+                        balance: format_u128(bal.balance),
+                        staked: format_u128(bal.staked),
+                        decay_epoch: bal.last_decay_epoch.to_string(),
+                        balance_u128: bal.balance,
+                    }
+                })
+                .collect()
+        } else {
+            labels
+                .iter()
+                .map(|label| TokenCardView {
                     label: label.to_string(),
-                    balance: format_u128(bal.balance),
-                    staked: format_u128(bal.staked),
-                    decay_epoch: bal.last_decay_epoch.to_string(),
-                    balance_u128: bal.balance,
-                }
-            })
-            .collect()
-    } else {
-        labels
-            .iter()
-            .map(|label| TokenCardView {
-                label: label.to_string(),
-                balance: "0".to_string(),
-                staked: "0".to_string(),
-                decay_epoch: "0".to_string(),
-                balance_u128: 0,
-            })
-            .collect()
-    };
+                    balance: "0".to_string(),
+                    staked: "0".to_string(),
+                    decay_epoch: "0".to_string(),
+                    balance_u128: 0,
+                })
+                .collect()
+        };
 
     let tpl = TokensTemplate {
         page: "tokens",
@@ -704,7 +730,7 @@ async fn tokens_page_handler(State(state): State<Arc<ServerState>>) -> Html<Stri
 
 async fn analytics_page_handler(State(state): State<Arc<ServerState>>) -> Html<String> {
     let feed_store = neunode_storage::feed_store::FeedStore::new(&state.db);
-    let all_events = feed_store.get_all("").unwrap_or_default();
+    let all_events = feed_store.list_all().unwrap_or_default();
     let (online, node_id, peer_count) = status_bar(&state).await;
 
     // Activity chart: last 7 days
@@ -749,14 +775,29 @@ async fn analytics_page_handler(State(state): State<Arc<ServerState>>) -> Html<S
         "tooltip": {"trigger": "axis"}
     }).to_string();
 
-    // Token distribution
+    // Display the active identity's real local available + staked balances.
+    let token_data = state
+        .api
+        .require_did()
+        .ok()
+        .and_then(|did| {
+            neunode_storage::token_store::TokenStore::new(&state.db).get_all_balances(&did.0).ok()
+        })
+        .map(|balances| {
+            balances
+                .into_iter()
+                .zip(["nCompute", "nTrain", "nBandwidth", "nStorage"])
+                .filter_map(|(balance, name)| {
+                    balance
+                        .balance
+                        .checked_add(balance.staked)
+                        .map(|value| serde_json::json!({"name": name, "value": value}))
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     let token_chart = serde_json::json!({
-        "series": [{"type": "pie", "radius": ["40%", "70%"], "data": [
-            {"name": "nCompute", "value": all_events.len().max(1), "itemStyle": {"color": "#4A90D9"}},
-            {"name": "nTrain", "value": all_events.len().max(1) / 2, "itemStyle": {"color": "#22D3EE"}},
-            {"name": "nBandwidth", "value": all_events.len().max(1) / 3, "itemStyle": {"color": "#34D399"}},
-            {"name": "nStorage", "value": all_events.len().max(1) / 4, "itemStyle": {"color": "#A78BFA"}}
-        ], "label": {"color": "#8B8FA3"}}],
+        "series": [{"type": "pie", "radius": ["40%", "70%"], "data": token_data, "label": {"color": "#8B8FA3"}}],
         "tooltip": {"trigger": "item"}
     }).to_string();
 
@@ -815,18 +856,18 @@ async fn analytics_page_handler(State(state): State<Arc<ServerState>>) -> Html<S
 async fn mesh_page_handler(State(state): State<Arc<ServerState>>) -> Html<String> {
     let (online, node_id, peer_count) = status_bar(&state).await;
 
-    let (local_peer_id, listeners, topics, topic_count) = if let Some(ref mesh) = state.mesh_handle
-    {
-        match mesh.status().await {
-            Ok(s) => {
-                let topic_count = s.subscribed_topics.len();
-                (truncate_did(&s.local_peer_id), s.listeners, s.subscribed_topics, topic_count)
+    let (local_peer_id, listeners, topics, topic_count) =
+        if let Some(mesh) = state.mesh_handle.read().await.as_ref() {
+            match mesh.status().await {
+                Ok(s) => {
+                    let topic_count = s.subscribed_topics.len();
+                    (truncate_did(&s.local_peer_id), s.listeners, s.subscribed_topics, topic_count)
+                }
+                Err(_) => ("--".to_string(), vec![], vec![], 0),
             }
-            Err(_) => ("--".to_string(), vec![], vec![], 0),
-        }
-    } else {
-        ("--".to_string(), vec![], vec![], 0)
-    };
+        } else {
+            ("--".to_string(), vec![], vec![], 0)
+        };
 
     let tpl = MeshTemplate {
         page: "mesh",
@@ -846,7 +887,7 @@ async fn mesh_page_handler(State(state): State<Arc<ServerState>>) -> Html<String
 }
 
 async fn mesh_peers_partial(State(state): State<Arc<ServerState>>) -> Html<String> {
-    let peers = if let Some(ref mesh) = state.mesh_handle {
+    let peers = if let Some(mesh) = state.mesh_handle.read().await.as_ref() {
         mesh.status().await.map(|s| s.connected_peers).unwrap_or_default()
     } else {
         vec![]
@@ -971,7 +1012,7 @@ async fn agents_page_handler(
 async fn token_balances_partial(State(state): State<Arc<ServerState>>) -> Html<String> {
     let token_store = neunode_storage::token_store::TokenStore::new(&state.db);
 
-    let balances = if let Some(ref did) = state.active_did {
+    let balances = if let Some(ref did) = state.api.require_did().ok().map(|did| did.0) {
         match token_store.get_all_balances(did) {
             Ok(bals) => {
                 let labels = ["nCompute", "nTrain", "nBandwidth", "nStorage"];
@@ -1059,9 +1100,24 @@ async fn feed_ws_client(socket: WebSocket, state: Arc<ServerState>) {
 
 async fn inference_ws_handler(
     ws: WebSocketUpgrade,
+    headers: axum::http::HeaderMap,
     State(state): State<Arc<ServerState>>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| inference_ws_client(socket, state))
+    // Authentication middleware has already verified this protocol's token.
+    // Browsers require the server to acknowledge their offered subprotocol.
+    let protocols: Vec<String> = headers
+        .get("sec-websocket-protocol")
+        .and_then(|value| value.to_str().ok())
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|protocol| protocol.starts_with("neunode-auth."))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    ws.protocols(protocols).on_upgrade(move |socket| inference_ws_client(socket, state))
 }
 
 async fn inference_ws_client(mut socket: WebSocket, state: Arc<ServerState>) {
@@ -1074,7 +1130,8 @@ async fn inference_ws_client(mut socket: WebSocket, state: Arc<ServerState>) {
         };
         let response: anyhow::Result<String> =
             match serde_json::from_str::<crate::api::inference_api::InferenceRequest>(&text) {
-                Ok(request) => crate::api::inference_api::submit_inference(&state.db, request)
+                Ok(request) => crate::api::inference_api::execute_inference(&state.api, request)
+                    .await
                     .map_err(|error| anyhow::anyhow!("{error:?}"))
                     .and_then(|result| serde_json::to_string(&result).map_err(Into::into)),
                 Err(error) => Err(anyhow::anyhow!("invalid inference request: {error}")),
@@ -1143,23 +1200,26 @@ pub async fn execute(
 ) -> Result<()> {
     let (feed_tx, _) = tokio::sync::broadcast::channel(256);
 
-    let server_state = Arc::new(ServerState {
-        db: Arc::clone(&app_state.db),
-        active_did: app_state.active_did.as_ref().map(|d| d.0.clone()),
-        mesh_handle: app_state.mesh_handle.take(),
-        feed_tx: feed_tx.clone(),
-    });
-
     // Build REST API state (shared DB, identity, config)
     let api_state = Arc::new(crate::api::state::ApiState {
         db: Arc::clone(&app_state.db),
-        active_did: app_state.active_did.clone(),
+        active_did: std::sync::RwLock::new(app_state.active_did.clone()).into(),
         active_keyring: std::sync::Mutex::new(app_state.active_keyring.take()).into(),
         mesh_handle: tokio::sync::RwLock::new(None).into(),
         config: std::sync::RwLock::new(app_state.config.clone()).into(),
         feed_tx: feed_tx.clone(),
     });
 
+    crate::inference_service::recover(&api_state.db)
+        .map_err(|error| anyhow::anyhow!(error.message()))?;
+    api_state.start_mesh().await.map_err(|error| anyhow::anyhow!(error.message()))?;
+    let token = Arc::new(crate::api_auth::load_token(&app_state.config.config_path)?);
+    let server_state = Arc::new(ServerState {
+        db: Arc::clone(&app_state.db),
+        api: Arc::clone(&api_state),
+        mesh_handle: Arc::clone(&api_state.mesh_handle),
+        feed_tx: feed_tx.clone(),
+    });
     let app = Router::new()
         // Pages
         .route("/", get(dashboard_handler))
@@ -1185,13 +1245,18 @@ pub async fn execute(
         .with_state(server_state.clone());
 
     // Mount REST API v1
-    let app = app.merge(crate::api::build_api_router().with_state(api_state));
+    let app = app.merge(crate::api::build_api_router().with_state(Arc::clone(&api_state)));
 
     let mut openapi = crate::api::ApiDoc::openapi();
     openapi.merge(DashboardApiDoc::openapi());
     let app = app.merge(
         utoipa_swagger_ui::SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi),
     );
+
+    let app = app.layer(axum::middleware::from_fn_with_state(
+        (token, Arc::clone(&api_state.db)),
+        crate::api_auth::authorize,
+    ));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     println!("{}  neunode dashboard → http://127.0.0.1:{}", console::style("INFO").dim(), port);
@@ -1220,16 +1285,11 @@ pub async fn execute(
 
     axum::serve(listener, app).with_graceful_shutdown(shutdown_signal).await?;
 
-    // Cleanup: close mesh connections, flush database
-    if let Ok(state) = Arc::try_unwrap(server_state) {
-        if let Some(mesh) = state.mesh_handle {
-            let _ = mesh.shutdown();
-            let _ = mesh.join_handle.await;
-            println!("{}  Mesh connections closed", console::style("INFO").dim());
-        }
-        drop(state.db);
-        println!("{}  Database flushed. Goodbye.", console::style("INFO").dim());
+    if let Some(mesh) = api_state.mesh_handle.write().await.take() {
+        let _ = mesh.shutdown();
+        let _ = mesh.join_handle.await;
     }
+    println!("Database flushed. Goodbye.");
 
     Ok(())
 }

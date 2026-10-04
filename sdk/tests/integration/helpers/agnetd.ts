@@ -6,8 +6,9 @@ const BINARY_NAME = "agnetd";
 function findBinary(): string | null {
   // Try relative path from sdk/tests/integration/helpers/ to workspace root target/
   const candidates = [
-    path.resolve(__dirname, "../../../../target/release/agnetd"),
+    ...(process.env.NEUNODE_TEST_BINARY ? [path.resolve(process.env.NEUNODE_TEST_BINARY)] : []),
     path.resolve(__dirname, "../../../../target/debug/agnetd"),
+    path.resolve(__dirname, "../../../../target/release/agnetd"),
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;

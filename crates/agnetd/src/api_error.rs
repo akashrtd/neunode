@@ -5,12 +5,22 @@ use serde::Serialize;
 
 #[derive(Debug)]
 pub enum ApiError {
+    Forbidden(String),
+    Unauthorized(String),
+    Unavailable(String),
     NotFound(String),
     BadRequest(String),
     NoIdentity,
     MeshNotRunning,
     Internal(String),
 }
+
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message())
+    }
+}
+impl std::error::Error for ApiError {}
 
 #[derive(Serialize)]
 struct ErrorBody {
@@ -27,6 +37,9 @@ struct ErrorDetail {
 impl ApiError {
     pub fn status_code(&self) -> StatusCode {
         match self {
+            ApiError::Forbidden(_) => StatusCode::FORBIDDEN,
+            ApiError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
+            ApiError::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             ApiError::NotFound(_) => StatusCode::NOT_FOUND,
             ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
             ApiError::NoIdentity => StatusCode::UNAUTHORIZED,
@@ -37,6 +50,9 @@ impl ApiError {
 
     pub fn error_code(&self) -> &str {
         match self {
+            ApiError::Forbidden(_) => "FORBIDDEN",
+            ApiError::Unauthorized(_) => "UNAUTHORIZED",
+            ApiError::Unavailable(_) => "UNAVAILABLE",
             ApiError::NotFound(_) => "NOT_FOUND",
             ApiError::BadRequest(_) => "BAD_REQUEST",
             ApiError::NoIdentity => "NO_IDENTITY",
@@ -47,6 +63,9 @@ impl ApiError {
 
     pub fn message(&self) -> String {
         match self {
+            ApiError::Forbidden(msg) | ApiError::Unauthorized(msg) | ApiError::Unavailable(msg) => {
+                msg.clone()
+            }
             ApiError::NotFound(msg) => msg.clone(),
             ApiError::BadRequest(msg) => msg.clone(),
             ApiError::NoIdentity => "no active identity — run `agnetd identity create`".to_string(),

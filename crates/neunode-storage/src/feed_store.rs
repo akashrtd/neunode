@@ -46,35 +46,27 @@ impl<'a> FeedStore<'a> {
 
     pub fn latest_sequence(&self, agent_did: &str) -> Result<u64> {
         let hash = cf::did_hash_16(agent_did);
-        let prefix = cf::agent_did_hash_prefix(&hash);
-        let entries = self.db.prefix_scan(cf::CF_FEED_EVENTS, &prefix)?;
-        if entries.is_empty() {
-            return Ok(0);
-        }
+        let end = cf::feed_event_key(&hash, u64::MAX);
+        let entries = self.db.scan_reverse_limit(cf::CF_FEED_EVENTS, &end, 1)?;
         Ok(entries
-            .iter()
-            .filter_map(|(k, _)| {
-                if k.len() == 24 {
-                    let mut seq_bytes = [0u8; 8];
-                    seq_bytes.copy_from_slice(&k[16..24]);
-                    Some(u64::from_be_bytes(seq_bytes))
-                } else {
-                    None
-                }
+            .first()
+            .filter(|(key, _)| key.len() == 24 && key.starts_with(&hash))
+            .map(|(key, _)| {
+                let mut bytes = [0; 8];
+                bytes.copy_from_slice(&key[16..]);
+                u64::from_be_bytes(bytes)
             })
-            .max()
             .unwrap_or(0))
     }
 
     pub fn get_range(&self, agent_did: &str, from: u64, limit: usize) -> Result<Vec<StoredEvent>> {
         let hash = cf::did_hash_16(agent_did);
         let start = cf::feed_event_key(&hash, from);
-        let end = cf::feed_event_key(&hash, u64::MAX);
 
-        let entries = self.db.range_scan(cf::CF_FEED_EVENTS, &start, &end)?;
+        let entries = self.db.scan_from_limit(cf::CF_FEED_EVENTS, &start, limit)?;
         entries
             .iter()
-            .take(limit)
+            .take_while(|(key, _)| key.starts_with(&hash))
             .map(|(_, v)| {
                 crate::codec::deserialize(v).map_err(|e| StorageError::Serialization(e.to_string()))
             })
@@ -92,11 +84,38 @@ impl<'a> FeedStore<'a> {
             })
             .collect()
     }
+
+    /// Snapshot of all locally stored authors. For per-author pagination use `get_range`.
+    pub fn list_all(&self) -> Result<Vec<StoredEvent>> {
+        let entries = self.db.prefix_scan(cf::CF_FEED_EVENTS, &[])?;
+        let mut events: Vec<StoredEvent> = entries
+            .iter()
+            .map(|(_, value)| {
+                crate::codec::deserialize(value)
+                    .map_err(|error| StorageError::Serialization(error.to_string()))
+            })
+            .collect::<Result<_>>()?;
+        events.sort_by(|a, b| {
+            (a.timestamp, &a.agent_did, a.sequence).cmp(&(b.timestamp, &b.agent_did, b.sequence))
+        });
+        Ok(events)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn network_snapshot_contains_distinct_authors() {
+        let db = temp_db();
+        let store = FeedStore::new(&db);
+        store.append(&make_event("did:neunode:a", 1, 9001)).unwrap();
+        store.append(&make_event("did:neunode:b", 1, 9002)).unwrap();
+        assert_eq!(store.get_all("").unwrap().len(), 0);
+        assert_eq!(store.list_all().unwrap().len(), 2);
+        assert_eq!(store.get_all("did:neunode:a").unwrap().len(), 1);
+    }
     use crate::db::NeunodeDb;
     use std::sync::atomic::{AtomicU64, Ordering};
 

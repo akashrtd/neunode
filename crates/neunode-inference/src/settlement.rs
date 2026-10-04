@@ -61,15 +61,28 @@ impl SettlementEngine {
         output_tokens: u32,
         input_price: TokenAmount,
         output_price: TokenAmount,
-    ) -> TokenAmount {
-        let input_cost = (input_tokens as u128) * input_price.0;
-        let output_cost = (output_tokens as u128) * output_price.0;
-        let total = input_cost.saturating_add(output_cost) / 1_000_000;
-        if total == 0 && (input_tokens > 0 || output_tokens > 0) {
-            TokenAmount(1)
-        } else {
-            TokenAmount(total)
+    ) -> Result<TokenAmount> {
+        let input = (input_price.0 / 1_000_000).checked_mul(u128::from(input_tokens));
+        let output = (output_price.0 / 1_000_000).checked_mul(u128::from(output_tokens));
+        let fractional = input_price.0 % 1_000_000 * u128::from(input_tokens)
+            + output_price.0 % 1_000_000 * u128::from(output_tokens);
+        let total = input
+            .and_then(|input| output.and_then(|output| input.checked_add(output)))
+            .and_then(|total| total.checked_add(fractional / 1_000_000))
+            .ok_or_else(|| {
+                InferenceError::SettlementFailed("cost exceeds token amount bounds".into())
+            })?;
+        Ok(TokenAmount(if input_tokens != 0 || output_tokens != 0 { total.max(1) } else { 0 }))
+    }
+
+    pub fn calculate_fee(gross: TokenAmount, basis_points: u64) -> Result<TokenAmount> {
+        if basis_points > 10_000 {
+            return Err(InferenceError::InvalidRequest(
+                "protocol_fee_bps must be at most 10000".into(),
+            ));
         }
+        let bps = u128::from(basis_points);
+        Ok(TokenAmount(gross.0 / 10_000 * bps + (gross.0 % 10_000 * bps).div_ceil(10_000)))
     }
 
     /// Rough estimate of input tokens from request messages (~4 chars per token).
@@ -129,10 +142,9 @@ impl SettlementEngine {
             output_tokens,
             model_info.input_price_per_million,
             model_info.output_price_per_million,
-        );
+        )?;
 
-        let fee_amount = (gross_cost.0 * self.config.protocol_fee_bps as u128).div_ceil(10_000);
-        let protocol_fee = TokenAmount(fee_amount);
+        let protocol_fee = Self::calculate_fee(gross_cost, self.config.protocol_fee_bps)?;
         let net_payout = gross_cost
             .checked_sub(protocol_fee)
             .ok_or(InferenceError::FeeExceedsGross { fee: protocol_fee, gross: gross_cost })?;
@@ -266,6 +278,33 @@ mod tests {
     }
 
     #[test]
+    fn costs_and_fees_are_exact_at_full_width_and_reject_overflow() {
+        assert!(SettlementEngine::calculate_cost(
+            u32::MAX,
+            u32::MAX,
+            TokenAmount(u128::MAX),
+            TokenAmount(u128::MAX)
+        )
+        .is_err());
+        assert_eq!(
+            SettlementEngine::calculate_cost(1, 0, TokenAmount(u128::MAX), TokenAmount(0))
+                .unwrap()
+                .0,
+            u128::MAX / 1_000_000
+        );
+        assert_eq!(
+            SettlementEngine::calculate_fee(TokenAmount(u128::MAX), 10_000).unwrap().0,
+            u128::MAX
+        );
+        assert!(SettlementEngine::calculate_fee(TokenAmount(1), 10_001).is_err());
+        for amount in [0, 1, 49, 50, 51, 9999, u128::MAX] {
+            let fee = SettlementEngine::calculate_fee(TokenAmount(amount), 200).unwrap().0;
+            assert!(fee <= amount);
+            assert_eq!((amount - fee).checked_add(fee), Some(amount));
+        }
+    }
+
+    #[test]
     fn pricing_config_default() {
         let config = PricingConfig::default();
         assert_eq!(config.protocol_fee_bps, 200);
@@ -279,26 +318,30 @@ mod tests {
             1_000_000,
             TokenAmount(100),
             TokenAmount(200),
-        );
+        )
+        .unwrap();
         assert_eq!(cost, TokenAmount(300));
     }
 
     #[test]
     fn calculate_cost_sub_million() {
         let cost =
-            SettlementEngine::calculate_cost(500_000, 500_000, TokenAmount(100), TokenAmount(200));
+            SettlementEngine::calculate_cost(500_000, 500_000, TokenAmount(100), TokenAmount(200))
+                .unwrap();
         assert_eq!(cost, TokenAmount(150));
     }
 
     #[test]
     fn calculate_cost_zero_tokens() {
-        let cost = SettlementEngine::calculate_cost(0, 0, TokenAmount(100), TokenAmount(200));
+        let cost =
+            SettlementEngine::calculate_cost(0, 0, TokenAmount(100), TokenAmount(200)).unwrap();
         assert_eq!(cost, TokenAmount(0));
     }
 
     #[test]
     fn calculate_cost_minimum_one_when_tokens_used() {
-        let cost = SettlementEngine::calculate_cost(100, 50, TokenAmount(100), TokenAmount(200));
+        let cost =
+            SettlementEngine::calculate_cost(100, 50, TokenAmount(100), TokenAmount(200)).unwrap();
         assert_eq!(cost, TokenAmount(1));
     }
 
@@ -309,19 +352,22 @@ mod tests {
             10_000_000,
             TokenAmount(5_000_000),
             TokenAmount(10_000_000),
-        );
+        )
+        .unwrap();
         assert_eq!(cost, TokenAmount(150_000_000));
     }
 
     #[test]
     fn calculate_cost_input_only() {
-        let cost = SettlementEngine::calculate_cost(1_000_000, 0, TokenAmount(500), TokenAmount(0));
+        let cost = SettlementEngine::calculate_cost(1_000_000, 0, TokenAmount(500), TokenAmount(0))
+            .unwrap();
         assert_eq!(cost, TokenAmount(500));
     }
 
     #[test]
     fn calculate_cost_output_only() {
-        let cost = SettlementEngine::calculate_cost(0, 1_000_000, TokenAmount(0), TokenAmount(300));
+        let cost = SettlementEngine::calculate_cost(0, 1_000_000, TokenAmount(0), TokenAmount(300))
+            .unwrap();
         assert_eq!(cost, TokenAmount(300));
     }
 

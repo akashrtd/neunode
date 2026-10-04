@@ -49,17 +49,17 @@ pub struct MeshStatus {
 
 #[allow(dead_code)]
 pub struct MeshHandle {
-    cmd_tx: mpsc::UnboundedSender<MeshCommand>,
+    cmd_tx: mpsc::Sender<MeshCommand>,
     pub local_peer_id: PeerId,
     pub(crate) join_handle: tokio::task::JoinHandle<()>,
-    event_rx: Option<mpsc::UnboundedReceiver<neunode_feed::event::FeedEvent>>,
+    event_rx: Option<mpsc::Receiver<neunode_feed::event::FeedEvent>>,
 }
 
 impl MeshHandle {
     /// Publish data to a gossipsub topic.
     pub fn publish(&self, topic: &str, data: &[u8]) -> Result<()> {
         self.cmd_tx
-            .send(MeshCommand::Publish { topic: topic.to_string(), data: data.to_vec() })
+            .try_send(MeshCommand::Publish { topic: topic.to_string(), data: data.to_vec() })
             .map_err(|_| anyhow::anyhow!("mesh task dropped"))
     }
 
@@ -67,28 +67,28 @@ impl MeshHandle {
     #[allow(dead_code)]
     pub fn subscribe(&self, topic: &str) -> Result<()> {
         self.cmd_tx
-            .send(MeshCommand::Subscribe { topic: topic.to_string() })
+            .try_send(MeshCommand::Subscribe { topic: topic.to_string() })
             .map_err(|_| anyhow::anyhow!("mesh task dropped"))
     }
 
     /// Dial a remote peer by multiaddr.
     pub fn dial(&self, addr: Multiaddr) -> Result<()> {
         self.cmd_tx
-            .send(MeshCommand::Dial { addr })
+            .try_send(MeshCommand::Dial { addr })
             .map_err(|_| anyhow::anyhow!("mesh task dropped"))
     }
 
     /// Disconnect from a specific peer.
     pub fn disconnect(&self, peer_id: PeerId) -> Result<()> {
         self.cmd_tx
-            .send(MeshCommand::Disconnect { peer_id })
+            .try_send(MeshCommand::Disconnect { peer_id })
             .map_err(|_| anyhow::anyhow!("mesh task dropped"))
     }
 
     pub async fn status(&self) -> Result<MeshStatus> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .send(MeshCommand::GetStatus { reply: tx })
+            .try_send(MeshCommand::GetStatus { reply: tx })
             .map_err(|_| anyhow::anyhow!("mesh task dropped"))?;
         rx.await.map_err(|_| anyhow::anyhow!("mesh task dropped"))
     }
@@ -96,20 +96,20 @@ impl MeshHandle {
     pub async fn peers(&self) -> Result<Vec<PeerId>> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .send(MeshCommand::GetPeers { reply: tx })
+            .try_send(MeshCommand::GetPeers { reply: tx })
             .map_err(|_| anyhow::anyhow!("mesh task dropped"))?;
         rx.await.map_err(|_| anyhow::anyhow!("mesh task dropped"))
     }
 
     /// Signal the background task to shut down.
     pub fn shutdown(&self) -> Result<()> {
-        self.cmd_tx.send(MeshCommand::Shutdown).map_err(|_| anyhow::anyhow!("mesh task dropped"))
+        self.cmd_tx
+            .try_send(MeshCommand::Shutdown)
+            .map_err(|_| anyhow::anyhow!("mesh task dropped"))
     }
 
     /// Take the event stream receiver (first call returns Some, subsequent calls return None).
-    pub fn take_event_stream(
-        &mut self,
-    ) -> Option<mpsc::UnboundedReceiver<neunode_feed::event::FeedEvent>> {
+    pub fn take_event_stream(&mut self) -> Option<mpsc::Receiver<neunode_feed::event::FeedEvent>> {
         self.event_rx.take()
     }
 }
@@ -129,6 +129,8 @@ pub fn spawn_mesh_task(
     let mut node = P2pNode::new(keypair, listen_addr.clone(), &data_dir)?;
     node.start(listen_addr)?;
 
+    node.subscribe(neunode_p2p::catchup::CATCHUP_TOPIC)?;
+
     if subscribe_all {
         node.subscribe_all_categories()?;
     }
@@ -142,8 +144,8 @@ pub fn spawn_mesh_task(
     }
 
     let local_peer_id = node.local_peer_id();
-    let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
-    let (event_tx, event_rx) = mpsc::unbounded_channel();
+    let (cmd_tx, cmd_rx) = mpsc::channel(256);
+    let (event_tx, event_rx) = mpsc::channel(256);
 
     let join_handle = tokio::spawn(mesh_event_loop(node, cmd_rx, db, event_tx));
 
@@ -156,12 +158,16 @@ pub fn spawn_mesh_task(
 
 async fn mesh_event_loop(
     mut node: P2pNode,
-    mut cmd_rx: mpsc::UnboundedReceiver<MeshCommand>,
+    mut cmd_rx: mpsc::Receiver<MeshCommand>,
     db: Arc<NeunodeDb>,
-    event_tx: mpsc::UnboundedSender<neunode_feed::event::FeedEvent>,
+    event_tx: mpsc::Sender<neunode_feed::event::FeedEvent>,
 ) {
     // 10 events per DID per 60-second window
-    let mut rate_limiter = RateLimiter::new(10, 60);
+    let mut rate_limiter = RateLimiter::new(512, 60);
+    let mut catchup_limiter = RateLimiter::new(30, 60);
+    let mut head_tick = tokio::time::interval(Duration::from_secs(5));
+    head_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut head_cursor = Vec::new();
     let mut address_book = load_address_book(&db);
     let mut retries = HashMap::<PeerId, RetryState>::new();
     let mut manual_disconnects = HashSet::<PeerId>::new();
@@ -173,6 +179,18 @@ async fn mesh_event_loop(
 
     loop {
         tokio::select! {
+            _ = head_tick.tick() => {
+                if let Ok(heads) = db.scan_from_limit(neunode_storage::cf::CF_FEED_STATE, &head_cursor, 64) {
+                    head_cursor = heads.last().map(|(key, _)| { let mut next = key.clone(); next.push(0); next }).unwrap_or_default();
+                    for (_, wire) in heads {
+                        if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&wire) {
+                            if let Ok(event) = serde_json::from_value::<neunode_feed::event::FeedEvent>(value["event"].clone()) {
+                            if let Ok(wire) = crate::feed_wire::relay_head(&wire) { let _ = node.publish(event.kind.gossipsub_topic(), &wire); }
+                            }
+                        }
+                    }
+                }
+            }
             _ = retry_tick.tick() => {
                 let due = retries
                     .iter()
@@ -249,47 +267,56 @@ async fn mesh_event_loop(
             event = node.next_event() => {
                 match event {
                     NodeEvent::GossipsubMessage { source, topic, data } => {
-                        match crate::feed_wire::deserialize_feed_event(&data) {
-                            Ok(feed_event) => {
-                                if let Err(e) = feed_event.validate() {
-                                    tracing::warn!("Invalid feed event from {:?}: {}", source, e);
-                                } else {
-                                    let now = chrono::Utc::now().timestamp() as u64;
-                                    let author_did = &feed_event.author.0;
-                                    if !rate_limiter.allow(author_did, now) {
-                                        tracing::warn!(
-                                            "Rate limited feed event from {} on {}",
-                                            author_did,
-                                            topic
-                                        );
-                                        continue;
-                                    }
-                                    let stored = crate::feed_wire::feed_event_to_stored(&feed_event);
+                        let now = chrono::Utc::now().timestamp() as u64;
+                        let Some(source) = source else { continue };
+                        if !rate_limiter.allow(&source.to_string(), now) { continue; }
+                        match crate::feed_wire::ingest_authenticated_event(&db, &data) {
+                            Ok(Some(event)) => { let _ = event_tx.try_send(event); }
+                            Ok(None) => (),
+                            Err(error) => {
+                                tracing::warn!(%source, %topic, %error, "Rejected unauthenticated or invalid feed event");
+                                if let Ok((did, sequence)) = crate::feed_wire::authenticated_position(&data) {
                                     let store = neunode_storage::feed_store::FeedStore::new(&db);
-                                    let event_id = feed_event.id.to_string();
-                                    let event_author = feed_event.author.0.clone();
-                                    match store.append(&stored) {
-                                        Ok(()) => {
-                                            tracing::info!(
-                                                "Stored feed event {} from {} on {}",
-                                                event_id,
-                                                event_author,
-                                                topic
-                                            );
-                                            let _ = event_tx.send(feed_event);
-                                        }
-                                        Err(e) => {
-                                            tracing::warn!("Failed to store feed event: {}", e)
+                                    if let Ok(latest) = store.latest_sequence(&did) {
+                                        if sequence > latest.saturating_add(1) && catchup_limiter.allow(&source.to_string(), now) {
+                                            let _ = node.request_catchup(did, latest.saturating_add(1), Some(sequence));
                                         }
                                     }
                                 }
+                            },
+                        }
+                    }
+                    NodeEvent::CatchupRequest { source, request } => {
+                        let Some(source) = source else { continue };
+                        let now = chrono::Utc::now().timestamp().max(0) as u64;
+                        if request.from_sequence == 0 || !catchup_limiter.allow(&source.to_string(), now) { continue; }
+                        let store = neunode_storage::feed_store::FeedStore::new(&db);
+                        if let Ok(events) = store.get_range(&request.author_did, request.from_sequence, 32) {
+                            let mut wire_events = Vec::new();
+                            let mut size = 0;
+                            let mut last = request.from_sequence;
+                            for row in events {
+                                if request.to_sequence.is_some_and(|end| row.sequence > end) { break; }
+                                let Ok(event) = crate::feed_wire::stored_to_event(&row) else { break };
+                                let Ok(Some(wire)) = db.get_raw(neunode_storage::cf::CF_FEED_INDEX, event.id.0.as_bytes()) else { break };
+                                size += wire.len();
+                                if size > 128 * 1024 { break; }
+                                last = event.sequence;
+                                wire_events.push(wire);
                             }
-                            Err(e) => {
-                                tracing::warn!(
-                                    "Failed to deserialize feed event from {:?}: {}",
-                                    source,
-                                    e
-                                );
+                            if !wire_events.is_empty() { let _ = node.respond_catchup(request.author_did, wire_events, request.from_sequence, last); }
+                        }
+                    }
+                    NodeEvent::CatchupResponse { source, response } => {
+                        let Some(source) = source else { continue };
+                        let now = chrono::Utc::now().timestamp().max(0) as u64;
+                        if response.events.len() > 32 || !catchup_limiter.allow(&source.to_string(), now) { continue; }
+                        for wire in response.events {
+                            if !crate::feed_wire::authenticated_position(&wire).is_ok_and(|(did, _)| did == response.author_did) { break; }
+                            match crate::feed_wire::ingest_authenticated_event(&db, &wire) {
+                                Ok(Some(event)) => { let _ = event_tx.try_send(event); }
+                                Ok(None) => (),
+                                Err(_) => break,
                             }
                         }
                     }

@@ -22,12 +22,20 @@ pub struct PublicKeyBundle {
 #[ts(export)]
 pub struct KeyRotation {
     pub old_did: Did,
+    #[serde(default)]
+    pub old_ed25519_public: Vec<u8>,
+    #[serde(default)]
+    pub old_secp256k1_public: Vec<u8>,
     pub new_did: Did,
     pub new_ed25519_public: Vec<u8>,
     pub new_secp256k1_public: Vec<u8>,
     pub timestamp: u64,
     pub ed25519_signature: Vec<u8>,
     pub secp256k1_signature: Vec<u8>,
+    #[serde(default)]
+    pub new_ed25519_signature: Vec<u8>,
+    #[serde(default)]
+    pub new_secp256k1_signature: Vec<u8>,
 }
 
 /// Dual-key keyring holding Ed25519 (P2P) and secp256k1 (on-chain) keypairs.
@@ -162,61 +170,92 @@ impl Keyring {
     /// Create a signed key rotation message from old keyring to new keyring.
     /// Both old and new keyrings must sign the transition.
     pub fn create_rotation(old: &Keyring, new: &Keyring, timestamp: u64) -> Result<KeyRotation> {
-        let new_pub = new.export_public();
-        let message = format!(
-            "{}:{}:{}:{}:{timestamp}",
-            old.to_did().as_str(),
-            new.to_did().as_str(),
-            bytes_to_hex(&new_pub.ed25519),
-            bytes_to_hex(&new_pub.secp256k1),
-        );
-        let ed_sig = old.sign_ed25519(message.as_bytes()).to_bytes().to_vec();
-        let secp_sig = old.sign_secp256k1(message.as_bytes()).to_bytes().to_vec();
-        Ok(KeyRotation {
+        let mut rotation = KeyRotation {
             old_did: old.to_did(),
             new_did: new.to_did(),
-            new_ed25519_public: new_pub.ed25519,
-            new_secp256k1_public: new_pub.secp256k1,
+            old_ed25519_public: old.ed25519_public_key().to_bytes().to_vec(),
+            old_secp256k1_public: old.secp256k1_public_key(),
+            new_ed25519_public: new.ed25519_public_key().to_bytes().to_vec(),
+            new_secp256k1_public: new.secp256k1_public_key(),
             timestamp,
-            ed25519_signature: ed_sig,
-            secp256k1_signature: secp_sig,
-        })
+            ed25519_signature: Vec::new(),
+            secp256k1_signature: Vec::new(),
+            new_ed25519_signature: Vec::new(),
+            new_secp256k1_signature: Vec::new(),
+        };
+        let message = rotation_message(&rotation);
+        rotation.ed25519_signature = old.sign_ed25519(&message).to_bytes().to_vec();
+        rotation.secp256k1_signature = old.sign_secp256k1(&message).to_bytes().to_vec();
+        rotation.new_ed25519_signature = new.sign_ed25519(&message).to_bytes().to_vec();
+        rotation.new_secp256k1_signature = new.sign_secp256k1(&message).to_bytes().to_vec();
+        Ok(rotation)
     }
 
-    /// Verify a key rotation message against the old keyring's public keys.
+    /// Verify authorization, DID bindings, and possession of both replacement keys.
+    /// Legacy messages lacking the old keys or possession proofs fail closed.
+    /// Callers must also enforce timestamp/replay policy when applying a rotation.
     pub fn verify_rotation(rotation: &KeyRotation) -> bool {
-        let message = format!(
-            "{}:{}:{}:{}:{}",
-            rotation.old_did.as_str(),
-            rotation.new_did.as_str(),
-            bytes_to_hex(&rotation.new_ed25519_public),
-            bytes_to_hex(&rotation.new_secp256k1_public),
-            rotation.timestamp,
-        );
-        // Verify Ed25519 signature
-        let ed_sig = match ed25519_dalek::Signature::from_slice(&rotation.ed25519_signature) {
-            Ok(s) => s,
-            Err(_) => return false,
-        };
-        let ed_vk = match ed25519_dalek::VerifyingKey::from_bytes(
-            &rotation.new_ed25519_public.clone().try_into().unwrap_or([0u8; 32]),
-        ) {
-            // We need the OLD public key to verify, but rotation stores NEW.
-            // The signature is from OLD key. We need to verify against old_did.
-            // For now, just check the structure is valid.
-            Ok(_) => ed_sig,
-            Err(_) => return false,
-        };
-        let _ = ed_vk;
-        // Verify secp256k1 signature length
-        if rotation.secp256k1_signature.len() != 64 {
-            return false;
+        let message = rotation_message(rotation);
+        for (did, ed, secp, ed_signature, secp_signature) in [
+            (
+                &rotation.old_did,
+                &rotation.old_ed25519_public,
+                &rotation.old_secp256k1_public,
+                &rotation.ed25519_signature,
+                &rotation.secp256k1_signature,
+            ),
+            (
+                &rotation.new_did,
+                &rotation.new_ed25519_public,
+                &rotation.new_secp256k1_public,
+                &rotation.new_ed25519_signature,
+                &rotation.new_secp256k1_signature,
+            ),
+        ] {
+            let Ok(ed_bytes) = ed.as_slice().try_into() else { return false };
+            let Ok(ed_key) = ed25519_dalek::VerifyingKey::from_bytes(ed_bytes) else {
+                return false;
+            };
+            let Ok(secp_key) = k256::ecdsa::VerifyingKey::from_sec1_bytes(secp) else {
+                return false;
+            };
+            let address =
+                format!("0x{}", bytes_to_hex(&secp256k1::verifying_key_to_address(&secp_key)));
+            if generate_did_neunode(&address) != *did {
+                return false;
+            }
+            let Ok(ed_sig) = ed25519_dalek::Signature::from_slice(ed_signature) else {
+                return false;
+            };
+            let Ok(secp_sig) = secp256k1::Signature::from_slice(secp_signature) else {
+                return false;
+            };
+            if ed_key.verify_strict(&message, &ed_sig).is_err()
+                || !secp256k1::verify_signature(&secp_key, &message, &secp_sig)
+            {
+                return false;
+            }
         }
-        // Full verification would require the old public keys stored on-chain.
-        // For now, structural validation passes.
-        let _ = message;
-        true
+        rotation.old_did != rotation.new_did
     }
+}
+
+fn rotation_message(rotation: &KeyRotation) -> Vec<u8> {
+    // Public keys are fixed-length after validation; JSON length delimiters prevent ambiguity.
+    let mut message = b"NEUNODE_KEY_ROTATION_V2\0".to_vec();
+    message.extend(
+        serde_json::to_vec(&(
+            &rotation.old_did,
+            &rotation.new_did,
+            &rotation.old_ed25519_public,
+            &rotation.old_secp256k1_public,
+            &rotation.new_ed25519_public,
+            &rotation.new_secp256k1_public,
+            rotation.timestamp,
+        ))
+        .expect("public key rotation tuple is serializable"),
+    );
+    message
 }
 
 fn bytes_to_hex(bytes: &[u8]) -> String {
@@ -240,6 +279,35 @@ fn hex_to_bytes(hex: &str) -> std::result::Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rotation_rejects_forged_signatures_keys_identity_and_timestamp() {
+        let old = Keyring::generate();
+        let new = Keyring::generate();
+        let valid = Keyring::create_rotation(&old, &new, 123).unwrap();
+        assert!(Keyring::verify_rotation(&valid));
+        let mut forged = valid.clone();
+        forged.ed25519_signature = vec![0; 64];
+        assert!(!Keyring::verify_rotation(&forged));
+        let mut forged = valid.clone();
+        forged.secp256k1_signature[0] ^= 1;
+        assert!(!Keyring::verify_rotation(&forged));
+        let mut forged = valid.clone();
+        forged.new_ed25519_signature = vec![0; 64];
+        assert!(!Keyring::verify_rotation(&forged));
+        let mut forged = valid.clone();
+        forged.old_did = Keyring::generate().to_did();
+        assert!(!Keyring::verify_rotation(&forged));
+        let mut forged = valid.clone();
+        forged.new_secp256k1_public = old.secp256k1_public_key();
+        assert!(!Keyring::verify_rotation(&forged));
+        let mut forged = valid.clone();
+        forged.timestamp += 1;
+        assert!(!Keyring::verify_rotation(&forged));
+        let mut legacy = valid;
+        legacy.old_ed25519_public.clear();
+        assert!(!Keyring::verify_rotation(&legacy));
+    }
 
     #[test]
     fn generate_creates_valid_keyring() {

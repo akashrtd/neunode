@@ -55,7 +55,10 @@ impl AppState {
         let selected_identity = identity_override.or(config.active_identity.as_deref());
         let (active_keyring, active_did) = match selected_identity {
             Some(did_str) => {
-                let kr = load_keyring(did_str).ok();
+                let kr = Some(
+                    crate::keystore::load(did_str)
+                        .with_context(|| format!("failed to unlock identity {did_str}"))?,
+                );
                 let did = Did(did_str.to_string());
                 (kr, Some(did))
             }
@@ -141,6 +144,7 @@ fn expand_db_path(path: &str) -> PathBuf {
 
 /// Return the identity directory for a given DID string.
 /// `~/.neunode/identities/<sanitized_did>/`
+#[cfg(test)]
 fn identity_dir_for_did(did: &str) -> PathBuf {
     let sanitized = did.replace(':', "_");
     dirs::home_dir()
@@ -150,41 +154,8 @@ fn identity_dir_for_did(did: &str) -> PathBuf {
         .join(sanitized)
 }
 
-/// Load a keyring from disk by reading `keys.json.enc` in the identity directory.
-fn load_keyring(did: &str) -> Result<Keyring> {
-    let dir = identity_dir_for_did(did);
-    let enc_path = dir.join("keys.json.enc");
-    let contents = if enc_path.exists() {
-        let encrypted = std::fs::read(&enc_path)
-            .with_context(|| format!("failed to read {}", enc_path.display()))?;
-        #[allow(deprecated)]
-        let machine_key = neunode_crypto::aead::derive_machine_key();
-        let decrypted = neunode_crypto::aead::decrypt(&machine_key, &encrypted)
-            .with_context(|| "failed to decrypt keys.json.enc")?;
-        String::from_utf8(decrypted).with_context(|| "keys.json.enc contains invalid UTF-8")?
-    } else {
-        let legacy_path = dir.join("keys.json");
-        std::fs::read_to_string(&legacy_path)
-            .with_context(|| format!("no keys.json.enc or keys.json found in {}", dir.display()))?
-    };
-    let json: serde_json::Value = serde_json::from_str(&contents)
-        .with_context(|| format!("failed to parse key data for {did}"))?;
-
-    let ed_hex = json["ed25519_private"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("missing ed25519_private in keys.json"))?;
-    let secp_hex = json["secp256k1_private"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("missing secp256k1_private in keys.json"))?;
-
-    let ed_bytes: [u8; 32] = hex_to_bytes(ed_hex)?;
-    let secp_bytes: [u8; 32] = hex_to_bytes(secp_hex)?;
-
-    Keyring::from_bytes(&ed_bytes, &secp_bytes)
-        .map_err(|e| anyhow::anyhow!("invalid key material: {e}"))
-}
-
 /// Decode a hex string into a fixed-size 32-byte array.
+#[cfg(test)]
 fn hex_to_bytes(hex: &str) -> Result<[u8; 32]> {
     if hex.len() != 64 {
         anyhow::bail!("expected 64 hex characters, got {}", hex.len());

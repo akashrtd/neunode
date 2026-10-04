@@ -1,5 +1,4 @@
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 
 use crate::cli::{GlobalArgs, SecurityCommands};
 use crate::output::OutputWriter;
@@ -75,53 +74,28 @@ struct SanitizeResult {
 }
 
 // ---------------------------------------------------------------------------
-// Circuit breakers — persistent state via RocksDB CF_CONFIG
+// Circuit breakers — persistent manual safety stops
 // ---------------------------------------------------------------------------
 
 const BREAKER_NAMES: &[&str] = &["token_volume", "reputation", "bounty_drain"];
 
 const BREAKER_THRESHOLDS: &[&str] = &[
-    "Pauses transfers if >5% of total supply moves in 1 hour",
-    "Freezes reputation if >10% change in 24 hours",
-    "Limits bounty pool to max 5% drain per hour",
+    "Manual stop for token transfers, staking and inference spending",
+    "Manual stop for reputation writes",
+    "Manual stop for bounty mutations",
 ];
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-enum BreakerState {
-    Closed,
-    Open,
-}
+use neunode_storage::breaker_store::{BreakerRecord, BreakerState};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct BreakerRecord {
-    state: BreakerState,
-    tripped_at: Option<u64>,
-    trip_count: u64,
+fn load_breaker(db: &neunode_storage::db::NeunodeDb, name: &str) -> Result<BreakerRecord> {
+    Ok(neunode_storage::breaker_store::load(db, name)?)
 }
-
-impl Default for BreakerRecord {
-    fn default() -> Self {
-        Self { state: BreakerState::Closed, tripped_at: None, trip_count: 0 }
-    }
-}
-
-fn breaker_db_key(name: &str) -> String {
-    format!("breaker:{name}")
-}
-
-fn load_breaker(db: &neunode_storage::db::NeunodeDb, name: &str) -> BreakerRecord {
-    let store = neunode_storage::identity_store::IdentityStore::new(db);
-    store.get(&breaker_db_key(name)).unwrap_or_default().unwrap_or_default()
-}
-
 fn save_breaker(
     db: &neunode_storage::db::NeunodeDb,
     name: &str,
     record: &BreakerRecord,
 ) -> Result<()> {
-    let store = neunode_storage::identity_store::IdentityStore::new(db);
-    store.put(&breaker_db_key(name), record)?;
-    Ok(())
+    Ok(neunode_storage::breaker_store::save(db, name, record)?)
 }
 
 fn now_ts() -> u64 {
@@ -180,7 +154,11 @@ fn breaker_status(writer: &OutputWriter, state: &AppState) -> Result<()> {
         .iter()
         .zip(BREAKER_THRESHOLDS.iter())
         .map(|(name, threshold)| {
-            let rec = load_breaker(&state.db, name);
+            let rec = load_breaker(&state.db, name).unwrap_or(BreakerRecord {
+                state: BreakerState::Open,
+                tripped_at: None,
+                trip_count: 0,
+            });
             let state_str = match rec.state {
                 BreakerState::Closed => "CLOSED (normal)".to_string(),
                 BreakerState::Open => "OPEN (tripped)".to_string(),
@@ -202,13 +180,14 @@ fn breaker_status(writer: &OutputWriter, state: &AppState) -> Result<()> {
 
 fn breaker_trip(name: &str, writer: &OutputWriter, state: &AppState) -> Result<()> {
     validate_breaker_name(name)?;
-    let mut rec = load_breaker(&state.db, name);
+    let mut rec = load_breaker(&state.db, name)?;
     if rec.state == BreakerState::Open {
         anyhow::bail!("breaker {name} is already OPEN");
     }
     rec.state = BreakerState::Open;
     rec.tripped_at = Some(now_ts());
-    rec.trip_count += 1;
+    rec.trip_count =
+        rec.trip_count.checked_add(1).ok_or_else(|| anyhow::anyhow!("trip count overflow"))?;
     save_breaker(&state.db, name, &rec)?;
 
     writer.write_value("breaker", name);
@@ -219,7 +198,7 @@ fn breaker_trip(name: &str, writer: &OutputWriter, state: &AppState) -> Result<(
 
 fn breaker_reset(name: &str, writer: &OutputWriter, state: &AppState) -> Result<()> {
     validate_breaker_name(name)?;
-    let mut rec = load_breaker(&state.db, name);
+    let mut rec = load_breaker(&state.db, name)?;
     if rec.state == BreakerState::Closed {
         anyhow::bail!("breaker {name} is already CLOSED");
     }
@@ -239,7 +218,7 @@ fn breaker_reset(name: &str, writer: &OutputWriter, state: &AppState) -> Result<
 /// Check if a circuit breaker is currently tripped (Open).
 #[allow(dead_code)]
 pub fn is_breaker_tripped(db: &neunode_storage::db::NeunodeDb, name: &str) -> bool {
-    load_breaker(db, name).state == BreakerState::Open
+    neunode_storage::breaker_store::ensure_closed(db, name).is_err()
 }
 
 #[cfg(test)]

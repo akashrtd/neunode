@@ -375,7 +375,7 @@ pub async fn claim_bounty(
 ) -> Result<impl IntoResponse, ApiError> {
     let claimant = state.require_did()?;
     let updated =
-        crate::bounty_service::claim(&state.db, &id, claimant, body.stake, current_timestamp())
+        crate::bounty_service::claim(&state.db, &id, &claimant, body.stake, current_timestamp())
             .map_err(service_error)?;
 
     let resp = BountyClaimResponse {
@@ -408,7 +408,7 @@ pub async fn submit_bounty(
     let artifact_cid = body.artifact;
     let actor = state.require_did()?;
     let updated =
-        crate::bounty_service::submit(&state.db, &id, actor, &artifact_cid, current_timestamp())
+        crate::bounty_service::submit(&state.db, &id, &actor, &artifact_cid, current_timestamp())
             .map_err(service_error)?;
 
     let resp = BountySubmitResponse { bounty_id: id, artifact_cid, state: updated.state };
@@ -437,7 +437,7 @@ pub async fn review_bounty(
     let updated = crate::bounty_service::review(
         &state.db,
         &id,
-        reviewer,
+        &reviewer,
         body.score,
         &body.feedback,
         current_timestamp(),
@@ -470,7 +470,7 @@ pub async fn pay_bounty(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let actor = state.require_did()?;
-    let payment = crate::bounty_service::pay(&state.db, &id, actor, current_timestamp())
+    let payment = crate::bounty_service::pay(&state.db, &id, &actor, current_timestamp())
         .map_err(service_error)?;
 
     let resp = BountyPayResponse {
@@ -501,7 +501,7 @@ pub async fn cancel_bounty(
     Json(body): Json<CancelBountyRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let actor = state.require_did()?;
-    let updated = crate::bounty_service::cancel(&state.db, &id, actor, current_timestamp())
+    let updated = crate::bounty_service::cancel(&state.db, &id, &actor, current_timestamp())
         .map_err(service_error)?;
 
     let resp = BountyCancelResponse {

@@ -3,6 +3,7 @@ use std::process::ExitCode;
 use clap::Parser;
 
 mod api;
+mod api_auth;
 mod bounty_service;
 mod cli;
 mod cmd_bounty;
@@ -29,8 +30,11 @@ mod cmd_verify;
 mod config;
 mod error;
 mod feed_wire;
+mod inference_service;
+mod keystore;
 mod mesh_handle;
 mod output;
+mod reputation_service;
 mod state;
 mod token_wire;
 mod turboquant_service;
@@ -94,7 +98,7 @@ fn main() -> ExitCode {
             cmd_reputation::execute(command, &global_args, &mut app_state)
         }
         Commands::Inference { command } => {
-            cmd_inference::execute(command, &global_args, &mut app_state)
+            rt.block_on(cmd_inference::execute(command, &global_args, &mut app_state))
         }
         Commands::Knowledge { command } => {
             cmd_knowledge::execute(command, &global_args, &mut app_state)

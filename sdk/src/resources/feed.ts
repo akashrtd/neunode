@@ -17,6 +17,7 @@ export interface FeedListParams {
 	kind?: number;
 	author?: string;
 	limit?: number;
+	fromSequence?: number;
 }
 
 export interface FeedListItem {
@@ -26,6 +27,8 @@ export interface FeedListItem {
 	readonly author_did: string;
 	readonly content: string;
 	readonly signature: string;
+	/** Complete canonical event, including ID, previous hash and tags. */
+	readonly event?: Record<string, unknown> | null;
 }
 
 export type FeedShowResult = FeedListItem;
@@ -68,6 +71,8 @@ export function createFeedResource(client: NeunodeClient): FeedResource {
 			if (params?.kind !== undefined) qs.set("kind", String(params.kind));
 			if (params?.author) qs.set("author", params.author);
 			if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+			if (params?.fromSequence !== undefined)
+				qs.set("from_sequence", String(params.fromSequence));
 			const query = qs.toString();
 			return http().get<FeedListItem[]>(
 				query ? `/api/v1/feed?${query}` : "/api/v1/feed",

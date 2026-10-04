@@ -69,26 +69,7 @@ fn create_identity(
     fs::create_dir_all(&dir)
         .with_context(|| format!("failed to create identity directory {}", dir.display()))?;
 
-    let (ed_bytes, secp_bytes) = keyring.to_bytes();
-    let key_data = serde_json::json!({
-        "ed25519_private": bytes_to_hex(&ed_bytes),
-        "secp256k1_private": bytes_to_hex(&secp_bytes),
-    });
-    let key_json = serde_json::to_string_pretty(&key_data)?;
-    #[allow(deprecated)]
-    let machine_key = neunode_crypto::aead::derive_machine_key();
-    let encrypted = neunode_crypto::aead::encrypt(&machine_key, key_json.as_bytes())
-        .with_context(|| "failed to encrypt key data")?;
-    let keys_path = dir.join("keys.json.enc");
-    fs::write(&keys_path, &encrypted).with_context(|| "failed to write keys.json.enc")?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let perms = std::fs::Permissions::from_mode(0o600);
-        fs::set_permissions(&keys_path, perms)
-            .with_context(|| "failed to set permissions on keys.json.enc")?;
-    }
+    crate::keystore::save_at(&dir, &keyring)?;
 
     fs::write(dir.join("did_document.json"), doc.to_json()?)
         .with_context(|| "failed to write did_document.json")?;
@@ -246,10 +227,6 @@ fn export_identity(
     Ok(())
 }
 
-fn bytes_to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
 pub(crate) fn attempt_onchain_registration(
     keyring: &neunode_identity::keyring::Keyring,
     config: &crate::config::CliConfig,
@@ -284,7 +261,7 @@ fn register_onchain(writer: &OutputWriter, state: &AppState) -> Result<()> {
         Some(result) => {
             let out = serde_json::json!({
                 "tx_hash": result.tx_hash,
-                "did_hash": format!("0x{}", bytes_to_hex(&result.did_hash)),
+                "did_hash": format!("0x{}", hex::encode(result.did_hash)),
                 "block_number": result.block_number,
             });
             writer.write_json(&out);

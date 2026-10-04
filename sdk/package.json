@@ -1,7 +1,7 @@
 {
   "name": "@neunode/sdk",
   "version": "0.1.0",
-  "description": "TypeScript SDK for Neunode — decentralized AI agent social network",
+  "description": "TypeScript SDK for Neunode \u2014 decentralized AI agent social network",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -16,6 +16,16 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./contracts": {
+      "import": {
+        "types": "./dist/contracts.d.ts",
+        "default": "./dist/contracts.js"
+      },
+      "require": {
+        "types": "./dist/contracts.d.cts",
+        "default": "./dist/contracts.cjs"
+      }
     }
   },
   "files": [
@@ -29,6 +39,7 @@
     "test:watch": "vitest",
     "test:e2e": "vitest run --config tests/e2e/vitest.config.ts",
     "test:integration": "vitest run --config tests/integration/vitest.config.ts",
+    "test:beta": "vitest run --config tests/beta/vitest.config.ts",
     "generate:protocol": "node scripts/protocol-types.mjs --write",
     "check:protocol": "node scripts/protocol-types.mjs",
     "generate:abi": "node scripts/contract-abis.mjs --write",

@@ -1,6 +1,5 @@
 use anyhow::Result;
 use neunode_core::kind::Kind;
-use neunode_core::types::Hash256;
 use neunode_storage::feed_store::StoredEvent;
 
 use crate::cli::{FeedCommands, GlobalArgs};
@@ -28,81 +27,11 @@ fn feed_post(
     state: &AppState,
     writer: &OutputWriter,
 ) -> Result<()> {
-    let kind_val = (kind as u16)
-        .try_into()
-        .map_err(|e: neunode_core::NeunodeError| anyhow::anyhow!("invalid kind {}: {e}", kind))?;
-
     let keyring = state.require_keyring()?;
-    let did = state.require_did()?;
-
-    let store = state.feed_store();
-    let latest_seq = store.latest_sequence(&did.0)?;
-    let next_seq = if latest_seq == 0 { 1 } else { latest_seq + 1 };
-
-    let prev_hash = if latest_seq == 0 {
-        Hash256("0".to_string())
-    } else {
-        match store.get(&did.0, latest_seq)? {
-            Some(prev) => {
-                let prev_event = neunode_feed::event::FeedEvent::new(
-                    Kind::AgentMetadata,
-                    did.clone(),
-                    prev.sequence,
-                    Hash256(
-                        std::str::from_utf8(&prev.prev_hash)
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|_| "0".to_string()),
-                    ),
-                    prev.payload.iter().map(|&b| b as char).collect::<String>(),
-                )?;
-                prev_event.compute_hash()?
-            }
-            None => Hash256("0".to_string()),
-        }
-    };
-
-    let prev_hash_bytes = prev_hash.0.as_bytes().to_vec();
-
-    let mut event = neunode_feed::event::FeedEvent::new(
-        kind_val,
-        did.clone(),
-        next_seq,
-        prev_hash,
-        content.to_string(),
-    )?;
-
-    let parsed_tags: Vec<neunode_feed::event::EventTag> = tags
-        .iter()
-        .map(|t| {
-            let parts: Vec<&str> = t.splitn(2, '=').collect();
-            neunode_feed::event::EventTag {
-                key: parts.first().unwrap_or(&"").to_string(),
-                value: parts.get(1).unwrap_or(&"").to_string(),
-            }
-        })
-        .collect();
-    event.tags = parsed_tags;
-
-    event.validate()?;
-
-    let (ed_bytes, _) = keyring.to_bytes();
-    let ed_bytes_fixed: [u8; 32] = ed_bytes
-        .as_slice()
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("invalid ed25519 key length"))?;
-    event.sign(&ed_bytes_fixed)?;
-
-    let stored = StoredEvent {
-        kind: kind_val.as_u16(),
-        timestamp: event.timestamp,
-        agent_did: did.0.clone(),
-        sequence: next_seq,
-        prev_hash: prev_hash_bytes,
-        payload: content.as_bytes().to_vec(),
-        signature: event.signature.as_ref().map(|s| s.0.as_bytes().to_vec()).unwrap_or_default(),
-    };
-    store.append(&stored)?;
-
+    let event =
+        crate::feed_wire::create_event(state.db(), keyring, kind, content.to_string(), tags)?;
+    let kind_val = event.kind;
+    let next_seq = event.sequence;
     let kind_name = kind_name(kind_val);
     let topic = kind_val.gossipsub_topic();
     let kind_display = format!("{} ({})", kind, kind_name);
@@ -167,8 +96,10 @@ fn feed_list(
 fn feed_subscribe(kind: Option<u32>, writer: &OutputWriter, state: &mut AppState) -> Result<()> {
     let topic_filter = match kind {
         Some(k) => {
-            let kind_val: Kind =
-                (k as u16).try_into().map_err(|e: neunode_core::NeunodeError| {
+            let kind_val: Kind = u16::try_from(k)
+                .map_err(|_| anyhow::anyhow!("kind exceeds wire bounds"))?
+                .try_into()
+                .map_err(|e: neunode_core::NeunodeError| {
                     anyhow::anyhow!("invalid kind {k}: {e}")
                 })?;
             Some(kind_val.gossipsub_topic().to_string())
@@ -230,8 +161,8 @@ fn feed_show(event_id: &str, state: &AppState, writer: &OutputWriter) -> Result<
 
     let events = store.get_all(&did.0)?;
     let found = events.iter().find(|e| {
-        let id_hex = hex::encode(&e.signature);
-        id_hex.contains(event_id) || event_id.starts_with(&format!("seq:{}", e.sequence))
+        crate::feed_wire::stored_to_event(e).is_ok_and(|event| event.id.0 == event_id)
+            || event_id == format!("seq:{}", e.sequence)
     });
 
     match found {
@@ -241,8 +172,8 @@ fn feed_show(event_id: &str, state: &AppState, writer: &OutputWriter) -> Result<
                 ("Kind", event.kind.to_string()),
                 ("Timestamp", event.timestamp.to_string()),
                 ("Author", event.agent_did.clone()),
-                ("Content", std::str::from_utf8(&event.payload).unwrap_or("(binary)").to_string()),
-                ("Signature", hex::encode(&event.signature)),
+                ("Content", crate::feed_wire::stored_to_event(event)?.content),
+                ("Signature", String::from_utf8_lossy(&event.signature).into_owned()),
             ];
             writer.write_key_value_pairs(
                 &pairs.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>(),
@@ -292,5 +223,7 @@ fn kind_name(kind: Kind) -> &'static str {
         Kind::Vote => "Vote",
         Kind::Delegate => "Delegate",
         Kind::ParameterChange => "ParameterChange",
+        Kind::Post => "Post",
+        Kind::Reply => "Reply",
     }
 }

@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use alloy::primitives::{Address, B256};
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
 use crate::{BridgeError, Result, ValidatorSet};
@@ -14,8 +14,18 @@ pub enum VoteStep {
     Precommit,
 }
 
+/// Scope prevents certificates being replayed across networks or validator epochs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConsensusDomain {
+    pub chain_id: u64,
+    pub genesis_hash: B256,
+    pub epoch: u64,
+    pub validator_set_hash: B256,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignedVote {
+    pub domain: ConsensusDomain,
     pub height: u64,
     pub round: i64,
     pub step: VoteStep,
@@ -26,6 +36,7 @@ pub struct SignedVote {
 
 impl SignedVote {
     pub fn sign(
+        domain: &ConsensusDomain,
         height: u64,
         round: i64,
         step: VoteStep,
@@ -33,8 +44,9 @@ impl SignedVote {
         validator: Address,
         key: &SigningKey,
     ) -> Self {
-        let bytes = sign_bytes(height, round, step, block_hash);
+        let bytes = sign_bytes(domain, height, round, step, block_hash);
         Self {
+            domain: domain.clone(),
             height,
             round,
             step,
@@ -68,6 +80,7 @@ pub struct ConsensusSnapshot {
 
 /// Collects authenticated votes for one height and rejects equivocation.
 pub struct VoteCollector {
+    pub domain: ConsensusDomain,
     validators: ValidatorSet,
     keys: BTreeMap<Address, VerifyingKey>,
     votes: BTreeMap<(u64, i64, VoteStep, Address), SignedVote>,
@@ -78,17 +91,61 @@ impl VoteCollector {
     pub fn new(
         validators: ValidatorSet,
         keys: impl IntoIterator<Item = (Address, VerifyingKey)>,
+        chain_id: u64,
+        genesis_hash: B256,
+        epoch: u64,
     ) -> Result<Self> {
-        let keys = keys.into_iter().collect::<BTreeMap<_, _>>();
+        let invalid = |reason: &str| BridgeError::InvalidProposal(reason.into());
+        let mut members = BTreeMap::new();
+        let mut total = 0u64;
+        for validator in &validators.validators {
+            if validator.voting_power == 0
+                || members.insert(validator.address, validator.voting_power).is_some()
+            {
+                return Err(invalid("zero-power or duplicate validator"));
+            }
+            total = total
+                .checked_add(validator.voting_power)
+                .ok_or_else(|| invalid("validator power overflow"))?;
+        }
+        if total == 0 || total != validators.total_voting_power {
+            return Err(invalid("inconsistent validator total power"));
+        }
+        let mut verified_keys = BTreeMap::new();
+        for (address, key) in keys {
+            if !members.contains_key(&address) || verified_keys.insert(address, key).is_some() {
+                return Err(invalid("unknown or duplicate validator key"));
+            }
+        }
+        let keys = verified_keys;
+        let mut binding = Vec::new();
+        for (address, power) in &members {
+            binding.extend(address.as_slice());
+            binding.extend(power.to_be_bytes());
+            let key =
+                keys.get(address).ok_or_else(|| invalid("validator verification key missing"))?;
+            binding.extend(key.as_bytes());
+        }
+        let domain = ConsensusDomain {
+            chain_id,
+            genesis_hash,
+            epoch,
+            validator_set_hash: alloy::primitives::keccak256(binding),
+        };
         if validators.validators.iter().any(|validator| !keys.contains_key(&validator.address)) {
             return Err(BridgeError::InvalidProposal(
                 "validator set contains an address without a verification key".into(),
             ));
         }
-        Ok(Self { validators, keys, votes: BTreeMap::new(), evidence: Vec::new() })
+        Ok(Self { domain, validators, keys, votes: BTreeMap::new(), evidence: Vec::new() })
     }
 
     pub fn add_vote(&mut self, vote: SignedVote) -> Result<Option<CommitCertificate>> {
+        if vote.domain != self.domain || vote.height == 0 || vote.round < 0 {
+            return Err(BridgeError::InvalidProposal(
+                "invalid consensus domain, height or round".into(),
+            ));
+        }
         self.validators
             .validators
             .iter()
@@ -98,8 +155,11 @@ impl VoteCollector {
         let key = self.keys.get(&vote.validator).expect("keys checked at construction");
         let signature = Signature::from_slice(&vote.signature)
             .map_err(|error| BridgeError::InvalidProposal(error.to_string()))?;
-        key.verify(&sign_bytes(vote.height, vote.round, vote.step, vote.block_hash), &signature)
-            .map_err(|_| BridgeError::InvalidProposal("invalid validator signature".into()))?;
+        key.verify_strict(
+            &sign_bytes(&vote.domain, vote.height, vote.round, vote.step, vote.block_hash),
+            &signature,
+        )
+        .map_err(|_| BridgeError::InvalidProposal("invalid validator signature".into()))?;
 
         let position = (vote.height, vote.round, vote.step, vote.validator);
         if let Some(existing) = self.votes.get(&position) {
@@ -129,6 +189,9 @@ impl VoteCollector {
         let mut verifier = Self::new(
             self.validators.clone(),
             self.keys.iter().map(|(address, key)| (*address, *key)),
+            self.domain.chain_id,
+            self.domain.genesis_hash,
+            self.domain.epoch,
         )?;
         let mut verified = None;
         for vote in &certificate.votes {
@@ -158,8 +221,11 @@ impl VoteCollector {
 
     /// Verify a consecutive sequence of finalized decisions received from a peer.
     pub fn verify_snapshot(&self, snapshot: &ConsensusSnapshot, after_height: u64) -> Result<()> {
-        let mut expected = after_height + 1;
+        let mut expected = after_height;
         for certificate in &snapshot.certificates {
+            expected = expected
+                .checked_add(1)
+                .ok_or_else(|| BridgeError::InvalidProposal("state sync height overflow".into()))?;
             if certificate.height != expected {
                 return Err(BridgeError::InvalidProposal(format!(
                     "state sync height gap: expected {expected}, got {}",
@@ -167,7 +233,6 @@ impl VoteCollector {
                 )));
             }
             self.verify_certificate(certificate)?;
-            expected += 1;
         }
         Ok(())
     }
@@ -199,7 +264,7 @@ impl VoteCollector {
             })
             .map(|validator| validator.voting_power)
             .sum();
-        if signed_power.saturating_mul(3) <= self.validators.total_voting_power.saturating_mul(2) {
+        if u128::from(signed_power) * 3 <= u128::from(self.validators.total_voting_power) * 2 {
             return None;
         }
         Some(CommitCertificate {
@@ -213,8 +278,18 @@ impl VoteCollector {
     }
 }
 
-fn sign_bytes(height: u64, round: i64, step: VoteStep, block_hash: B256) -> Vec<u8> {
-    let mut bytes = b"neunode-consensus-v1".to_vec();
+fn sign_bytes(
+    domain: &ConsensusDomain,
+    height: u64,
+    round: i64,
+    step: VoteStep,
+    block_hash: B256,
+) -> Vec<u8> {
+    let mut bytes = b"neunode-consensus-v2".to_vec();
+    bytes.extend(domain.chain_id.to_be_bytes());
+    bytes.extend(domain.genesis_hash.as_slice());
+    bytes.extend(domain.epoch.to_be_bytes());
+    bytes.extend(domain.validator_set_hash.as_slice());
     bytes.extend(height.to_be_bytes());
     bytes.extend(round.to_be_bytes());
     bytes.push(match step {
@@ -246,10 +321,48 @@ mod tests {
             total_voting_power: count as u64,
         };
         let keys = signers.iter().map(|(address, key)| (*address, key.verifying_key()));
-        (VoteCollector::new(validators, keys).unwrap(), signers)
+        (VoteCollector::new(validators, keys, 2026001, B256::repeat_byte(42), 0).unwrap(), signers)
     }
 
     use alloy::primitives::U256;
+
+    #[test]
+    fn votes_are_scoped_and_validator_metadata_is_checked() {
+        let (mut collector, signers) = network(4);
+        for field in 0..4 {
+            let mut domain = collector.domain.clone();
+            match field {
+                0 => domain.chain_id += 1,
+                1 => domain.genesis_hash = B256::ZERO,
+                2 => domain.epoch += 1,
+                _ => domain.validator_set_hash = B256::ZERO,
+            }
+            let vote = SignedVote::sign(
+                &domain,
+                1,
+                0,
+                VoteStep::Precommit,
+                B256::ZERO,
+                signers[0].0,
+                &signers[0].1,
+            );
+            assert!(collector.add_vote(vote).is_err());
+        }
+        let keys = || signers.iter().map(|(address, key)| (*address, key.verifying_key()));
+        let mut set = collector.validators.clone();
+        set.total_voting_power = 1;
+        assert!(VoteCollector::new(set, keys(), 1, B256::ZERO, 0).is_err());
+        let mut set = collector.validators.clone();
+        set.validators[1].address = set.validators[0].address;
+        assert!(VoteCollector::new(set, keys(), 1, B256::ZERO, 0).is_err());
+        let mut set = collector.validators.clone();
+        set.validators[0].voting_power = 0;
+        set.total_voting_power = 3;
+        assert!(VoteCollector::new(set, keys(), 1, B256::ZERO, 0).is_err());
+        assert!(collector
+            .verify_snapshot(&ConsensusSnapshot { certificates: vec![] }, u64::MAX)
+            .is_ok());
+    }
 
     #[test]
     fn four_validators_finalize_with_one_offline() {
@@ -257,7 +370,15 @@ mod tests {
         let hash = B256::repeat_byte(7);
         for (index, (address, key)) in validators.iter().take(3).enumerate() {
             let certificate = collector
-                .add_vote(SignedVote::sign(9, 0, VoteStep::Precommit, hash, *address, key))
+                .add_vote(SignedVote::sign(
+                    &collector.domain,
+                    9,
+                    0,
+                    VoteStep::Precommit,
+                    hash,
+                    *address,
+                    key,
+                ))
                 .unwrap();
             assert_eq!(certificate.is_some(), index == 2);
         }
@@ -272,7 +393,15 @@ mod tests {
         let hash = B256::repeat_byte(8);
         for (address, key) in validators.iter().take(2) {
             assert!(collector
-                .add_vote(SignedVote::sign(2, 0, VoteStep::Precommit, hash, *address, key))
+                .add_vote(SignedVote::sign(
+                    &collector.domain,
+                    2,
+                    0,
+                    VoteStep::Precommit,
+                    hash,
+                    *address,
+                    key
+                ))
                 .unwrap()
                 .is_none());
         }
@@ -284,6 +413,7 @@ mod tests {
         let (address, key) = &validators[0];
         collector
             .add_vote(SignedVote::sign(
+                &collector.domain,
                 3,
                 1,
                 VoteStep::Precommit,
@@ -294,6 +424,7 @@ mod tests {
             .unwrap();
         let error = collector
             .add_vote(SignedVote::sign(
+                &collector.domain,
                 3,
                 1,
                 VoteStep::Precommit,
@@ -311,6 +442,7 @@ mod tests {
         let (mut collector, validators) = network(4);
         let (address, _) = &validators[0];
         let forged = SignedVote::sign(
+            &collector.domain,
             1,
             0,
             VoteStep::Precommit,
@@ -330,7 +462,15 @@ mod tests {
             let mut certificate = None;
             for (address, key) in validators.iter().take(3) {
                 certificate = producer
-                    .add_vote(SignedVote::sign(height, 0, VoteStep::Precommit, hash, *address, key))
+                    .add_vote(SignedVote::sign(
+                        &producer.domain,
+                        height,
+                        0,
+                        VoteStep::Precommit,
+                        hash,
+                        *address,
+                        key,
+                    ))
                     .unwrap()
                     .or(certificate);
             }
@@ -348,7 +488,15 @@ mod tests {
         let mut certificate = None;
         for (address, key) in validators.iter().take(3) {
             certificate = producer
-                .add_vote(SignedVote::sign(2, 0, VoteStep::Precommit, hash, *address, key))
+                .add_vote(SignedVote::sign(
+                    &producer.domain,
+                    2,
+                    0,
+                    VoteStep::Precommit,
+                    hash,
+                    *address,
+                    key,
+                ))
                 .unwrap()
                 .or(certificate);
         }

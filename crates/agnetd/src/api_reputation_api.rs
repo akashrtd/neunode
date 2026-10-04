@@ -113,7 +113,7 @@ pub async fn show_reputation(
     };
 
     let db = &state.db;
-    let attestations = load_attestations_for(db, &agent_did);
+    let attestations = crate::reputation_service::attestations_for(db, &agent_did)?;
 
     let avg_score = if attestations.is_empty() {
         0.0
@@ -121,17 +121,7 @@ pub async fn show_reputation(
         attestations.iter().map(|a| a.score).sum::<f64>() / attestations.len() as f64
     };
 
-    let inputs = neunode_reputation::score::FactorInputs {
-        staked_amount: neunode_core::types::TokenAmount(0),
-        total_staked: neunode_core::types::TokenAmount(0),
-        attestation_count: attestations.len() as u32,
-        avg_attestation_score: avg_score,
-        events_per_day: 0.0,
-        days_active: 0,
-        tasks_completed: 0,
-        tasks_failed: 0,
-        days_since_creation: 0,
-    };
+    let inputs = crate::reputation_service::inputs(db, &agent_did)?;
     let score = neunode_reputation::score::ReputationScore::compute_default(&inputs);
     let grade = score.grade();
 
@@ -227,31 +217,11 @@ pub async fn leaderboard(
     Query(params): Query<LeaderboardQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
     let db = &state.db;
-    let entries = db
-        .prefix_scan(neunode_storage::cf::CF_REPUTATION, &[])
-        .map_err(|e| ApiError::Internal(format!("reputation scan: {e}")))?;
-
-    let mut agent_scores: std::collections::HashMap<String, (f64, usize)> =
-        std::collections::HashMap::new();
-
-    for (_, value_bytes) in &entries {
-        if let Ok(att) = neunode_storage::codec::deserialize::<
-            neunode_reputation::attestation::Attestation,
-        >(value_bytes)
-        {
-            let entry = agent_scores.entry(att.target.0.clone()).or_insert((0.0, 0));
-            entry.0 += att.score;
-            entry.1 += 1;
-        }
-    }
-
-    let mut ranked: Vec<(String, f64)> =
-        agent_scores.into_iter().map(|(did, (sum, count))| (did, sum / count as f64)).collect();
-    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let ranked = crate::reputation_service::leaderboard(db)?;
 
     let leaderboard: Vec<LeaderboardEntry> = ranked
         .iter()
-        .take(params.limit)
+        .take(params.limit.min(1000))
         .enumerate()
         .map(|(i, (agent, score))| LeaderboardEntry {
             rank: i + 1,
@@ -286,24 +256,7 @@ pub async fn show_factors(
     };
 
     let db = &state.db;
-    let attestations = load_attestations_for(db, &agent);
-    let avg_score = if attestations.is_empty() {
-        0.0
-    } else {
-        attestations.iter().map(|a| a.score).sum::<f64>() / attestations.len() as f64
-    };
-
-    let inputs = neunode_reputation::score::FactorInputs {
-        staked_amount: neunode_core::types::TokenAmount(0),
-        total_staked: neunode_core::types::TokenAmount(0),
-        attestation_count: attestations.len() as u32,
-        avg_attestation_score: avg_score,
-        events_per_day: 0.0,
-        days_active: 0,
-        tasks_completed: 0,
-        tasks_failed: 0,
-        days_since_creation: 0,
-    };
+    let inputs = crate::reputation_service::inputs(db, &agent)?;
 
     let weights = neunode_reputation::factors::FactorWeights::default();
     let score = neunode_reputation::score::ReputationScore::compute(&weights, &inputs);
@@ -352,7 +305,10 @@ fn persist_attestation(
     db: &neunode_storage::db::NeunodeDb,
     attestation: &neunode_reputation::attestation::Attestation,
 ) -> Result<(), ApiError> {
-    let key = format!("att_{}_{}", attestation.attester.0, attestation.timestamp);
+    let key = format!(
+        "att_{}_{}_{}",
+        attestation.attester.0, attestation.target.0, attestation.timestamp
+    );
     let key_bytes = neunode_storage::codec::serialize(&key)
         .map_err(|e| ApiError::Internal(format!("key serialization: {e}")))?;
     let value_bytes = neunode_storage::codec::serialize(attestation)
@@ -360,22 +316,4 @@ fn persist_attestation(
     db.put_raw(neunode_storage::cf::CF_REPUTATION, &key_bytes, &value_bytes)
         .map_err(|e| ApiError::Internal(format!("persist attestation: {e}")))?;
     Ok(())
-}
-
-fn load_attestations_for(
-    db: &neunode_storage::db::NeunodeDb,
-    did: &str,
-) -> Vec<neunode_reputation::attestation::Attestation> {
-    let entries = match db.prefix_scan(neunode_storage::cf::CF_REPUTATION, &[]) {
-        Ok(e) => e,
-        Err(_) => return Vec::new(),
-    };
-    entries
-        .iter()
-        .filter_map(|(_, v)| {
-            neunode_storage::codec::deserialize::<neunode_reputation::attestation::Attestation>(v)
-                .ok()
-        })
-        .filter(|a| a.target.0 == did)
-        .collect()
 }

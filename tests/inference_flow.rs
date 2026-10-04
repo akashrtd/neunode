@@ -269,25 +269,28 @@ fn all_routing_strategies_select_correctly() {
 #[test]
 fn settlement_cost_calculation_edge_cases() {
     let exact =
-        SettlementEngine::calculate_cost(1_000_000, 1_000_000, TokenAmount(100), TokenAmount(200));
+        SettlementEngine::calculate_cost(1_000_000, 1_000_000, TokenAmount(100), TokenAmount(200))
+            .unwrap();
     assert_eq!(exact, TokenAmount(300));
 
     let sub =
-        SettlementEngine::calculate_cost(500_000, 500_000, TokenAmount(100), TokenAmount(200));
+        SettlementEngine::calculate_cost(500_000, 500_000, TokenAmount(100), TokenAmount(200))
+            .unwrap();
     assert_eq!(sub, TokenAmount(150));
 
-    let zero = SettlementEngine::calculate_cost(0, 0, TokenAmount(100), TokenAmount(200));
+    let zero = SettlementEngine::calculate_cost(0, 0, TokenAmount(100), TokenAmount(200)).unwrap();
     assert_eq!(zero, TokenAmount(0));
 
-    let minimum = SettlementEngine::calculate_cost(100, 50, TokenAmount(100), TokenAmount(200));
+    let minimum =
+        SettlementEngine::calculate_cost(100, 50, TokenAmount(100), TokenAmount(200)).unwrap();
     assert_eq!(minimum, TokenAmount(1), "sub-million tokens should floor to minimum 1");
 
     let input_only =
-        SettlementEngine::calculate_cost(1_000_000, 0, TokenAmount(500), TokenAmount(0));
+        SettlementEngine::calculate_cost(1_000_000, 0, TokenAmount(500), TokenAmount(0)).unwrap();
     assert_eq!(input_only, TokenAmount(500));
 
     let output_only =
-        SettlementEngine::calculate_cost(0, 1_000_000, TokenAmount(0), TokenAmount(300));
+        SettlementEngine::calculate_cost(0, 1_000_000, TokenAmount(0), TokenAmount(300)).unwrap();
     assert_eq!(output_only, TokenAmount(300));
 }
 

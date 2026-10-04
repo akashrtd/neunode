@@ -30,6 +30,7 @@ function makeClient(): {
 			train: {} as never,
 			bounty: {} as never,
 			token: {} as never,
+			security: {} as never,
 			reputation: {} as never,
 			inference: {} as never,
 			knowledge: {} as never,

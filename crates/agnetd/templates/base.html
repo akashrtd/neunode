@@ -427,8 +427,38 @@
 
     <!-- Main content -->
     <div class="main-content">
+      <form id="daemon-access" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap" autocomplete="off">
+        <label for="daemon-token">Daemon access token</label>
+        <input id="daemon-token" class="input-field" style="width:280px" type="password" autocomplete="off" placeholder="Token from your daemon's api-token file" required>
+        <button class="btn btn-primary" type="submit">Unlock actions for this tab</button>
+        <button class="btn" id="daemon-lock" type="button">Lock</button>
+        <span class="text-muted mono" id="daemon-access-status" role="status"></span>
+      </form>
       {% block content %}{% endblock %}
     </div>
   </div>
+  <script>
+    (() => {
+      const key = "neunode-daemon-token";
+      const status = document.getElementById("daemon-access-status");
+      function refresh() { status.textContent = sessionStorage.getItem(key) ? "Actions unlocked" : "Read only"; }
+      document.getElementById("daemon-access").addEventListener("submit", event => {
+        event.preventDefault();
+        const input = document.getElementById("daemon-token");
+        sessionStorage.setItem(key, input.value);
+        input.value = "";
+        refresh();
+      });
+      document.getElementById("daemon-lock").addEventListener("click", () => { sessionStorage.removeItem(key); refresh(); });
+      document.body.addEventListener("htmx:configRequest", event => {
+        const token = sessionStorage.getItem(key);
+        if (token) event.detail.headers.Authorization = "Bearer " + token;
+      });
+      document.body.addEventListener("htmx:responseError", event => {
+        if (event.detail.xhr.status === 401) status.textContent = "Access denied: check the daemon token";
+      });
+      refresh();
+    })();
+  </script>
 </body>
 </html>

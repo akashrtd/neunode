@@ -30,6 +30,8 @@ pub mod model_api;
 pub mod reputation_api;
 #[path = "api_routes.rs"]
 pub mod routes;
+#[path = "api_security_api.rs"]
+pub mod security_api;
 #[path = "api_state.rs"]
 pub mod state;
 #[path = "api_token_api.rs"]
@@ -49,6 +51,13 @@ pub use routes::build_api_router;
 #[derive(utoipa::OpenApi)]
 #[openapi(
     paths(
+        health_api::health_handler,
+        feed_api::post_feed,
+        feed_api::list_feed,
+        feed_api::show_feed_event,
+        inference_api::request_inference,
+        security_api::list,
+        security_api::set,
         identity_api::show_identity,
         identity_api::export_identity,
         verification_api::verify_intel_tdx,

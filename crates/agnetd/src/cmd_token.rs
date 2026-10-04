@@ -12,6 +12,12 @@ use crate::token_wire::{TokenBalanceWire, TokenBalancesWire};
 use crate::util::{parse_token_type, token_type_display};
 
 pub fn execute(cmd: &TokenCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
+    if !matches!(
+        cmd,
+        TokenCommands::Balance { .. } | TokenCommands::StakeStatus | TokenCommands::DecayInfo
+    ) {
+        neunode_storage::breaker_store::ensure_closed(state.db(), "token_volume")?;
+    }
     let writer = OutputWriter::new(args.output);
     match cmd {
         TokenCommands::Balance { token } => show_balance(token.as_deref(), &writer, state),
@@ -300,22 +306,34 @@ fn seed_tokens(agent: Option<&str>, writer: &OutputWriter, state: &AppState) -> 
         ("nStorage", TOKEN_STORAGE, token::SEED_STORAGE),
     ];
 
-    let store = state.token_store();
-    let mut total_seed: u128 = 0;
-    let mut granted = Vec::new();
-
-    for (name, token_byte, amount) in &seeds {
-        let mut bal = store.get_balance(&did, *token_byte)?;
-        // Only grant if not already seeded (staked == 0 and balance == 0)
-        if bal.balance == 0 && bal.staked == 0 && *amount > 0 {
-            bal.staked = *amount;
-            store.set_balance(&did, *token_byte, &bal)?;
-            total_seed += amount;
-            granted.push(format!("{name}: {amount} (staked)"));
+    let total_seed: u128 = seeds.iter().map(|(_, _, amount)| *amount).sum();
+    let granted = state.db.with_ledger_write(|| {
+        use neunode_storage::{cf, codec, error::StorageError, token_store::TokenBalance};
+        neunode_storage::breaker_store::ensure_closed(&state.db, "token_volume")?;
+        let marker = format!("seed:{did}").into_bytes();
+        if state.db.get_raw(cf::CF_MODELS, &marker)?.is_some() {
+            return Ok::<_, StorageError>(false);
         }
-    }
+        let hash = cf::did_hash_16(&did);
+        let mut writes = Vec::new();
+        for (_, token_type, amount) in seeds {
+            let key = cf::token_key(&hash, token_type).to_vec();
+            // A legacy token record is evidence of previous initialization, even if spent.
+            if state.db.get_raw(cf::CF_TOKENS, &key)?.is_some() {
+                return Ok(false);
+            }
+            let value = codec::serialize(&TokenBalance { staked: amount, ..Default::default() })
+                .map_err(|error| StorageError::Serialization(error.to_string()))?;
+            writes.push((cf::CF_TOKENS, key, value));
+        }
+        writes.push((cf::CF_MODELS, marker, vec![1]));
+        let entries: Vec<_> =
+            writes.iter().map(|(cf, key, value)| (*cf, key.as_slice(), value.as_slice())).collect();
+        state.db.batch_put_raw(&entries)?;
+        Ok(true)
+    })?;
 
-    if granted.is_empty() {
+    if !granted {
         writer.write_status(&format!("{did} already has tokens — seed skipped"));
     } else {
         let headers = ["Token", "Amount", "Type"];
@@ -346,6 +364,23 @@ mod tests {
         store
             .set_balance(&did.0, token_byte, &TokenBalance { balance, staked, last_decay_epoch: 0 })
             .unwrap();
+    }
+
+    #[test]
+    fn spent_bootstrap_grants_cannot_be_reissued() {
+        let state = test_state();
+        seed_tokens(None, &test_writer(), &state).unwrap();
+        let did = state.require_did().unwrap().0.clone();
+        for token in [TOKEN_COMPUTE, TOKEN_TRAINING, TOKEN_BANDWIDTH, TOKEN_STORAGE] {
+            state.token_store().set_balance(&did, token, &TokenBalance::default()).unwrap();
+        }
+        seed_tokens(None, &test_writer(), &state).unwrap();
+        assert!(state
+            .token_store()
+            .get_all_balances(&did)
+            .unwrap()
+            .iter()
+            .all(|balance| balance.balance == 0 && balance.staked == 0));
     }
 
     #[test]

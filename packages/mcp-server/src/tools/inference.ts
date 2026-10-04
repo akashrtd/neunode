@@ -46,7 +46,7 @@ export function registerInferenceTools(
 
   server.tool(
     "neunode_request_inference",
-    "Submit an inference request to the Neunode network",
+    "Execute an inference request and return a completion and local settlement receipt",
     {
       model: z.string().min(1).describe("Model ID to use for inference"),
       prompt: z.string().min(1).describe("The prompt text to send"),
@@ -56,6 +56,7 @@ export function registerInferenceTools(
         .min(1)
         .optional()
         .describe("Maximum tokens to generate (default: 256)"),
+      idempotency_key: z.string().min(1).max(128).optional().describe("Reuse the same key and input when retrying an ambiguous request"),
       temperature: z
         .number()
         .min(0)
@@ -63,12 +64,13 @@ export function registerInferenceTools(
         .optional()
         .describe("Sampling temperature 0.0-2.0 (default: 0.7)"),
     },
-    async ({ model, prompt, max_tokens, temperature }) => {
+    async ({ model, prompt, max_tokens, temperature, idempotency_key }) => {
       const result = await client.requestInference({
         model,
         prompt,
         max_tokens,
         temperature,
+        idempotency_key,
       });
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],

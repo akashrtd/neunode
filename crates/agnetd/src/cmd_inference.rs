@@ -1,5 +1,6 @@
 use anyhow::Result;
 use neunode_core::types::TokenAmount;
+#[cfg(test)]
 use neunode_inference::openai::{ChatCompletionRequest, ChatMessage, MessageRole};
 use neunode_inference::provider::{InferenceProvider, ModelInfo, ProviderStatus};
 use neunode_inference::router::{Router, RoutingStrategy};
@@ -10,14 +11,18 @@ use crate::cmd_model::load_model;
 use crate::output::OutputWriter;
 use crate::state::AppState;
 
-pub fn execute(cmd: &InferenceCommands, args: &GlobalArgs, state: &mut AppState) -> Result<()> {
+pub async fn execute(
+    cmd: &InferenceCommands,
+    args: &GlobalArgs,
+    state: &mut AppState,
+) -> Result<()> {
     let writer = OutputWriter::new(args.output);
     match cmd {
         InferenceCommands::RegisterProvider { name, endpoint, models } => {
             register_provider(name, endpoint, models, &writer, state)
         }
         InferenceCommands::Request { model, prompt, max_tokens, temperature } => {
-            request_inference(model, prompt, *max_tokens, Some(*temperature), &writer, state)
+            execute_request(model, prompt, *max_tokens, *temperature, &writer, state).await
         }
         InferenceCommands::ListModels { provider } => {
             list_models(provider.as_deref(), &writer, state)
@@ -46,8 +51,7 @@ fn load_all_providers(db: &NeunodeDb) -> Result<Vec<InferenceProvider>> {
     let entries = db.prefix_scan(neunode_storage::cf::CF_MODELS, &[])?;
     let mut providers = Vec::new();
     for (key, value) in entries {
-        let key = neunode_storage::codec::deserialize::<String>(&key)
-            .map_err(|e| anyhow::anyhow!("deserialize model-store key: {e}"))?;
+        let Ok(key) = neunode_storage::codec::deserialize::<String>(&key) else { continue };
         if key.starts_with("prov:") {
             providers.push(
                 neunode_storage::codec::deserialize::<InferenceProvider>(&value)
@@ -115,6 +119,44 @@ fn register_provider(
     writer.write_status(&format!("Registered inference provider {name} ({did})"));
     Ok(())
 }
+
+async fn execute_request(
+    model: &str,
+    prompt: &str,
+    max_tokens: u32,
+    temperature: f64,
+    writer: &OutputWriter,
+    state: &AppState,
+) -> Result<()> {
+    let body = crate::api::inference_api::InferenceRequest {
+        model: model.into(),
+        prompt: prompt.into(),
+        max_tokens,
+        temperature,
+        idempotency_key: None,
+    };
+    let validated = crate::api::inference_api::submit_inference(&state.db, body.clone())?;
+    let provider = load_all_providers(&state.db)?
+        .into_iter()
+        .find(|provider| {
+            provider.status == ProviderStatus::Online && provider.find_model(model).is_some()
+        })
+        .ok_or_else(|| anyhow::anyhow!("no online provider for model {model}"))?;
+    crate::inference_service::recover(&state.db)?;
+    let result = crate::inference_service::execute(
+        std::sync::Arc::clone(&state.db),
+        state.require_did()?.0.clone(),
+        provider,
+        body,
+        validated,
+    )
+    .await?;
+    writer.write_json(&result);
+    writer.write_status("Provider execution and local-ledger settlement completed");
+    Ok(())
+}
+
+#[cfg(test)]
 
 fn request_inference(
     model: &str,
@@ -327,38 +369,14 @@ fn show_pricing(
         anyhow::bail!("at least one of input_tokens or output_tokens must be > 0");
     }
 
-    let providers = load_all_providers(state.db())?;
-    let model_info =
-        providers.iter().find_map(|p| p.find_model(model)).cloned().unwrap_or_else(|| ModelInfo {
-            id: model.to_string(),
-            base_model: None,
-            context_length: 4096,
-            input_price_per_million: TokenAmount(100),
-            output_price_per_million: TokenAmount(200),
-            capabilities: vec!["chat".to_string()],
-        });
-
-    let input_cost =
-        ((input_tokens as u128) * model_info.input_price_per_million.0 / 1_000_000) as u64;
-    let output_cost =
-        ((output_tokens as u128) * model_info.output_price_per_million.0 / 1_000_000) as u64;
-    let total = input_cost.saturating_add(output_cost);
-    let total_cost =
-        if total == 0 && (input_tokens > 0 || output_tokens > 0) { 1u64 } else { total };
-
-    let protocol_fee = ((total_cost as f64) * 2.0 / 100.0).ceil() as u64;
-    let net_payout = total_cost.saturating_sub(protocol_fee);
-
-    let out = serde_json::json!({
-        "model": model,
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "input_cost": input_cost,
-        "output_cost": output_cost,
-        "total_cost": total_cost,
-        "protocol_fee": protocol_fee,
-        "net_payout": net_payout,
-    });
+    let out = crate::api::inference_api::pricing_response(
+        state.db(),
+        crate::api::inference_api::PricingQuery {
+            model: model.into(),
+            input_tokens,
+            output_tokens,
+        },
+    )?;
 
     writer.write_json(&out);
     writer.write_status(&format!("Pricing for: {model}"));
@@ -472,10 +490,10 @@ mod tests {
     }
 
     #[test]
-    fn pricing_default_rates() {
+    fn pricing_unknown_model_is_not_fabricated() {
         let state = test_state();
         let writer = test_writer();
-        show_pricing("neunode/llama-3b", 1000, 500, &writer, &state).unwrap();
+        assert!(show_pricing("neunode/llama-3b", 1000, 500, &writer, &state).is_err());
     }
 
     #[test]

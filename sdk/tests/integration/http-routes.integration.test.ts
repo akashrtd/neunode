@@ -1,6 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer as createHttpServer, type Server } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -54,12 +55,18 @@ describe("Integration: live HTTP resource routes", () => {
 	let home: string;
 	let client: NeunodeClient;
 	let baseUrl: string;
+	let provider: Server;
+	let providerUrl: string;
 
 	beforeAll(async () => {
 		if (!BINARY_PATH)
 			throw new Error("agnetd binary is required for HTTP integration tests");
 		home = await mkdtemp(join(tmpdir(), "neunode-http-integration-"));
-		const env = { ...process.env, HOME: home };
+		const env = {
+			...process.env,
+			HOME: home,
+			NEUNODE_API_KEY: "integration-fixture-authority-token-32-characters",
+		};
 		await execFileAsync(
 			BINARY_PATH,
 			[
@@ -88,15 +95,55 @@ describe("Integration: live HTTP resource routes", () => {
 			{ env },
 		);
 
+		await execFileAsync(
+			BINARY_PATH,
+			["config", "set", "network.listen_addr", "/ip4/127.0.0.1/tcp/0"],
+			{ env },
+		);
+		provider = createHttpServer(async (request, response) => {
+			for await (const _chunk of request) {
+				/* Drain request. */
+			}
+			response.writeHead(200, { "content-type": "application/json" });
+			response.end(
+				JSON.stringify({
+					id: "integration-real-completion",
+					object: "chat.completion",
+					created: 1,
+					model: "provider-fixture",
+					choices: [
+						{
+							index: 0,
+							message: { role: "assistant", content: "real answer" },
+							finish_reason: "stop",
+						},
+					],
+					usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+				}),
+			);
+		});
+		await new Promise<void>((resolve) =>
+			provider.listen(0, "127.0.0.1", resolve),
+		);
+		const address = provider.address();
+		if (!address || typeof address === "string")
+			throw new Error("Provider has no address");
+		providerUrl = `http://127.0.0.1:${address.port}`;
 		const port = await availablePort();
 		baseUrl = `http://127.0.0.1:${port}`;
 		daemon = execFile(BINARY_PATH, ["serve", "--port", String(port)], { env });
 		await waitForHealth(baseUrl);
-		client = createNeunodeClient({ http: { baseUrl, timeout: 5_000 } });
+		client = createNeunodeClient({
+			http: { baseUrl, timeout: 5_000, apiKey: env.NEUNODE_API_KEY },
+		});
 	});
 
 	afterAll(async () => {
 		daemon?.kill("SIGTERM");
+		if (provider)
+			await new Promise<void>((resolve, reject) =>
+				provider.close((error) => (error ? reject(error) : resolve())),
+			);
 		if (home) await rm(home, { recursive: true, force: true });
 	});
 
@@ -162,12 +209,15 @@ describe("Integration: live HTTP resource routes", () => {
 	});
 
 	it("round-trips canonical feed event IDs over HTTP", async () => {
-		const posted = await client.feed.post({ kind: 4242, content: "http feed event" });
-		expect(posted).toMatchObject({ sequence: 1, kind: 4242 });
+		const posted = await client.feed.post({
+			kind: 4002,
+			content: "http feed event",
+		});
+		expect(posted).toMatchObject({ sequence: 1, kind: 4002 });
 		const shown = await client.feed.show(posted.event_id);
 		expect(shown).toMatchObject({
 			sequence: posted.sequence,
-			kind: 4242,
+			kind: 4002,
 			content: "http feed event",
 		});
 	});
@@ -200,12 +250,9 @@ describe("Integration: live HTTP resource routes", () => {
 		});
 		expect((await client.train.stop(job.job_id)).status).toBe("stopped");
 
-		const pricing = await client.inference.pricing("tiny", 1_000, 500);
-		expect(pricing).toMatchObject({
-			model: "tiny",
-			input_tokens: 1_000,
-			output_tokens: 500,
-		});
+		await expect(client.inference.pricing("tiny", 1_000, 500)).rejects.toThrow(
+			"no registered pricing",
+		);
 	});
 
 	it("registers and discovers inference providers over HTTP", async () => {
@@ -229,7 +276,7 @@ describe("Integration: live HTTP resource routes", () => {
 		).rejects.toThrow("model not found");
 		const registered = await client.inference.registerProvider({
 			name: "HTTP provider",
-			endpoint: "https://provider.example/v1",
+			endpoint: providerUrl,
 			models: ["provider-fixture"],
 		});
 		expect(registered).toMatchObject({
@@ -245,21 +292,30 @@ describe("Integration: live HTTP resource routes", () => {
 
 	it("streams inference results over WebSocket", async () => {
 		const result = await new Promise<unknown>((resolve, reject) => {
-			const timeout = setTimeout(() => reject(new Error("inference stream timed out")), 5_000);
+			const timeout = setTimeout(
+				() => reject(new Error("inference stream timed out")),
+				5_000,
+			);
 			const cancel = client.inference.stream(
-				{ model: "tiny", prompt: "hello", maxTokens: 16 },
+				{ model: "provider-fixture", prompt: "hello", maxTokens: 16 },
 				(value) => {
 					clearTimeout(timeout);
 					cancel();
 					resolve(value);
 				},
+				(error) => {
+					clearTimeout(timeout);
+					cancel();
+					reject(error);
+				},
 			);
 		});
 		expect(result).toMatchObject({
-			model: "tiny",
+			model: "provider-fixture",
 			prompt: "hello",
 			max_tokens: 16,
-			status: "submitted",
+			status: "completed",
+			completion: { choices: [{ message: { content: "real answer" } }] },
 		});
 	});
 
@@ -448,8 +504,7 @@ describe("Integration: live HTTP resource routes", () => {
 		);
 
 		const beforeUnstake = Math.floor(Date.now() / 1000);
-		await client.token.stake({ amount: 100, token: "compute" });
-		const position = await client.token.unstake(100);
+		const position = await client.token.unstake(50);
 		expect(position.id).toMatch(/^unbond_/);
 		expect(position.state).toBe("Unbonding");
 		expect(position.unbond_at - beforeUnstake).toBeGreaterThanOrEqual(7200);
@@ -457,7 +512,7 @@ describe("Integration: live HTTP resource routes", () => {
 
 		const earlyClaim = await client.token.claimUnbonded();
 		const status = await client.token.stakeStatus();
-		const balance = await client.token.balance("compute");
+		const balance = await client.token.balance("train");
 
 		expect(earlyClaim).toEqual({
 			claimed_amount: 0,
@@ -467,8 +522,8 @@ describe("Integration: live HTTP resource routes", () => {
 		expect(status.unbonding).toHaveLength(1);
 		expect(status.unbonding[0]).toMatchObject({
 			id: position.id,
-			amount: 100,
-			token: "nCompute",
+			amount: 50,
+			token: "nTrain",
 		});
 		expect(balance).toMatchObject({ balance: "0", staked: "0" });
 	});

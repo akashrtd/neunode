@@ -10,7 +10,11 @@ const NS: &str = "https://neunode.io/ontology/";
 
 /// Shorthand for building a full URI: nn("Agent") → "https://neunode.io/ontology/Agent"
 pub fn nn(suffix: &str) -> String {
-    format!("{NS}{suffix}")
+    if suffix.starts_with(NS) {
+        suffix.to_owned()
+    } else {
+        format!("{NS}{suffix}")
+    }
 }
 
 // ---------------------------------------------------------------------------

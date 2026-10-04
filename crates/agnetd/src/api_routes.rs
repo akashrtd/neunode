@@ -9,6 +9,8 @@ pub fn build_api_router() -> Router<Arc<ApiState>> {
     Router::new()
         // Health
         .route("/api/v1/health", get(super::health_handler))
+        .route("/api/v1/security/breakers", get(super::security_api::list))
+        .route("/api/v1/security/breakers/{name}", post(super::security_api::set))
         // Forensic audit
         .route("/api/v1/audit", get(super::audit_api::list_audit))
         .route("/api/v1/audit/verify", get(super::audit_api::verify_audit))

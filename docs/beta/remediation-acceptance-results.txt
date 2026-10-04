@@ -1,0 +1,14 @@
+
+> @neunode/sdk@0.1.0 test:beta
+> vitest run --config tests/beta/vitest.config.ts
+
+
+ RUN  v3.2.4 /Users/akashrathod/Desktop/projects/neunode/sdk
+
+ ✓ tests/beta/agent.acceptance.test.ts (21 tests) 21553ms
+   ✓ Beta: public agent promises > exchanges authenticated events between independent daemons and catches up bounded batches  19915ms
+
+ Test Files  1 passed (1)
+      Tests  21 passed (21)
+   Start at  17:03:42
+   Duration  21.67s (transform 25ms, setup 0ms, collect 24ms, tests 21.55s, environment 0ms, prepare 32ms)

@@ -2,6 +2,7 @@
  * Tool registration — wires all tool modules to the MCP server.
  */
 
+import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AgnetdClient } from "../client.js";
 import { registerIdentityTools } from "./identity.js";
@@ -19,6 +20,14 @@ export function registerAllTools(
   server: McpServer,
   client: AgnetdClient,
 ): void {
+  server.tool("neunode_get_breakers", "Inspect manual operator safety stops", {}, async () => ({
+    content: [{ type: "text" as const, text: JSON.stringify(await client.getBreakers()) }],
+  }));
+  server.tool("neunode_set_breaker", "Trip or reset a manual safety stop (operator authority required)", {
+    name: z.enum(["token_volume", "reputation", "bounty_drain"]), open: z.boolean(),
+  }, async ({ name, open }) => ({
+    content: [{ type: "text" as const, text: JSON.stringify(await client.setBreaker(name, open)) }],
+  }));
   registerIdentityTools(server, client);
   registerFeedTools(server, client);
   registerInferenceTools(server, client);

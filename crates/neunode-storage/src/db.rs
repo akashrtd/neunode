@@ -259,6 +259,24 @@ impl NeunodeDb {
         Ok(results)
     }
 
+    /// Read a bounded reverse slice without materializing the entire key range.
+    pub fn scan_reverse_limit(
+        &self,
+        cf_name: &str,
+        start: &[u8],
+        limit: usize,
+    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
+        let cf = self.cf_handle(cf_name)?;
+        let db = self.get_db_for_cf(cf_name)?;
+        db.iterator_cf(&cf, IteratorMode::From(start, Direction::Reverse))
+            .take(limit)
+            .map(|item| {
+                item.map(|(key, value)| (key.to_vec(), value.to_vec()))
+                    .map_err(StorageError::RocksDb)
+            })
+            .collect()
+    }
+
     pub fn range_scan(
         &self,
         cf_name: &str,

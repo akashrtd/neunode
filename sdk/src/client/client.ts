@@ -37,6 +37,10 @@ import {
 	createReputationResource,
 	type ReputationResource,
 } from "../resources/reputation.js";
+import {
+	createSecurityResource,
+	type SecurityResource,
+} from "../resources/security.js";
 import { createTokenResource, type TokenResource } from "../resources/token.js";
 import { createTrainResource, type TrainResource } from "../resources/train.js";
 import {
@@ -69,6 +73,8 @@ export type TransportMode = "http" | "mock" | "dual";
 
 /** Root client for interacting with the Neunode network. */
 export interface NeunodeClient {
+	/** Authenticated manual safety stops for a running daemon. */
+	readonly security: SecurityResource;
 	/** Which transport(s) are active. */
 	readonly transportMode: TransportMode;
 	/** HTTP-compatible transport used by every SDK resource. */
@@ -112,6 +118,7 @@ export interface NeunodeClient {
 }
 
 class NeunodeClientImpl implements NeunodeClient {
+	readonly security: SecurityResource;
 	readonly http: HttpTransport;
 	readonly viem: ViemTransport | undefined;
 	readonly mock: MockTransport | undefined;
@@ -165,6 +172,7 @@ class NeunodeClientImpl implements NeunodeClient {
 		this.train = createTrainResource(this);
 		this.bounty = createBountyResource(this);
 		this.token = createTokenResource(this);
+		this.security = createSecurityResource(this);
 		this.reputation = createReputationResource(this);
 		this.inference = createInferenceResource(this);
 		this.knowledge = createKnowledgeResource(this);
@@ -195,6 +203,7 @@ class NeunodeClientImpl implements NeunodeClient {
 			"train",
 			"bounty",
 			"token",
+			"security",
 			"reputation",
 			"inference",
 			"knowledge",

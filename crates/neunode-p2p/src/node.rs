@@ -441,7 +441,7 @@ mod tests {
         let addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
         node.start(addr).unwrap();
         node.subscribe_all_categories().expect("subscribe all should succeed");
-        assert_eq!(node.subscribed_topics().len(), 6);
+        assert_eq!(node.subscribed_topics().len(), 7);
     }
 
     #[test]
